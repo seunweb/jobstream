@@ -168,7 +168,8 @@ def get_companies(active_only=True) -> list[dict]:
         cur = conn.cursor()
         q = "SELECT * FROM companies"
         if active_only:
-            q += " WHERE active = 1"
+            # Use != 0 instead of = 1 to work across both PostgreSQL and SQLite
+            q += " WHERE active != 0"
         q += " ORDER BY name"
         cur.execute(q)
         return [row_to_dict(r) for r in cur.fetchall()]
@@ -179,12 +180,12 @@ def add_company(name: str, url: str) -> dict:
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute(
-                "INSERT INTO companies (name, url) VALUES (%s, %s) RETURNING *",
+                "INSERT INTO companies (name, url) VALUES (%s, %s) ON CONFLICT (url) DO UPDATE SET active = 1 RETURNING *",
                 (name, url)
             )
             return row_to_dict(cur.fetchone())
         else:
-            cur.execute("INSERT INTO companies (name, url) VALUES (?, ?)", (name, url))
+            cur.execute("INSERT OR REPLACE INTO companies (name, url) VALUES (?, ?)", (name, url))
             cur.execute("SELECT * FROM companies WHERE url = ?", (url,))
             return row_to_dict(cur.fetchone())
 
@@ -248,7 +249,7 @@ def get_jobs(
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[list[dict], int]:
-    conditions = ["is_active = 1"]
+    conditions = ["is_active != 0"]
     params = []
 
     if search:
@@ -303,7 +304,7 @@ def mark_jobs_inactive(source_url: str, current_fingerprints: list[str]):
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute(
-                "UPDATE jobs SET is_active = 0 WHERE source_url = %s AND fingerprint != ALL(%s)",
+                "UPDATE jobs SET is_active = 0 WHERE source_url = %s AND NOT (fingerprint = ANY(%s))",
                 (source_url, current_fingerprints)
             )
         else:

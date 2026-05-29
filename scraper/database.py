@@ -171,7 +171,7 @@ def _seed_companies():
         for name, url in defaults:
             if USE_POSTGRES:
                 cur.execute(
-                    "INSERT INTO companies (name, url) VALUES ($1, $2) ON CONFLICT (url) DO NOTHING",
+                    "INSERT INTO companies (name, url) SELECT $1, $2 WHERE NOT EXISTS (SELECT 1 FROM companies WHERE url = $2)",
                     (name, url)
                 )
             else:

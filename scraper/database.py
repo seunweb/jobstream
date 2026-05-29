@@ -1,7 +1,6 @@
 """
 JobStream Database Layer
-Supports both PostgreSQL (production) and SQLite (local dev).
-Set DATABASE_URL env var for PostgreSQL, otherwise falls back to SQLite.
+Auto-detects PostgreSQL or SQLite based on DATABASE_URL env var.
 
 PostgreSQL:  DATABASE_URL=postgresql://user:pass@host:5432/jobstream
 SQLite:      DB_PATH=/app/data/jobstream.db (default)
@@ -17,8 +16,6 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 DB_PATH = os.environ.get("DB_PATH", "./jobstream.db")
-
-# Use PostgreSQL if DATABASE_URL is set, otherwise SQLite
 USE_POSTGRES = bool(DATABASE_URL)
 
 if USE_POSTGRES:
@@ -42,7 +39,6 @@ def get_conn():
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
-
     try:
         yield conn
         conn.commit()
@@ -53,19 +49,8 @@ def get_conn():
         conn.close()
 
 
-def placeholder(n: int) -> str:
-    """Return correct placeholders for the DB driver."""
-    if USE_POSTGRES:
-        return ", ".join(f"${i}" for i in range(1, n + 1))
-    return ", ".join("?" * n)
-
-
-def ph(n: int) -> str:
-    return placeholder(n)
-
-
 def adapt(sql: str) -> str:
-    """Convert SQLite ? placeholders to PostgreSQL $1, $2... style."""
+    """Convert ? placeholders to $1,$2... for PostgreSQL."""
     if not USE_POSTGRES:
         return sql
     count = 0
@@ -79,11 +64,9 @@ def adapt(sql: str) -> str:
     return "".join(result)
 
 
-def row_to_dict(row) -> dict:
+def row_to_dict(row) -> Optional[dict]:
     if row is None:
         return None
-    if USE_POSTGRES:
-        return dict(row)
     return dict(row)
 
 
@@ -91,72 +74,67 @@ def row_to_dict(row) -> dict:
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS companies (
-    id          SERIAL PRIMARY KEY,
-    name        TEXT NOT NULL,
-    url         TEXT NOT NULL UNIQUE,
-    active      INTEGER DEFAULT 1,
-    added_at    TEXT DEFAULT (CURRENT_TIMESTAMP)
-);
+POSTGRES_SCHEMA = [
+    """CREATE TABLE IF NOT EXISTS companies (
+        id       SERIAL PRIMARY KEY,
+        name     TEXT NOT NULL,
+        url      TEXT NOT NULL UNIQUE,
+        active   INTEGER DEFAULT 1,
+        added_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""",
+    """CREATE TABLE IF NOT EXISTS jobs (
+        id          SERIAL PRIMARY KEY,
+        fingerprint TEXT UNIQUE NOT NULL,
+        title       TEXT NOT NULL,
+        company     TEXT NOT NULL,
+        source_url  TEXT NOT NULL,
+        location    TEXT DEFAULT 'Not specified',
+        job_type    TEXT DEFAULT 'Full-time',
+        department  TEXT DEFAULT 'General',
+        salary      TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        apply_url   TEXT DEFAULT '',
+        is_active   INTEGER DEFAULT 1,
+        scraped_at  TEXT NOT NULL,
+        created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+    )""",
+    """CREATE TABLE IF NOT EXISTS applications (
+        id           SERIAL PRIMARY KEY,
+        job_id       INTEGER NOT NULL REFERENCES jobs(id),
+        name         TEXT NOT NULL,
+        email        TEXT NOT NULL,
+        phone        TEXT DEFAULT '',
+        resume_url   TEXT DEFAULT '',
+        cover_note   TEXT DEFAULT '',
+        status       TEXT DEFAULT 'new',
+        submitted_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""",
+    """CREATE TABLE IF NOT EXISTS scrape_runs (
+        id          SERIAL PRIMARY KEY,
+        started_at  TEXT NOT NULL,
+        finished_at TEXT,
+        jobs_found  INTEGER DEFAULT 0,
+        jobs_new    INTEGER DEFAULT 0,
+        status      TEXT DEFAULT 'running',
+        error       TEXT DEFAULT ''
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company)",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_active  ON jobs(is_active)",
+    "CREATE INDEX IF NOT EXISTS idx_apps_job     ON applications(job_id)",
+]
 
-CREATE TABLE IF NOT EXISTS jobs (
-    id           SERIAL PRIMARY KEY,
-    fingerprint  TEXT UNIQUE NOT NULL,
-    title        TEXT NOT NULL,
-    company      TEXT NOT NULL,
-    source_url   TEXT NOT NULL,
-    location     TEXT DEFAULT 'Not specified',
-    job_type     TEXT DEFAULT 'Full-time',
-    department   TEXT DEFAULT 'General',
-    salary       TEXT DEFAULT '',
-    description  TEXT DEFAULT '',
-    apply_url    TEXT DEFAULT '',
-    is_active    INTEGER DEFAULT 1,
-    scraped_at   TEXT NOT NULL,
-    created_at   TEXT DEFAULT (CURRENT_TIMESTAMP)
-);
-
-CREATE TABLE IF NOT EXISTS applications (
-    id           SERIAL PRIMARY KEY,
-    job_id       INTEGER NOT NULL REFERENCES jobs(id),
-    name         TEXT NOT NULL,
-    email        TEXT NOT NULL,
-    phone        TEXT DEFAULT '',
-    resume_url   TEXT DEFAULT '',
-    cover_note   TEXT DEFAULT '',
-    status       TEXT DEFAULT 'new',
-    submitted_at TEXT DEFAULT (CURRENT_TIMESTAMP)
-);
-
-CREATE TABLE IF NOT EXISTS scrape_runs (
-    id          SERIAL PRIMARY KEY,
-    started_at  TEXT NOT NULL,
-    finished_at TEXT,
-    jobs_found  INTEGER DEFAULT 0,
-    jobs_new    INTEGER DEFAULT 0,
-    status      TEXT DEFAULT 'running',
-    error       TEXT DEFAULT ''
-);
-
-CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company);
-CREATE INDEX IF NOT EXISTS idx_jobs_active  ON jobs(is_active);
-CREATE INDEX IF NOT EXISTS idx_apps_job     ON applications(job_id);
-"""
-
-SCHEMA_SQLITE = SCHEMA.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+SQLITE_SCHEMA = [s.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+                 for s in POSTGRES_SCHEMA]
 
 
 def init_db():
+    schema = POSTGRES_SCHEMA if USE_POSTGRES else SQLITE_SCHEMA
     with get_conn() as conn:
         cur = conn.cursor()
-        schema = SCHEMA if USE_POSTGRES else SCHEMA_SQLITE
-        # Execute each statement separately
-        for stmt in schema.strip().split(";"):
-            stmt = stmt.strip()
-            if stmt:
-                cur.execute(stmt)
+        for stmt in schema:
+            cur.execute(stmt)
     _seed_companies()
+    logger.info("Database schema ready")
 
 
 def _seed_companies():
@@ -171,8 +149,8 @@ def _seed_companies():
         for name, url in defaults:
             if USE_POSTGRES:
                 cur.execute(
-                    "INSERT INTO companies (name, url) SELECT $1, $2 WHERE NOT EXISTS (SELECT 1 FROM companies WHERE url = $2)",
-                    (name, url)
+                    "INSERT INTO companies (name, url) SELECT %s, %s WHERE NOT EXISTS (SELECT 1 FROM companies WHERE url = %s)",
+                    (name, url, url)
                 )
             else:
                 cur.execute(
@@ -201,7 +179,7 @@ def add_company(name: str, url: str) -> dict:
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute(
-                "INSERT INTO companies (name, url) VALUES ($1, $2) RETURNING *",
+                "INSERT INTO companies (name, url) VALUES (%s, %s) RETURNING *",
                 (name, url)
             )
             return row_to_dict(cur.fetchone())
@@ -237,9 +215,9 @@ def upsert_jobs(scraped) -> tuple[int, int]:
                 if USE_POSTGRES:
                     cur.execute("""
                         INSERT INTO jobs
-                          (fingerprint, title, company, source_url, location,
-                           job_type, department, salary, description, apply_url, scraped_at)
-                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                          (fingerprint,title,company,source_url,location,
+                           job_type,department,salary,description,apply_url,scraped_at)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     """, (
                         job.fingerprint, job.title, job.company, job.source_url,
                         job.location, job.job_type, job.department,
@@ -249,8 +227,8 @@ def upsert_jobs(scraped) -> tuple[int, int]:
                 else:
                     cur.execute("""
                         INSERT INTO jobs
-                          (fingerprint, title, company, source_url, location,
-                           job_type, department, salary, description, apply_url, scraped_at)
+                          (fingerprint,title,company,source_url,location,
+                           job_type,department,salary,description,apply_url,scraped_at)
                         VALUES (?,?,?,?,?,?,?,?,?,?,?)
                     """, (
                         job.fingerprint, job.title, job.company, job.source_url,
@@ -274,47 +252,39 @@ def get_jobs(
     params = []
 
     if search:
+        like = f"%{search}%"
         if USE_POSTGRES:
-            conditions.append("(title ILIKE $%d OR company ILIKE $%d OR location ILIKE $%d)")
+            conditions.append("(title ILIKE %s OR company ILIKE %s OR location ILIKE %s)")
         else:
             conditions.append("(title LIKE ? OR company LIKE ? OR location LIKE ?)")
-        like = f"%{search}%"
         params.extend([like, like, like])
     if job_type:
+        conditions.append("job_type = %s" if USE_POSTGRES else "job_type = ?")
         params.append(job_type)
-        conditions.append(f"job_type = {'$'+str(len(params)) if USE_POSTGRES else '?'}")
     if department:
+        conditions.append("department = %s" if USE_POSTGRES else "department = ?")
         params.append(department)
-        conditions.append(f"department = {'$'+str(len(params)) if USE_POSTGRES else '?'}")
     if company:
+        conditions.append("company = %s" if USE_POSTGRES else "company = ?")
         params.append(company)
-        conditions.append(f"company = {'$'+str(len(params)) if USE_POSTGRES else '?'}")
 
     where = " AND ".join(conditions)
-
-    # Fix ILIKE placeholder numbering for postgres
-    if USE_POSTGRES and search:
-        base = len(params) - 2
-        where = where.replace(
-            "(title ILIKE $%d OR company ILIKE $%d OR location ILIKE $%d)",
-            f"(title ILIKE ${base} OR company ILIKE ${base+1} OR location ILIKE ${base+2})"
-        )
 
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(f"SELECT COUNT(*) FROM jobs WHERE {where}", params)
-        total = cur.fetchone()[0] if not USE_POSTGRES else list(cur.fetchone().values())[0]
+        row = cur.fetchone()
+        total = row["count"] if USE_POSTGRES else row[0]
 
-        params.extend([limit, offset])
         if USE_POSTGRES:
             cur.execute(
-                f"SELECT * FROM jobs WHERE {where} ORDER BY created_at DESC LIMIT ${len(params)-1} OFFSET ${len(params)}",
-                params
+                f"SELECT * FROM jobs WHERE {where} ORDER BY created_at DESC LIMIT %s OFFSET %s",
+                params + [limit, offset]
             )
         else:
             cur.execute(
                 f"SELECT * FROM jobs WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                params
+                params + [limit, offset]
             )
         return [row_to_dict(r) for r in cur.fetchall()], total
 
@@ -353,22 +323,20 @@ def create_application(job_id: int, data: dict) -> dict:
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute("""
-                INSERT INTO applications (job_id, name, email, phone, resume_url, cover_note)
-                VALUES ($1,$2,$3,$4,$5,$6) RETURNING *
+                INSERT INTO applications (job_id,name,email,phone,resume_url,cover_note)
+                VALUES (%s,%s,%s,%s,%s,%s) RETURNING *
             """, (
                 job_id, data["name"], data["email"],
-                data.get("phone", ""), data.get("resume_url", ""),
-                data.get("cover_note", "")
+                data.get("phone",""), data.get("resume_url",""), data.get("cover_note","")
             ))
             return row_to_dict(cur.fetchone())
         else:
             cur.execute("""
-                INSERT INTO applications (job_id, name, email, phone, resume_url, cover_note)
+                INSERT INTO applications (job_id,name,email,phone,resume_url,cover_note)
                 VALUES (?,?,?,?,?,?)
             """, (
                 job_id, data["name"], data["email"],
-                data.get("phone", ""), data.get("resume_url", ""),
-                data.get("cover_note", "")
+                data.get("phone",""), data.get("resume_url",""), data.get("cover_note","")
             ))
             cur.execute("SELECT * FROM applications WHERE rowid = last_insert_rowid()")
             return row_to_dict(cur.fetchone())
@@ -390,7 +358,7 @@ def get_applications(job_id: int = None) -> list[dict]:
 
 
 def update_application_status(app_id: int, status: str):
-    valid = {"new", "reviewing", "interview", "offered", "rejected"}
+    valid = {"new","reviewing","interview","offered","rejected"}
     if status not in valid:
         raise ValueError(f"Invalid status: {status}")
     with get_conn() as conn:
@@ -407,15 +375,12 @@ def start_scrape_run() -> int:
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute(
-                "INSERT INTO scrape_runs (started_at) VALUES ($1) RETURNING id",
+                "INSERT INTO scrape_runs (started_at) VALUES (%s) RETURNING id",
                 (datetime.utcnow().isoformat(),)
             )
-            return cur.fetchone()["id"]
+            return row_to_dict(cur.fetchone())["id"]
         else:
-            cur.execute(
-                "INSERT INTO scrape_runs (started_at) VALUES (?)",
-                (datetime.utcnow().isoformat(),)
-            )
+            cur.execute("INSERT INTO scrape_runs (started_at) VALUES (?)", (datetime.utcnow().isoformat(),))
             cur.execute("SELECT last_insert_rowid()")
             return cur.fetchone()[0]
 
@@ -425,7 +390,7 @@ def finish_scrape_run(run_id: int, jobs_found: int, jobs_new: int, error: str = 
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
-            adapt("UPDATE scrape_runs SET finished_at=?, jobs_found=?, jobs_new=?, status=?, error=? WHERE id=?"),
+            adapt("UPDATE scrape_runs SET finished_at=?,jobs_found=?,jobs_new=?,status=?,error=? WHERE id=?"),
             (datetime.utcnow().isoformat(), jobs_found, jobs_new, status, error, run_id)
         )
 

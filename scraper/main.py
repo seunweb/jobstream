@@ -6,9 +6,11 @@ Run: uvicorn main:app --reload
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
@@ -21,7 +23,7 @@ from database import (
     create_application, get_applications, update_application_status,
     start_scrape_run, finish_scrape_run, get_scrape_history,
 )
-from scraper import scrape_all, scrape_company
+from scraper import scrape_all
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -35,12 +37,23 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
-    logger.info("Database initialised")
+    # Ensure data directory exists (for SQLite)
+    db_path = os.environ.get("DB_PATH", "./jobstream.db")
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        init_db()
+        logger.info("Database initialised")
+    except Exception as e:
+        logger.error(f"Database init failed: {e}")
+        raise
+
     scheduler.add_job(run_scheduled_scrape, "interval", hours=2, id="auto_scrape")
     scheduler.start()
     logger.info("Scheduler started (scraping every 2 hours)")
+
     yield
+
     scheduler.shutdown()
 
 
@@ -64,7 +77,6 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 async def run_scrape_task():
-    """Scrape all active companies."""
     companies = get_companies(active_only=True)
     if not companies:
         logger.info("No active companies to scrape")
@@ -73,7 +85,6 @@ async def run_scrape_task():
 
 
 async def run_single_company_task(company: dict):
-    """Scrape a single company."""
     await _do_scrape([company])
 
 
@@ -211,14 +222,12 @@ def set_application_status(app_id: int, body: StatusUpdate):
 
 @app.post("/scrape", status_code=202)
 async def trigger_scrape(background_tasks: BackgroundTasks):
-    """Scrape all active companies."""
     background_tasks.add_task(run_scrape_task)
     return {"message": "Scrape started for all companies"}
 
 
 @app.post("/scrape/{company_id}", status_code=202)
 async def trigger_single_scrape(company_id: int, background_tasks: BackgroundTasks):
-    """Scrape a single company by ID."""
     companies = get_companies(active_only=True)
     company = next((c for c in companies if c["id"] == company_id), None)
     if not company:

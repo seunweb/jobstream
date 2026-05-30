@@ -455,7 +455,7 @@ function JobsPage({ onApply, toast }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f2", letterSpacing: -0.5 }}>Job Board</div>
-          <div style={{ fontSize: 13, color: "#555", marginTop: 3 }}>{total} live jobs from scraped career pages</div>
+          <div style={{ fontSize: 13, color: "#555", marginTop: 3 }}>{total} live jobs</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={backfillDescriptions} disabled={backfilling} style={{
@@ -470,7 +470,7 @@ function JobsPage({ onApply, toast }) {
             borderRadius: 9, padding: "8px 16px", fontSize: 12, color: scraping ? "#666" : "#fff",
             cursor: scraping ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6,
           }}>
-            {scraping ? "Scraping…" : "⟳ Scrape now"}
+            {scraping ? "Streaming…" : "⟳ Stream now"}
           </button>
         </div>
       </div>
@@ -597,8 +597,8 @@ function ScraperPage({ toast }) {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f2", letterSpacing: -0.5 }}>Scraper Config</div>
-        <div style={{ fontSize: 13, color: "#555", marginTop: 3 }}>Manage career pages to scrape automatically</div>
+        <div style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f2", letterSpacing: -0.5 }}>Streamer Config</div>
+        <div style={{ fontSize: 13, color: "#555", marginTop: 3 }}>Manage career pages to stream automatically</div>
       </div>
 
       {/* Companies list */}
@@ -624,7 +624,7 @@ function ScraperPage({ toast }) {
                   disabled={busyId === c.id}
                   style={{ background: "rgba(123,110,246,0.15)", border: "1px solid rgba(123,110,246,0.3)", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: busyId === c.id ? "#555" : "#a99df8", cursor: busyId === c.id ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
                 >
-                  {busyId === c.id ? "Busy..." : "⟳ Scrape"}
+                  {busyId === c.id ? "Streaming..." : "⟳ Stream"}
                 </button>
                 {/* Force rescrape button */}
                 <button
@@ -726,7 +726,7 @@ function ApplicationsPage() {
 }
 
 // ── Stats bar ─────────────────────────────────────────────────────────────────
-function StatsBar() {
+function StatsBar({ isDark = true }) {
   const [stats, setStats] = useState({ jobs: 0, companies: 0, apps: 0, lastRun: null });
 
   useEffect(() => {
@@ -753,9 +753,9 @@ function StatsBar() {
         { label: "Applications", val: stats.apps },
         { label: "Last scraped", val: stats.lastRun || "—" },
       ].map(({ label, val }) => (
-        <div key={label} style={{ background: "#141416", border: "1px solid #2a2a32", borderRadius: 12, padding: "14px 16px" }}>
-          <div style={{ fontSize: typeof val === "number" ? 24 : 15, fontWeight: 600, color: "#f0f0f2", letterSpacing: -0.5 }}>{val}</div>
-          <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>{label}</div>
+        <div key={label} style={{ background: isDark ? "#141416" : "#ffffff", border: `1px solid ${isDark ? "#2a2a32" : "#e0e0e8"}`, borderRadius: 12, padding: "14px 16px", transition: "background 0.2s" }}>
+          <div style={{ fontSize: typeof val === "number" ? 24 : 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.5 }}>{val}</div>
+          <div style={{ fontSize: 11, color: isDark ? "#555" : "#888", marginTop: 4 }}>{label}</div>
         </div>
       ))}
     </div>
@@ -767,34 +767,48 @@ export default function App() {
   const [page, setPage] = useState("jobs");
   const [applyJob, setApplyJob] = useState(null);
   const [toast, setToast] = useState("");
+  const [theme, setTheme] = useState("dark");
+  const isDark = theme === "dark";
 
   const showToast = (msg) => { setToast(msg); };
 
   const NAV = [
     { id: "jobs", icon: "💼", label: "Job Board" },
-    { id: "scraper", icon: "🤖", label: "Scraper" },
+    { id: "scraper", icon: "🤖", label: "Streamer" },
     { id: "applications", icon: "📋", label: "Applications" },
   ];
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", background: "#0D0D0F", color: "#f0f0f2" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", background: isDark ? "#0D0D0F" : "#f4f4f6", color: isDark ? "#f0f0f2" : "#1a1a1a", transition: "background 0.2s, color 0.2s" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        input::placeholder, textarea::placeholder { color: #444; }
-        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a32; border-radius: 3px; }
-      `}</style>
+        input::placeholder, textarea::placeholder { color: ${isDark ? "#444" : "#aaa"}; }
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: ${isDark ? "#2a2a32" : "#ccc"}; border-radius: 3px; }
+        select option { background: ${isDark ? "#141416" : "#ffffff"}; color: ${isDark ? "#f0f0f2" : "#1a1a1a"}; }
+      \`}</style>
 
       {/* Sidebar */}
-      <aside style={{ background: "#0f0f12", borderRight: "1px solid #1e1e24", padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh" }}>
+      <aside style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: `1px solid ${isDark ? "#1e1e24" : "#e0e0e8"}`, padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "background 0.2s" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", marginBottom: 20 }}>
           <div style={{ width: 30, height: 30, background: "#7B6EF6", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>⚡</div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: -0.3 }}>JobStream</div>
             <div style={{ fontSize: 9, color: "#444", fontFamily: "'DM Mono', monospace" }}>MVP v0.1</div>
           </div>
+        </div>
+
+        {/* Theme toggle */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, marginTop: -8 }}>
+          <button
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: `1px solid ${isDark ? "#2a2a32" : "#d0d0d8"}`, borderRadius: 20, padding: "4px 12px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6, transition: "all 0.2s" }}
+          >
+            {isDark ? "☀ Light" : "● Dark"}
+          </button>
         </div>
 
         {NAV.map(({ id, icon, label }) => (
@@ -812,15 +826,15 @@ export default function App() {
         <div style={{ marginTop: "auto", background: "#141416", border: "1px solid #1e1e24", borderRadius: 10, padding: "12px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
             <span style={{ width: 6, height: 6, background: "#3DD68C", borderRadius: "50%", display: "inline-block", animation: "spin 3s linear infinite" }} />
-            <span style={{ fontSize: 12, fontWeight: 500, color: "#f0f0f2" }}>Scraper active</span>
+            <span style={{ fontSize: 12, fontWeight: 500, color: isDark ? "#f0f0f2" : "#1a1a1a" }}>Streamer active</span>
           </div>
-          <div style={{ fontSize: 10, color: "#444", fontFamily: "'DM Mono', monospace" }}>Runs every 2 hours</div>
+          <div style={{ fontSize: 10, color: "#444", fontFamily: "'DM Mono', monospace" }}>Streams every 2 hours</div>
         </div>
       </aside>
 
       {/* Main */}
-      <main style={{ padding: "28px 32px", overflowY: "auto", maxHeight: "100vh" }}>
-        <StatsBar />
+      <main style={{ padding: "28px 32px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s" }}>
+        <StatsBar isDark={isDark} />
         {page === "jobs" && <JobsPage onApply={setApplyJob} toast={showToast} />}
         {page === "scraper" && <ScraperPage toast={showToast} />}
         {page === "applications" && <ApplicationsPage />}

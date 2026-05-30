@@ -503,11 +503,16 @@ function ScraperPage({ toast }) {
   async function forceRescrape(id, name) {
     setScrapingId(id);
     try {
-      await api(`/scrape/${id}/force`, { method: "POST" });
-      toast(`Force rescraping ${name}... old jobs cleared, fetching fresh descriptions.`);
-      setTimeout(load, 10000);
+      const res = await fetch(`${API}/scrape/${id}/force`, { method: "POST", headers: { "Content-Type": "application/json" } });
+      if (!res.ok) {
+        const err = await res.text();
+        toast(`Error ${res.status}: ${err}`);
+        return;
+      }
+      toast(`Force rescraping ${name}... refresh in 30 seconds.`);
+      setTimeout(load, 15000);
     } catch (e) {
-      toast(`Force rescrape failed: ${e.message}`);
+      toast(`Network error: ${e.message}`);
     } finally {
       setScrapingId(null);
     }

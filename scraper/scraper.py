@@ -7,8 +7,8 @@ import asyncio
 import hashlib
 import httpx
 import logging
-import json
 import re
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from urllib.parse import urlparse
@@ -38,55 +38,107 @@ class ScrapedJob:
         return hashlib.md5(raw.encode()).hexdigest()
 
 
+
 # ---------------------------------------------------------------------------
-# Oracle HCM — intercept the browser's own API call
+# Description fetcher — visits individual job page to get full description
 # ---------------------------------------------------------------------------
 
-async def scrape_oracle_hcm(page: Page, url: str, company: str) -> list[ScrapedJob]:
+async def fetch_job_description(page: Page, apply_url: str) -> str:
+    """Visit the job detail page and extract the full description."""
+    if not apply_url or not apply_url.startswith("http"):
+        return ""
+    try:
+        await page.goto(apply_url, wait_until="networkidle", timeout=20000)
+        await asyncio.sleep(1)
+        soup = BeautifulSoup(await page.content(), "html.parser")
+
+        # Remove noise
+        for tag in soup.select("nav, header, footer, script, style, [class*='nav'], [class*='header'], [class*='footer'], [class*='cookie'], [class*='banner']"):
+            tag.decompose()
+
+        # Common description container selectors
+        selectors = [
+            "[class*='job-description']", "[class*='jobDescription']",
+            "[class*='description']", "[class*='job-details']",
+            "[class*='jobDetails']", "[class*='job-content']",
+            "[class*='posting-content']", "[class*='content']",
+            "article", "main", ".details", "#job-description",
+            "#jobDescription", "[data-testid*='description']",
+        ]
+
+        for sel in selectors:
+            el = soup.select_one(sel)
+            if el:
+                text = el.get_text(separator="\n", strip=True)
+                if len(text) > 100:
+                    # Clean up excessive blank lines
+                    lines = [l.strip() for l in text.splitlines()]
+                    cleaned = "\n".join(l for l in lines if l)
+                    return cleaned[:5000]  # cap at 5000 chars
+
+        # Fallback: get body text
+        body = soup.find("body")
+        if body:
+            text = body.get_text(separator="\n", strip=True)
+            lines = [l.strip() for l in text.splitlines() if l.strip()]
+            return "\n".join(lines[:80])
+
+    except Exception as e:
+        logger.warning(f"Could not fetch description from {apply_url}: {e}")
+    return ""
+
+# ---------------------------------------------------------------------------
+# Oracle HCM — direct API with required headers
+# ---------------------------------------------------------------------------
+
+async def scrape_oracle_hcm(url: str, company: str) -> list[ScrapedJob]:
     """
-    Oracle HCM pages load jobs via an internal XHR request.
-    We intercept that network response directly using Playwright.
+    Oracle HCM requires three special headers to return job data:
+      - ora-irc-cx-userid: any random UUID
+      - ora-irc-language: language code
+      - content-type: application/json
+    Without these the API returns empty results.
     """
     jobs = []
-    captured = []
-
-    async def handle_response(response):
-        try:
-            if "recruitingCEJobRequisitions" in response.url and response.status == 200:
-                data = await response.json()
-                captured.append(data)
-        except Exception:
-            pass
-
-    page.on("response", handle_response)
-
     try:
-        await page.goto(url, wait_until="networkidle", timeout=30000)
-        # Wait extra for XHR calls to complete
-        await asyncio.sleep(4)
-
         parsed = urlparse(url)
         base = f"{parsed.scheme}://{parsed.netloc}"
+
+        # Extract site ID from URL path e.g. /sites/CX_1/
         site_match = re.search(r'/sites/([^/]+)', parsed.path)
         site_id = site_match.group(1) if site_match else "CX_1"
 
-        req_list = []
-        for data in captured:
-            for item in data.get("items", []):
-                req_list.extend(item.get("requisitionList", []))
+        # Required headers — ora-irc-cx-userid must be a valid UUID
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "ora-irc-cx-userid": str(uuid.uuid4()),
+            "ora-irc-language": "en",
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+        }
 
-        if not req_list:
-            logger.warning(f"Oracle HCM: no XHR data captured for {url}, trying fallback")
-            # Fallback: parse visible job titles from the rendered DOM
-            soup = BeautifulSoup(await page.content(), "html.parser")
-            for el in soup.select("[class*='job-title'], [class*='jobTitle'], h3, h4"):
-                text = el.get_text(strip=True)
-                if text and 5 < len(text) < 120:
-                    jobs.append(ScrapedJob(
-                        title=text, company=company, source_url=url,
-                        apply_url=url,
-                    ))
-            return jobs[:50]
+        api_url = (
+            f"{base}/hcmRestApi/resources/latest/recruitingCEJobRequisitions"
+            f"?onlyData=true"
+            f"&expand=requisitionList.secondaryLocations"
+            f"&finder=findReqs;siteNumber={site_id},sortBy=POSTING_DATES_DESC"
+            f"&limit=100&offset=0"
+        )
+
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.get(api_url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+
+        req_list = []
+        for item in data.get("items", []):
+            req_list.extend(item.get("requisitionList", []))
+
+        logger.info(f"Oracle HCM: raw response has {len(req_list)} requisitions")
 
         for req in req_list:
             title = req.get("requisitionTitle", "").strip()
@@ -124,8 +176,6 @@ async def scrape_oracle_hcm(page: Page, url: str, company: str) -> list[ScrapedJ
 
         logger.info(f"Oracle HCM: found {len(jobs)} jobs at {company}")
 
-    except PlaywrightTimeout:
-        logger.warning(f"Oracle HCM timeout for {url}")
     except Exception as e:
         logger.error(f"Oracle HCM scrape failed for {url}: {e}")
 
@@ -202,6 +252,12 @@ async def scrape_greenhouse(page: Page, url: str, company: str) -> list[ScrapedJ
                     dept = h2.get_text(strip=True)
             jobs.append(ScrapedJob(title=title, company=company, source_url=url,
                                    location=location, department=dept, apply_url=apply_url))
+
+        # Fetch descriptions for each job (cap at 10 to avoid timeout)
+        for job in jobs[:10]:
+            if job.apply_url:
+                job.description = await fetch_job_description(page, job.apply_url)
+
     except Exception as e:
         logger.error(f"Greenhouse scrape failed for {url}: {e}")
     return jobs
@@ -229,6 +285,12 @@ async def scrape_lever(page: Page, url: str, company: str) -> list[ScrapedJob]:
             dept = dept_el.get_text(strip=True) if dept_el else "General"
             jobs.append(ScrapedJob(title=title, company=company, source_url=url,
                                    location=location, department=dept, apply_url=apply_url))
+
+        # Fetch descriptions for each job (cap at 10)
+        for job in jobs[:10]:
+            if job.apply_url:
+                job.description = await fetch_job_description(page, job.apply_url)
+
     except Exception as e:
         logger.error(f"Lever scrape failed for {url}: {e}")
     return jobs
@@ -287,6 +349,12 @@ async def scrape_generic(page: Page, url: str, company: str) -> list[ScrapedJob]
             jobs.append(ScrapedJob(title=title, company=company, source_url=url,
                                    location=location, job_type=job_type,
                                    apply_url=apply_url or url))
+
+        # Fetch descriptions for each job (cap at 10)
+        for job in jobs[:10]:
+            if job.apply_url and job.apply_url != url:
+                job.description = await fetch_job_description(page, job.apply_url)
+
     except PlaywrightTimeout:
         logger.warning(f"Timeout scraping {url}")
     except Exception as e:
@@ -314,11 +382,13 @@ async def scrape_company(url: str, company: str) -> list[ScrapedJob]:
     ats = detect_ats(url)
     logger.info(f"Scraping {company} ({url}) via {ats} strategy")
 
-    # Workday uses direct API — no browser needed
+    # Oracle and Workday use direct HTTP API calls — no browser needed
+    if ats == "oracle":
+        return await scrape_oracle_hcm(url, company)
     if ats == "workday":
         return await scrape_workday(url, company)
 
-    # All others use Playwright (Oracle intercepts XHR, others parse HTML)
+    # Browser-based scrapers
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         context = await browser.new_context(
@@ -331,9 +401,7 @@ async def scrape_company(url: str, company: str) -> list[ScrapedJob]:
         )
         page = await context.new_page()
         try:
-            if ats == "oracle":
-                jobs = await scrape_oracle_hcm(page, url, company)
-            elif ats == "greenhouse":
+            if ats == "greenhouse":
                 jobs = await scrape_greenhouse(page, url, company)
             elif ats == "lever":
                 jobs = await scrape_lever(page, url, company)

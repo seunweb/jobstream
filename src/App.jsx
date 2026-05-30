@@ -307,16 +307,16 @@ function JobCard({ job, onApply, onView, isExpanded }) {
       {isExpanded && (
         <div style={{ borderTop: "1px solid #2a2a32", padding: "20px 24px", background: "#111113" }}>
           {/* Description */}
-          {job.description ? (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 500, marginBottom: 12 }}>About this role</div>
-              <div style={{ fontSize: 13, color: "#b0b0c0", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{job.description}</div>
-            </div>
-          ) : (
-            <div style={{ background: "#1C1C20", border: "1px solid #2a2a32", borderRadius: 10, padding: "16px 20px", marginBottom: 20, textAlign: "center" }}>
-              <div style={{ fontSize: 13, color: "#666", marginBottom: 4 }}>Full description available on the company site</div>
-            </div>
-          )}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 500, marginBottom: 12 }}>About this role</div>
+            {job.description && job.description.trim() ? (
+              <div style={{ fontSize: 13, color: "#b0b0c0", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{job.description.trim()}</div>
+            ) : (
+              <div style={{ fontSize: 13, color: "#555", lineHeight: 1.8 }}>
+                This job was scraped from the company career page. The full description is available on their website — click <strong style={{ color: "#a99df8" }}>Apply on company website</strong> below to view it.
+              </div>
+            )}
+          </div>
 
           {/* Action buttons */}
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 16, borderTop: "1px solid #2a2a32" }}>
@@ -325,7 +325,7 @@ function JobCard({ job, onApply, onView, isExpanded }) {
             </button>
             {job.apply_url && (
               <a href={job.apply_url} target="_blank" rel="noreferrer" style={{ background: "#1e1e2e", border: "1px solid rgba(123,110,246,0.4)", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#a99df8", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "none" }}>
-                View on company site →
+                Apply on company website →
               </a>
             )}
             <button onClick={() => onApply(job)} style={{ background: "#7B6EF6", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>

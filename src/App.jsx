@@ -153,8 +153,97 @@ function ApplyModal({ job, onClose, onSuccess }) {
   );
 }
 
+
+// ── Job Detail Modal ─────────────────────────────────────────────────────────
+function JobDetailModal({ job, onClose, onApply }) {
+  const lc = logoColor(job.company);
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+      backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
+      justifyContent: "center", zIndex: 200, padding: 20,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: "#141416", border: "1px solid #2a2a32", borderRadius: 16,
+        width: "100%", maxWidth: 620, maxHeight: "90vh", overflowY: "auto",
+      }}>
+        {/* Header */}
+        <div style={{ padding: "24px 24px 20px", borderBottom: "1px solid #2a2a32" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: lc.bg, color: lc.fg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 600, flexShrink: 0 }}>
+                {initials(job.company)}
+              </div>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 600, color: "#f0f0f2", letterSpacing: -0.3 }}>{job.title}</div>
+                <div style={{ fontSize: 13, color: "#666", marginTop: 3 }}>{job.company}</div>
+              </div>
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: "#666", fontSize: 20, cursor: "pointer" }}>✕</button>
+          </div>
+
+          {/* Meta chips */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Chip>📍 {job.location}</Chip>
+            <Chip>{job.job_type}</Chip>
+            {job.salary && <Chip>💰 {job.salary}</Chip>}
+            <Chip variant="accent">{job.department}</Chip>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "20px 24px" }}>
+          {/* Posted date */}
+          <div style={{ fontSize: 11, color: "#555", fontFamily: "'DM Mono', monospace", marginBottom: 20 }}>
+            🤖 Auto-scraped · {job.scraped_at ? new Date(job.scraped_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}
+          </div>
+
+          {/* Description */}
+          {job.description ? (
+            <div>
+              <div style={{ fontSize: 12, color: "#666", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10, fontWeight: 500 }}>About this role</div>
+              <div style={{ fontSize: 13, color: "#b0b0c0", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{job.description}</div>
+            </div>
+          ) : (
+            <div style={{ background: "#1C1C20", border: "1px solid #2a2a32", borderRadius: 10, padding: "20px 24px", textAlign: "center" }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>📄</div>
+              <div style={{ fontSize: 13, color: "#666", marginBottom: 6 }}>Full description on company site</div>
+              <a href={job.apply_url} target="_blank" rel="noreferrer"
+                style={{ fontSize: 12, color: "#7B6EF6", textDecoration: "none" }}>
+                View original posting →
+              </a>
+            </div>
+          )}
+
+          {/* Original link */}
+          {job.apply_url && (
+            <div style={{ marginTop: 20, padding: "12px 16px", background: "#1C1C20", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12, color: "#666" }}>Original job posting</span>
+              <a href={job.apply_url} target="_blank" rel="noreferrer"
+                style={{ fontSize: 12, color: "#7B6EF6", textDecoration: "none" }}>
+                {new URL(job.apply_url.startsWith("http") ? job.apply_url : "https://" + job.apply_url).hostname} →
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "16px 24px", borderTop: "1px solid #2a2a32", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ background: "none", border: "1px solid #2a2a32", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+            Close
+          </button>
+          <button onClick={() => { onClose(); onApply(job); }} style={{ background: "#7B6EF6", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+            Apply now →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Job Card ─────────────────────────────────────────────────────────────────
-function JobCard({ job, onApply }) {
+function JobCard({ job, onApply, onView }) {
   const lc = logoColor(job.company);
   const isNew = (() => {
     try { return (Date.now() - new Date(job.created_at).getTime()) < 86400000 * 2; } catch { return false; }
@@ -164,8 +253,9 @@ function JobCard({ job, onApply }) {
     <div style={{
       background: "#141416", border: "1px solid #2a2a32", borderRadius: 14,
       padding: "18px 20px", transition: "border-color 0.15s",
-      cursor: "default",
+      cursor: "pointer",
     }}
+      onClick={() => onView(job)}
       onMouseEnter={(e) => e.currentTarget.style.borderColor = "#3a3a42"}
       onMouseLeave={(e) => e.currentTarget.style.borderColor = "#2a2a32"}
     >
@@ -191,7 +281,7 @@ function JobCard({ job, onApply }) {
         <span style={{ fontSize: 10, color: "#444", fontFamily: "'DM Mono', monospace" }}>
           🤖 scraped · {job.scraped_at ? new Date(job.scraped_at).toLocaleDateString() : "—"}
         </span>
-        <button onClick={() => onApply(job)} style={{
+        <button onClick={(e) => { e.stopPropagation(); onApply(job); }} style={{
           background: "#7B6EF6", border: "none", borderRadius: 8,
           padding: "7px 16px", fontSize: 12, fontWeight: 500, color: "#fff",
           cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "background 0.15s",
@@ -207,7 +297,7 @@ function JobCard({ job, onApply }) {
 }
 
 // ── Pages ─────────────────────────────────────────────────────────────────────
-function JobsPage({ onApply, toast }) {
+function JobsPage({ onApply, onView, toast }) {
   const [jobs, setJobs] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -300,7 +390,7 @@ function JobsPage({ onApply, toast }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {jobs.map((j) => <JobCard key={j.id} job={j} onApply={onApply} />)}
+          {jobs.map((j) => <JobCard key={j.id} job={j} onApply={onApply} onView={onView} />)}
         </div>
       )}
     </div>
@@ -506,6 +596,7 @@ function StatsBar() {
 export default function App() {
   const [page, setPage] = useState("jobs");
   const [applyJob, setApplyJob] = useState(null);
+  const [detailJob, setDetailJob] = useState(null);
   const [toast, setToast] = useState("");
 
   const showToast = (msg) => { setToast(msg); };
@@ -561,12 +652,13 @@ export default function App() {
       {/* Main */}
       <main style={{ padding: "28px 32px", overflowY: "auto", maxHeight: "100vh" }}>
         <StatsBar />
-        {page === "jobs" && <JobsPage onApply={setApplyJob} toast={showToast} />}
+        {page === "jobs" && <JobsPage onApply={setApplyJob} onView={setDetailJob} toast={showToast} />}
         {page === "scraper" && <ScraperPage toast={showToast} />}
         {page === "applications" && <ApplicationsPage />}
       </main>
 
       {applyJob && <ApplyModal job={applyJob} onClose={() => setApplyJob(null)} onSuccess={showToast} />}
+      {detailJob && <JobDetailModal job={detailJob} onClose={() => setDetailJob(null)} onApply={(job) => { setDetailJob(null); setApplyJob(job); }} />}
       {toast && <Toast msg={toast} onClose={() => setToast("")} />}
     </div>
   );

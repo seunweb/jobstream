@@ -262,6 +262,12 @@ async def trigger_scrape(background_tasks: BackgroundTasks):
     return {"message": "Scrape started for all companies"}
 
 
+@app.post("/scrape/backfill-descriptions", status_code=202)
+async def backfill_descriptions(background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_backfill)
+    return {"message": "Backfill started — check logs for progress"}
+
+
 @app.post("/scrape/{company_id}", status_code=202)
 async def trigger_single_scrape(company_id: int, background_tasks: BackgroundTasks):
     companies = get_companies(active_only=True)
@@ -270,12 +276,6 @@ async def trigger_single_scrape(company_id: int, background_tasks: BackgroundTas
         raise HTTPException(404, "Company not found")
     background_tasks.add_task(run_single_company_task, company)
     return {"message": f"Scrape started for {company['name']}"}
-
-
-@app.post("/scrape/backfill-descriptions", status_code=202)
-async def backfill_descriptions(background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_backfill)
-    return {"message": "Backfill started — check logs for progress"}
 
 
 @app.get("/scrape/history")

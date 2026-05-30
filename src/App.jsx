@@ -501,14 +501,16 @@ function ScraperPage({ toast }) {
     finally { setScrapingId(null); }
 
   async function forceRescrape(id, name) {
-    if (!window.confirm(`This will delete all existing jobs for ${name} and rescrape fresh with descriptions. Continue?`)) return;
     setScrapingId(id);
     try {
       await api(`/scrape/${id}/force`, { method: "POST" });
-      toast(`Force rescraping ${name}... clearing old jobs and fetching fresh descriptions.`);
-      setTimeout(load, 8000);
-    } catch { toast(`Failed to force rescrape ${name}`); }
-    finally { setScrapingId(null); }
+      toast(`Force rescraping ${name}... old jobs cleared, fetching fresh descriptions.`);
+      setTimeout(load, 10000);
+    } catch (e) {
+      toast(`Force rescrape failed: ${e.message}`);
+    } finally {
+      setScrapingId(null);
+    }
   }
   }
 

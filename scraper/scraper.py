@@ -8,6 +8,7 @@ import hashlib
 import httpx
 import logging
 import re
+from typing import Optional
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -367,113 +368,150 @@ async def scrape_generic(page: Page, url: str, company: str) -> list[ScrapedJob]
 # Odoo Job Board scraper
 # ---------------------------------------------------------------------------
 
+async def scrape_odoo_job_page(page: Page, job_url: str, source_url: str, company: str) -> Optional[ScrapedJob]:
+    """
+    Fetch a single Odoo job detail page and extract all fields.
+    Odoo job pages have this structure:
+      - h1: job title
+      - subtitle below h1: department name (e.g. --T2 Mobile--)
+      - "Location: Lagos" text near title
+      - Main content block between Apply button and footer images
+    """
+    try:
+        await page.goto(job_url, wait_until="networkidle", timeout=20000)
+        await asyncio.sleep(1)
+        soup = BeautifulSoup(await page.content(), "html.parser")
+
+        # Title — always in h1
+        h1 = soup.find("h1")
+        if not h1:
+            return None
+        title = h1.get_text(strip=True)
+
+        # Location — look for "Location:" text anywhere on page
+        location = "Not specified"
+        for tag in soup.find_all(string=re.compile(r"Location\s*:", re.I)):
+            text = tag.strip()
+            loc = re.sub(r"Location\s*:\s*", "", text, flags=re.I).strip()
+            if loc:
+                location = loc
+                break
+
+        # Department — the subtitle under h1 (e.g. "--T2 Mobile--")
+        department = "General"
+        h5 = soup.find("h5")
+        if h5:
+            dept_text = h5.get_text(strip=True).strip("-").strip()
+            if dept_text:
+                department = dept_text
+
+        # Job type — look for contract type text
+        job_type = "Full-time"
+        body_text = soup.get_text(" ").lower()
+        if "part-time" in body_text or "part time" in body_text:
+            job_type = "Part-time"
+        elif "contract" in body_text:
+            job_type = "Contract"
+        elif "intern" in body_text:
+            job_type = "Internship"
+
+        # Description — extract the main content block
+        # On Odoo pages this is inside #wrap, between the header and footer
+        description = ""
+
+        # Remove nav, header, footer, images from soup to get clean content
+        for tag in soup.select("nav, header, footer, .navbar, .o_header, .o_footer, img"):
+            tag.decompose()
+
+        # The main content is in #wrap or the main tag
+        wrap = soup.select_one("#wrap") or soup.find("main") or soup.find("body")
+        if wrap:
+            # Get all text, skip very short lines (nav remnants)
+            raw = wrap.get_text(separator="\n")
+            lines = []
+            skip_keywords = [
+                "sign in", "contact us", "follow us", "useful links",
+                "about us", "connect with us", "copyright", "powered by",
+                "open source", "all jobs", "apply now", "my website",
+                "whistle blower", "fraud alert", "buy airtime", "forum",
+                "helpdesk", "skip to", "home", "blog", "shop", "search"
+            ]
+            started = False
+            for line in raw.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                # Start capturing after the title line
+                if not started:
+                    if title.lower()[:20] in line.lower():
+                        started = True
+                    continue
+                # Stop at footer section
+                if any(kw in line.lower() for kw in ["useful links", "connect with us", "follow us", "copyright"]):
+                    break
+                # Skip very short nav-like lines
+                if len(line) < 4:
+                    continue
+                # Skip lines that are just the location line we already captured
+                if line.lower().startswith("location:"):
+                    continue
+                lines.append(line)
+
+            description = "\n".join(lines).strip()[:6000]
+
+        logger.info(f"  ✓ {title} — {len(description)} chars, location: {location}")
+
+        return ScrapedJob(
+            title=title,
+            company=company,
+            source_url=source_url,
+            location=location,
+            job_type=job_type,
+            department=department,
+            description=description,
+            apply_url=job_url,
+        )
+
+    except Exception as e:
+        logger.warning(f"  ✗ Failed to scrape {job_url}: {e}")
+        return None
+
+
 async def scrape_odoo(page: Page, url: str, company: str) -> list[ScrapedJob]:
     """
     Scrapes Odoo-based job boards.
-    - Visits the jobs listing page
-    - Collects all job links
-    - Follows each link to fetch the full description
-    Example: https://odooerp.t2mobile.com.ng/jobs
+    1. Visits the jobs listing page and finds all /jobs/<slug> links
+    2. Visits each job detail page to fetch the full description
     """
     jobs = []
     try:
+        parsed = urlparse(url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+
         await page.goto(url, wait_until="networkidle", timeout=25000)
         await asyncio.sleep(2)
         soup = BeautifulSoup(await page.content(), "html.parser")
 
-        # Odoo job listing links — typically /jobs/<slug>
-        base = urlparse(url)
-        base_url = f"{base.scheme}://{base.netloc}"
-
+        # Collect all job detail links — /jobs/<slug> but not /jobs/apply/<slug>
         job_links = []
         for a in soup.find_all("a", href=True):
             href = a["href"]
-            # Build full URL
-            if href.startswith("/jobs/") and not href == "/jobs":
-                full_url = base_url + href
-                if full_url not in job_links:
-                    job_links.append(full_url)
-            elif href.startswith(base_url + "/jobs/"):
-                if href not in job_links:
-                    job_links.append(href)
+            full = href if href.startswith("http") else base_url + href
+            if (
+                "/jobs/" in full
+                and "/jobs/apply/" not in full
+                and full != url
+                and full != base_url + "/jobs"
+                and full not in job_links
+            ):
+                job_links.append(full)
 
         logger.info(f"Odoo: found {len(job_links)} job links at {url}")
 
         for job_url in job_links:
-            try:
-                await page.goto(job_url, wait_until="networkidle", timeout=20000)
-                await asyncio.sleep(1)
-                detail_soup = BeautifulSoup(await page.content(), "html.parser")
-
-                # Extract title
-                title = ""
-                for sel in ["h1", ".o_jobs_title", "[class*='job-title']"]:
-                    el = detail_soup.select_one(sel)
-                    if el:
-                        title = el.get_text(strip=True)
-                        break
-                if not title:
-                    continue
-
-                # Extract location
-                location = "Not specified"
-                for sel in [".o_jobs_location", "[class*='location']", "[itemprop='jobLocation']"]:
-                    el = detail_soup.select_one(sel)
-                    if el:
-                        location = el.get_text(strip=True)
-                        break
-
-                # Extract department
-                department = "General"
-                for sel in [".o_jobs_department", "[class*='department']", "[class*='team']"]:
-                    el = detail_soup.select_one(sel)
-                    if el:
-                        department = el.get_text(strip=True)
-                        break
-
-                # Extract job type
-                job_type = "Full-time"
-                for sel in [".o_jobs_contract", "[class*='contract']", "[class*='employment']"]:
-                    el = detail_soup.select_one(sel)
-                    if el:
-                        raw = el.get_text(strip=True).lower()
-                        if "part" in raw:
-                            job_type = "Part-time"
-                        elif "contract" in raw:
-                            job_type = "Contract"
-                        elif "intern" in raw:
-                            job_type = "Internship"
-                        break
-
-                # Extract full description
-                description = ""
-                for sel in [
-                    ".o_jobs_description", "[class*='job_description']",
-                    "[class*='job-description']", ".oe_structure",
-                    "article", "main .container", ".col-lg-8"
-                ]:
-                    el = detail_soup.select_one(sel)
-                    if el:
-                        text = el.get_text(separator="\n", strip=True)
-                        if len(text) > 100:
-                            lines = [l.strip() for l in text.splitlines() if l.strip()]
-                            description = "\n".join(lines)[:5000]
-                            break
-
-                jobs.append(ScrapedJob(
-                    title=title,
-                    company=company,
-                    source_url=url,
-                    location=location,
-                    job_type=job_type,
-                    department=department,
-                    description=description,
-                    apply_url=job_url,
-                ))
-                logger.info(f"  ✓ {title} ({len(description)} chars)")
-
-            except Exception as e:
-                logger.warning(f"  ✗ Failed to scrape {job_url}: {e}")
+            job = await scrape_odoo_job_page(page, job_url, url, company)
+            if job:
+                jobs.append(job)
 
     except Exception as e:
         logger.error(f"Odoo scrape failed for {url}: {e}")

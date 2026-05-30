@@ -531,16 +531,9 @@ def detect_ats(url: str) -> str:
         return "oracle"
     if "myworkdayjobs.com" in url:
         return "workday"
+    if "odoo" in url.lower() or "/jobs" in url:
+        return "odoo"
     return "generic"
-
-
-def is_odoo(url: str, page_content: str = "") -> bool:
-    """Detect Odoo job boards by URL pattern or page content."""
-    if "/jobs" in url and ("odoo" in url.lower() or "odooerp" in url.lower()):
-        return True
-    if page_content and ("odoo" in page_content.lower() or "o_jobs" in page_content):
-        return True
-    return False
 
 
 async def scrape_company(url: str, company: str) -> list[ScrapedJob]:
@@ -566,7 +559,9 @@ async def scrape_company(url: str, company: str) -> list[ScrapedJob]:
         )
         page = await context.new_page()
         try:
-            if ats == "greenhouse":
+            if ats == "odoo":
+                jobs = await scrape_odoo(page, url, company)
+            elif ats == "greenhouse":
                 jobs = await scrape_greenhouse(page, url, company)
             elif ats == "lever":
                 jobs = await scrape_lever(page, url, company)

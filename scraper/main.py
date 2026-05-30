@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from database import USE_POSTGRES, get_conn
 from database import (
     init_db, get_companies, add_company, delete_company,
     get_jobs, get_job, upsert_jobs, mark_jobs_inactive,
@@ -235,6 +236,56 @@ async def trigger_single_scrape(company_id: int, background_tasks: BackgroundTas
     background_tasks.add_task(run_single_company_task, company)
     return {"message": f"Scrape started for {company['name']}"}
 
+
+
+@app.post("/scrape/backfill-descriptions", status_code=202)
+async def backfill_descriptions(background_tasks: BackgroundTasks):
+    """Fetch and save descriptions for all existing jobs that have none."""
+    background_tasks.add_task(run_backfill)
+    return {"message": "Backfill started — this may take several minutes"}
+
+
+async def run_backfill():
+    from playwright.async_api import async_playwright
+    from scraper import fetch_job_description
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, title, apply_url FROM jobs WHERE (description IS NULL OR description = '') AND apply_url != '' ORDER BY id"
+        )
+        jobs = [dict(r) for r in cur.fetchall()]
+
+    logger.info(f"Backfill: {len(jobs)} jobs need descriptions")
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 800},
+        )
+        page = await context.new_page()
+
+        for i, job in enumerate(jobs):
+            logger.info(f"Backfill [{i+1}/{len(jobs)}]: {job['title']}")
+            try:
+                desc = await fetch_job_description(page, job["apply_url"])
+                if desc:
+                    with get_conn() as conn:
+                        cur = conn.cursor()
+                        if USE_POSTGRES:
+                            cur.execute("UPDATE jobs SET description = %s WHERE id = %s", (desc, job["id"]))
+                        else:
+                            cur.execute("UPDATE jobs SET description = ? WHERE id = ?", (desc, job["id"]))
+                    logger.info(f"  ✓ {len(desc)} chars saved")
+                else:
+                    logger.warning(f"  ✗ No description found")
+            except Exception as e:
+                logger.error(f"  ✗ Error: {e}")
+            await asyncio.sleep(1)
+
+        await browser.close()
+    logger.info("Backfill complete!")
 
 @app.get("/scrape/history")
 def scrape_history():

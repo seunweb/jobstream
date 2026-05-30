@@ -349,6 +349,7 @@ function JobsPage({ onApply, toast }) {
   const [jobType, setJobType] = useState("");
   const [dept, setDept] = useState("");
   const [scraping, setScraping] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const debounceRef = useRef(null);
 
   const load = useCallback(async (q = search, t = jobType, d = dept) => {
@@ -380,6 +381,15 @@ function JobsPage({ onApply, toast }) {
     finally { setScraping(false); }
   }
 
+  async function backfillDescriptions() {
+    setBackfilling(true);
+    try {
+      await api("/scrape/backfill-descriptions", { method: "POST" });
+      toast("Fetching descriptions in background — refresh in a few minutes.");
+    } catch { toast("Failed to start backfill."); }
+    finally { setBackfilling(false); }
+  }
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
@@ -387,13 +397,22 @@ function JobsPage({ onApply, toast }) {
           <div style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f2", letterSpacing: -0.5 }}>Job Board</div>
           <div style={{ fontSize: 13, color: "#555", marginTop: 3 }}>{total} live jobs from scraped career pages</div>
         </div>
-        <button onClick={triggerScrape} disabled={scraping} style={{
-          background: scraping ? "#1e1e24" : "#7B6EF6", border: "1px solid #3a3a42",
-          borderRadius: 9, padding: "8px 16px", fontSize: 12, color: scraping ? "#666" : "#fff",
-          cursor: scraping ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6,
-        }}>
-          {scraping ? "Scraping…" : "⟳ Scrape now"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={backfillDescriptions} disabled={backfilling} style={{
+            background: backfilling ? "#1e1e24" : "transparent", border: "1px solid #3a3a42",
+            borderRadius: 9, padding: "8px 16px", fontSize: 12, color: backfilling ? "#666" : "#888",
+            cursor: backfilling ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif",
+          }}>
+            {backfilling ? "Fetching descriptions…" : "📄 Fetch all descriptions"}
+          </button>
+          <button onClick={triggerScrape} disabled={scraping} style={{
+            background: scraping ? "#1e1e24" : "#7B6EF6", border: "1px solid #3a3a42",
+            borderRadius: 9, padding: "8px 16px", fontSize: 12, color: scraping ? "#666" : "#fff",
+            cursor: scraping ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6,
+          }}>
+            {scraping ? "Scraping…" : "⟳ Scrape now"}
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

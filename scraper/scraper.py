@@ -518,58 +518,76 @@ async def scrape_odoo_job_page(page: Page, job_url: str, source_url: str, compan
             extract_node(child)
 
         # Build formatted description
+        # Step 1: Collapse all whitespace within each part (fixes broken sentences)
+        cleaned_parts = []
+        for part_type, part_text in desc_parts:
+            # Collapse internal whitespace and line breaks into single spaces
+            part_text = " ".join(part_text.split())
+            part_text = part_text.strip()
+            if not part_text or len(part_text) < 2:
+                continue
+            # Skip nav noise
+            nav_noise = {"home","forum","jobs","blog","help","contact us","sign in","all jobs","apply now!","apply now","search","0","#"}
+            if part_text.lower() in nav_noise:
+                continue
+            cleaned_parts.append((part_type, part_text))
+
+        # Step 2: Handle fake bullets — lines starting with · or - that came in as text
+        normalized = []
+        for part_type, part_text in cleaned_parts:
+            if part_type == "text" and re.match(r"^[·•\-–]\s*", part_text):
+                # Convert fake bullet to real bullet
+                clean = re.sub(r"^[·•\-–]+\s*", "", part_text).strip()
+                if clean:
+                    normalized.append(("bullet", clean))
+            else:
+                normalized.append((part_type, part_text))
+
+        # Step 3: Merge fragmented text lines into proper sentences/paragraphs
+        merged = []
+        for part_type, part_text in normalized:
+            if not merged:
+                merged.append((part_type, part_text))
+                continue
+            prev_type, prev_text = merged[-1]
+            # Merge consecutive text fragments that form one sentence
+            if (part_type == "text" and prev_type == "text" and
+                    not prev_text.endswith((".", "!", "?", ":")) and
+                    not part_text[0].isupper()):
+                merged[-1] = ("text", prev_text + " " + part_text)
+            else:
+                merged.append((part_type, part_text))
+
+        # Step 4: Build final output lines
         lines_out = []
         prev_type = None
-        nav_noise = {
-            "home", "forum", "jobs", "blog", "help", "contact us",
-            "sign in", "all jobs", "apply now!", "apply now", "search",
-            "0", "#"
-        }
-
-        for part_type, part_text in desc_parts:
-            part_text = part_text.strip()
-            if not part_text or part_text.lower() in nav_noise:
-                continue
-            if len(part_text) < 2:
-                continue
-
+        for part_type, part_text in merged:
             if part_type == "heading":
                 if lines_out:
                     lines_out.append("")
                 lines_out.append(f"**{part_text}**")
                 lines_out.append("")
-
             elif part_type == "bullet":
-                lines_out.append(f"• {part_text}")
-
+                lines_out.append(f"\u2022 {part_text}")
             elif part_type == "text":
-                # Merge with previous text line if it exists and didn't end sentence
-                if (prev_type == "text" and lines_out and
-                        not lines_out[-1].startswith("**") and
-                        not lines_out[-1].startswith("•") and
-                        lines_out[-1] and
-                        not lines_out[-1][-1] in ".!?:"):
-                    lines_out[-1] = lines_out[-1] + " " + part_text
-                else:
-                    if prev_type == "bullet" and lines_out:
-                        lines_out.append("")
-                    lines_out.append(part_text)
-
+                if prev_type == "bullet":
+                    lines_out.append("")
+                lines_out.append(part_text)
             prev_type = part_type
 
-        # Remove consecutive blank lines
-        cleaned = []
+        # Step 5: Remove consecutive blank lines
+        final = []
         prev_blank = False
         for line in lines_out:
             if line == "":
                 if not prev_blank:
-                    cleaned.append(line)
+                    final.append(line)
                 prev_blank = True
             else:
-                cleaned.append(line)
+                final.append(line)
                 prev_blank = False
 
-        description = "\n".join(cleaned).strip()
+        description = "\n".join(final).strip()
 
         logger.info(f"  v {title} - {len(description)} chars, location: {location}")
 

@@ -310,25 +310,52 @@ function JobCard({ job, onApply, onView, isExpanded }) {
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 500, marginBottom: 12 }}>About this role</div>
             {job.description && job.description.trim() ? (
-              <div style={{ fontSize: 13, color: "#b0b0c0", lineHeight: 1.9 }}>
-                {job.description.trim().split("\n").map((line, i) => {
-                  if (line.startsWith("**") && line.endsWith("**")) {
-                    // Bold heading
-                    return <div key={i} style={{ fontWeight: 700, color: "#f0f0f2", fontSize: 13, marginTop: 16, marginBottom: 6 }}>{line.replace(/\*\*/g, "")}</div>;
-                  } else if (line.startsWith("• ")) {
-                    // Bullet point
-                    return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, paddingLeft: 8 }}>
-                      <span style={{ color: "#7B6EF6", flexShrink: 0, marginTop: 2 }}>•</span>
-                      <span>{line.slice(2)}</span>
-                    </div>;
-                  } else if (line.trim() === "") {
-                    // Blank line spacer
-                    return <div key={i} style={{ height: 6 }} />;
-                  } else {
-                    // Regular paragraph
-                    return <div key={i} style={{ marginBottom: 4 }}>{line}</div>;
-                  }
-                })}
+              <div style={{ fontSize: 13, color: "#b0b0c0", lineHeight: 1.8 }}>
+                {(() => {
+                  const lines = job.description.trim().split("\n");
+                  const elements = [];
+                  let bulletGroup = [];
+
+                  const flushBullets = () => {
+                    if (bulletGroup.length > 0) {
+                      elements.push(
+                        <ul key={`ul-${elements.length}`} style={{ paddingLeft: 0, margin: "6px 0 10px 0", listStyle: "none" }}>
+                          {bulletGroup.map((b, bi) => (
+                            <li key={bi} style={{ display: "flex", gap: 10, marginBottom: 5, alignItems: "flex-start" }}>
+                              <span style={{ color: "#7B6EF6", flexShrink: 0, fontSize: 16, lineHeight: 1.4 }}>•</span>
+                              <span style={{ flex: 1 }}>{b}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                      bulletGroup = [];
+                    }
+                  };
+
+                  lines.forEach((line, i) => {
+                    if (line.startsWith("**") && line.endsWith("**")) {
+                      flushBullets();
+                      elements.push(
+                        <div key={i} style={{ fontWeight: 700, color: "#f0f0f2", fontSize: 14, marginTop: 20, marginBottom: 8, borderBottom: "1px solid #2a2a32", paddingBottom: 4 }}>
+                          {line.replace(/\*\*/g, "")}
+                        </div>
+                      );
+                    } else if (line.startsWith("• ") || line.startsWith("• ")) {
+                      bulletGroup.push(line.slice(2));
+                    } else if (line.trim() === "") {
+                      flushBullets();
+                      elements.push(<div key={i} style={{ height: 8 }} />);
+                    } else {
+                      flushBullets();
+                      elements.push(
+                        <p key={i} style={{ margin: "0 0 8px 0", color: "#b0b0c0" }}>{line}</p>
+                      );
+                    }
+                  });
+
+                  flushBullets();
+                  return elements;
+                })()}
               </div>
             ) : (
               <div style={{ fontSize: 13, color: "#555", lineHeight: 1.8 }}>

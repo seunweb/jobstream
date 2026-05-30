@@ -310,10 +310,29 @@ function JobCard({ job, onApply, onView, isExpanded }) {
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 500, marginBottom: 12 }}>About this role</div>
             {job.description && job.description.trim() ? (
-              <div style={{ fontSize: 13, color: "#b0b0c0", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{job.description.trim()}</div>
+              <div style={{ fontSize: 13, color: "#b0b0c0", lineHeight: 1.9 }}>
+                {job.description.trim().split("\n").map((line, i) => {
+                  if (line.startsWith("**") && line.endsWith("**")) {
+                    // Bold heading
+                    return <div key={i} style={{ fontWeight: 700, color: "#f0f0f2", fontSize: 13, marginTop: 16, marginBottom: 6 }}>{line.replace(/\*\*/g, "")}</div>;
+                  } else if (line.startsWith("• ")) {
+                    // Bullet point
+                    return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, paddingLeft: 8 }}>
+                      <span style={{ color: "#7B6EF6", flexShrink: 0, marginTop: 2 }}>•</span>
+                      <span>{line.slice(2)}</span>
+                    </div>;
+                  } else if (line.trim() === "") {
+                    // Blank line spacer
+                    return <div key={i} style={{ height: 6 }} />;
+                  } else {
+                    // Regular paragraph
+                    return <div key={i} style={{ marginBottom: 4 }}>{line}</div>;
+                  }
+                })}
+              </div>
             ) : (
               <div style={{ fontSize: 13, color: "#555", lineHeight: 1.8 }}>
-                This job was scraped from the company career page. The full description is available on their website — click <strong style={{ color: "#a99df8" }}>Apply on company website</strong> below to view it.
+                Full description available on the company website — click <strong style={{ color: "#a99df8" }}>Apply on company website</strong> below to view it.
               </div>
             )}
           </div>

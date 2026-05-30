@@ -371,33 +371,20 @@ async def scrape_generic(page: Page, url: str, company: str) -> list[ScrapedJob]
 async def scrape_odoo_job_page(page: Page, job_url: str, source_url: str, company: str) -> Optional[ScrapedJob]:
     """
     Fetch a single Odoo job detail page and extract all fields.
-    Odoo job pages have this structure:
-      - h1: job title
-      - subtitle below h1: department name (e.g. --T2 Mobile--)
-      - "Location: Lagos" text near title
-      - Main content block between Apply button and footer images
+    Returns full untruncated description with proper formatting.
     """
     try:
         await page.goto(job_url, wait_until="networkidle", timeout=20000)
         await asyncio.sleep(1)
         soup = BeautifulSoup(await page.content(), "html.parser")
 
-        # Title — always in h1
+        # Title
         h1 = soup.find("h1")
         if not h1:
             return None
         title = h1.get_text(strip=True)
 
-        # Location — look for "Location:" text anywhere on page
-        location = "Not specified"
-        for tag in soup.find_all(string=re.compile(r"Location\s*:", re.I)):
-            text = tag.strip()
-            loc = re.sub(r"Location\s*:\s*", "", text, flags=re.I).strip()
-            if loc:
-                location = loc
-                break
-
-        # Department — the subtitle under h1 (e.g. "--T2 Mobile--")
+        # Department — subtitle under h1
         department = "General"
         h5 = soup.find("h5")
         if h5:
@@ -405,7 +392,7 @@ async def scrape_odoo_job_page(page: Page, job_url: str, source_url: str, compan
             if dept_text:
                 department = dept_text
 
-        # Job type — look for contract type text
+        # Job type
         job_type = "Full-time"
         body_text = soup.get_text(" ").lower()
         if "part-time" in body_text or "part time" in body_text:
@@ -415,51 +402,138 @@ async def scrape_odoo_job_page(page: Page, job_url: str, source_url: str, compan
         elif "intern" in body_text:
             job_type = "Internship"
 
-        # Description — extract the main content block
-        # On Odoo pages this is inside #wrap, between the header and footer
-        description = ""
+        # Location — find "Location:" text
+        location = "Not specified"
+        for tag in soup.find_all(string=re.compile(r"Location", re.I)):
+            text = tag.strip()
+            if "location" in text.lower() and len(text) < 100:
+                loc = re.sub(r"Location\s*:\s*", "", text, flags=re.I).strip()
+                if loc and loc != text:
+                    location = loc
+                    break
 
-        # Remove nav, header, footer, images from soup to get clean content
-        for tag in soup.select("nav, header, footer, .navbar, .o_header, .o_footer, img"):
+        # ----------------------------------------------------------------
+        # Extract and format full description
+        # ----------------------------------------------------------------
+        # Remove noise elements
+        for tag in soup.select("nav, header, footer, .navbar, .o_header, .o_footer, script, style"):
             tag.decompose()
 
-        # The main content is in #wrap or the main tag
+        # Remove images
+        for img in soup.find_all("img"):
+            img.decompose()
+
+        # Get the main content wrapper
         wrap = soup.select_one("#wrap") or soup.find("main") or soup.find("body")
+
+        description = ""
         if wrap:
-            # Get all text, skip very short lines (nav remnants)
-            raw = wrap.get_text(separator="\n")
-            lines = []
-            skip_keywords = [
-                "sign in", "contact us", "follow us", "useful links",
-                "about us", "connect with us", "copyright", "powered by",
-                "open source", "all jobs", "apply now", "my website",
-                "whistle blower", "fraud alert", "buy airtime", "forum",
-                "helpdesk", "skip to", "home", "blog", "shop", "search"
-            ]
+            # Convert HTML to structured text preserving headings and bullets
+            desc_lines = []
             started = False
-            for line in raw.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                # Start capturing after the title line
-                if not started:
-                    if title.lower()[:20] in line.lower():
+            skip_footer_keywords = [
+                "useful links", "connect with us", "follow us",
+                "copyright", "powered by", "about us", "open source ecommerce"
+            ]
+
+            def process_element(el):
+                nonlocal started
+                tag = el.name if hasattr(el, "name") else None
+
+                if tag in ["h1", "h2", "h3", "h4", "h5", "h6"]:
+                    text = el.get_text(strip=True)
+                    if not text:
+                        return
+                    # Start capturing after h1 (the job title)
+                    if tag == "h1":
                         started = True
-                    continue
-                # Stop at footer section
-                if any(kw in line.lower() for kw in ["useful links", "connect with us", "follow us", "copyright"]):
-                    break
-                # Skip very short nav-like lines
-                if len(line) < 4:
-                    continue
-                # Skip lines that are just the location line we already captured
-                if line.lower().startswith("location:"):
-                    continue
-                lines.append(line)
+                        return  # skip the title itself, already captured
+                    if not started:
+                        return
+                    if any(kw in text.lower() for kw in skip_footer_keywords):
+                        return
+                    desc_lines.append(f"\n**{text}**\n")
 
-            description = "\n".join(lines).strip()[:6000]
+                elif tag in ["p", "div", "span"] or tag is None:
+                    if not started:
+                        return
+                    if hasattr(el, "children"):
+                        for child in el.children:
+                            process_element(child)
+                    else:
+                        text = str(el).strip()
+                        if text and len(text) > 1:
+                            if any(kw in text.lower() for kw in skip_footer_keywords):
+                                return
+                            desc_lines.append(text)
 
-        logger.info(f"  ✓ {title} — {len(description)} chars, location: {location}")
+                elif tag in ["ul", "ol"]:
+                    if not started:
+                        return
+                    for li in el.find_all("li", recursive=False):
+                        text = li.get_text(strip=True)
+                        if text:
+                            if any(kw in text.lower() for kw in skip_footer_keywords):
+                                return
+                            desc_lines.append(f"• {text}")
+                    desc_lines.append("")
+
+                elif tag == "li":
+                    if not started:
+                        return
+                    text = el.get_text(strip=True)
+                    if text:
+                        desc_lines.append(f"• {text}")
+
+                elif tag in ["strong", "b"]:
+                    if not started:
+                        return
+                    text = el.get_text(strip=True)
+                    if text:
+                        desc_lines.append(f"**{text}**")
+
+                elif tag == "br":
+                    if started:
+                        desc_lines.append("")
+
+                else:
+                    if not started or not hasattr(el, "children"):
+                        return
+                    for child in el.children:
+                        process_element(child)
+
+            for child in wrap.children:
+                process_element(child)
+
+            # Clean up the lines
+            cleaned = []
+            prev_blank = False
+            for line in desc_lines:
+                line = line.strip()
+                # Skip navigation remnants
+                if line.lower() in ["home", "forum", "jobs", "blog", "help", "contact us", "sign in", "all jobs", "apply now!", "apply now", "search"]:
+                    continue
+                # Skip very short orphan lines that are not bullets or headings
+                if len(line) < 3 and not line.startswith("•") and not line.startswith("**"):
+                    if line == "":
+                        if not prev_blank:
+                            cleaned.append("")
+                            prev_blank = True
+                    continue
+                # Merge lines that are continuations (not bullets/headings)
+                if cleaned and not line.startswith("•") and not line.startswith("**") and not line == "" and not cleaned[-1].startswith("•") and not cleaned[-1].startswith("**") and cleaned[-1] != "":
+                    # Check if previous line ends with punctuation suggesting sentence end
+                    if cleaned[-1].endswith((".", ":", "!", "?")):
+                        cleaned.append(line)
+                    else:
+                        cleaned[-1] = cleaned[-1] + " " + line
+                else:
+                    cleaned.append(line)
+                    prev_blank = line == ""
+
+            description = "\n".join(cleaned).strip()
+
+        logger.info(f"  v {title} - {len(description)} chars, location: {location}")
 
         return ScrapedJob(
             title=title,
@@ -473,9 +547,8 @@ async def scrape_odoo_job_page(page: Page, job_url: str, source_url: str, compan
         )
 
     except Exception as e:
-        logger.warning(f"  ✗ Failed to scrape {job_url}: {e}")
+        logger.warning(f"  x Failed to scrape {job_url}: {e}")
         return None
-
 
 async def scrape_odoo(page: Page, url: str, company: str) -> list[ScrapedJob]:
     """

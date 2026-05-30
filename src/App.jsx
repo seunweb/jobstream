@@ -499,6 +499,17 @@ function ScraperPage({ toast }) {
       setTimeout(load, 5000);
     } catch { toast(`Failed to scrape ${name}`); }
     finally { setScrapingId(null); }
+
+  async function forceRescrape(id, name) {
+    if (!window.confirm(`This will delete all existing jobs for ${name} and rescrape fresh with descriptions. Continue?`)) return;
+    setScrapingId(id);
+    try {
+      await api(`/scrape/${id}/force`, { method: "POST" });
+      toast(`Force rescraping ${name}... clearing old jobs and fetching fresh descriptions.`);
+      setTimeout(load, 8000);
+    } catch { toast(`Failed to force rescrape ${name}`); }
+    finally { setScrapingId(null); }
+  }
   }
 
   const inputStyle = { background: "#141416", border: "1px solid #2a2a32", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#f0f0f2", fontFamily: "'DM Sans', sans-serif", outline: "none" };
@@ -531,6 +542,14 @@ function ScraperPage({ toast }) {
                   style={{ background: scrapingId === c.id ? "#1e1e24" : "rgba(123,110,246,0.15)", border: "1px solid rgba(123,110,246,0.3)", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: scrapingId === c.id ? "#555" : "#a99df8", cursor: scrapingId === c.id ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
                 >
                   {scrapingId === c.id ? "Scraping\u2026" : "\u27f3 Scrape"}
+                </button>
+                <button
+                  onClick={() => forceRescrape(c.id, c.name)}
+                  disabled={scrapingId === c.id}
+                  title="Clear existing jobs and rescrape fresh with descriptions"
+                  style={{ background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.25)", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#f87171", cursor: scrapingId === c.id ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+                >
+                  Force
                 </button>
                 <button onClick={() => removeCompany(c.id, c.name)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 4 }}
                   onMouseEnter={(e) => e.currentTarget.style.color = "#f87171"}

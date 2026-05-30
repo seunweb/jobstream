@@ -262,6 +262,30 @@ async def trigger_scrape(background_tasks: BackgroundTasks):
     return {"message": "Scrape started for all companies"}
 
 
+
+@app.post("/scrape/{company_id}/force", status_code=202)
+async def force_rescrape(company_id: int, background_tasks: BackgroundTasks):
+    """Force rescrape a company — clears existing jobs first so descriptions are refetched."""
+    companies = get_companies(active_only=True)
+    company = next((c for c in companies if c["id"] == company_id), None)
+    if not company:
+        raise HTTPException(404, "Company not found")
+    background_tasks.add_task(run_force_rescrape, company)
+    return {"message": f"Force rescrape started for {company['name']}"}
+
+
+async def run_force_rescrape(company: dict):
+    """Delete all jobs for a company then rescrape fresh."""
+    logger.info(f"Force rescrape: clearing jobs for {company['name']}")
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute("DELETE FROM jobs WHERE source_url = %s", (company["url"],))
+        else:
+            cur.execute("DELETE FROM jobs WHERE source_url = ?", (company["url"],))
+    logger.info(f"Cleared existing jobs for {company['name']}, scraping fresh...")
+    await _do_scrape([company])
+
 @app.post("/scrape/backfill-descriptions", status_code=202)
 async def backfill_descriptions(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_backfill)

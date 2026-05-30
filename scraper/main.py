@@ -42,18 +42,6 @@ async def lifespan(app: FastAPI):
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Drop and recreate tables on PostgreSQL to fix column type issues
-        from database import USE_POSTGRES, get_conn
-        if USE_POSTGRES:
-            with get_conn() as conn:
-                cur = conn.cursor()
-                logger.info("Dropping existing PostgreSQL tables for clean migration...")
-                cur.execute("""
-                    DROP TABLE IF EXISTS applications CASCADE;
-                    DROP TABLE IF EXISTS scrape_runs CASCADE;
-                    DROP TABLE IF EXISTS jobs CASCADE;
-                    DROP TABLE IF EXISTS companies CASCADE;
-                """)
         init_db()
         logger.info("Database initialised")
     except Exception as e:
@@ -253,19 +241,6 @@ def scrape_history():
     return get_scrape_history()
 
 
-
-# ---------------------------------------------------------------------------
-# Debug route (temporary - remove in production)
-# ---------------------------------------------------------------------------
-
-@app.get("/debug/companies")
-def debug_companies():
-    """Returns ALL companies including inactive ones."""
-    with __import__("database").get_conn() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM companies ORDER BY id")
-        from database import row_to_dict
-        return [row_to_dict(r) for r in cur.fetchall()]
 
 @app.get("/scrape/status")
 def scrape_status():

@@ -335,9 +335,23 @@ function JobCard({ job, onApply, onView, isExpanded }) {
                   lines.forEach((line, i) => {
                     if (line.startsWith("**") && line.endsWith("**")) {
                       flushBullets();
+                      const headingText = line.replace(/\*\*/g, "");
+                      // Detect if it's a main section heading or a sub-heading
+                      const isMain = headingText === headingText.toUpperCase() && headingText.length > 3;
                       elements.push(
-                        <div key={i} style={{ fontWeight: 700, color: "#f0f0f2", fontSize: 14, marginTop: 20, marginBottom: 8, borderBottom: "1px solid #2a2a32", paddingBottom: 4 }}>
-                          {line.replace(/\*\*/g, "")}
+                        <div key={i} style={{
+                          fontWeight: 700,
+                          color: "#f0f0f2",
+                          fontSize: isMain ? 14 : 13,
+                          marginTop: isMain ? 24 : 14,
+                          marginBottom: 8,
+                          borderBottom: isMain ? "1px solid #2a2a32" : "none",
+                          paddingBottom: isMain ? 6 : 0,
+                          textTransform: isMain ? "uppercase" : "none",
+                          letterSpacing: isMain ? "0.5px" : "normal",
+                          color: isMain ? "#f0f0f2" : "#c0b8f8",
+                        }}>
+                          {headingText}
                         </div>
                       );
                     } else if (line.startsWith("• ") || line.startsWith("• ")) {

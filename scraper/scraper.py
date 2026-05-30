@@ -535,9 +535,9 @@ async def scrape_odoo_job_page(page: Page, job_url: str, source_url: str, compan
         # Step 2: Handle fake bullets — lines starting with · or - that came in as text
         normalized = []
         for part_type, part_text in cleaned_parts:
-            if part_type == "text" and re.match(r"^[·•\-–]\s*", part_text):
-                # Convert fake bullet to real bullet
-                clean = re.sub(r"^[·•\-–]+\s*", "", part_text).strip()
+            # Detect fake bullets: ·, •, -, –, or lowercase 'o' used as bullet prefix
+            if part_type == "text" and re.match(r"^([·•\-–]|o\s+[A-Z]|o\s+[a-z])\s*", part_text):
+                clean = re.sub(r"^[·•\-–o]+\s*", "", part_text).strip()
                 if clean:
                     normalized.append(("bullet", clean))
             else:

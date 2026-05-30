@@ -753,7 +753,7 @@ function StatsBar({ isDark = true }) {
         { label: "Applications", val: stats.apps },
         { label: "Last scraped", val: stats.lastRun || "—" },
       ].map(({ label, val }) => (
-        <div key={label} style={{ background: isDark ? "#141416" : "#ffffff", border: `1px solid ${isDark ? "#2a2a32" : "#e0e0e8"}`, borderRadius: 12, padding: "14px 16px", transition: "background 0.2s" }}>
+        <div key={label} style={{ background: isDark ? "#141416" : "#ffffff", border: (isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8"), borderRadius: 12, padding: "14px 16px", transition: "background 0.2s" }}>
           <div style={{ fontSize: typeof val === "number" ? 24 : 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.5 }}>{val}</div>
           <div style={{ fontSize: 11, color: isDark ? "#555" : "#888", marginTop: 4 }}>{label}</div>
         </div>
@@ -785,13 +785,13 @@ export default function App() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        input::placeholder, textarea::placeholder { color: ${isDark ? "#444" : "#aaa"}; }
-        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: ${isDark ? "#2a2a32" : "#ccc"}; border-radius: 3px; }
-        select option { background: ${isDark ? "#141416" : "#ffffff"}; color: ${isDark ? "#f0f0f2" : "#1a1a1a"}; }
+        input::placeholder, textarea::placeholder { color: #444; }
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a32; border-radius: 3px; }
+        select option { background: #141416; color: #f0f0f2; }
       \`}</style>
 
       {/* Sidebar */}
-      <aside style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: `1px solid ${isDark ? "#1e1e24" : "#e0e0e8"}`, padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "background 0.2s" }}>
+      <aside style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: (isDark ? "1px solid #1e1e24" : "1px solid #e0e0e8"), padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "background 0.2s" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", marginBottom: 20 }}>
           <div style={{ width: 30, height: 30, background: "#7B6EF6", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>⚡</div>
           <div>
@@ -805,7 +805,7 @@ export default function App() {
           <button
             onClick={() => setTheme(isDark ? "light" : "dark")}
             title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: `1px solid ${isDark ? "#2a2a32" : "#d0d0d8"}`, borderRadius: 20, padding: "4px 12px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6, transition: "all 0.2s" }}
+            style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: (isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8"), borderRadius: 20, padding: "4px 12px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6, transition: "all 0.2s" }}
           >
             {isDark ? "☀ Light" : "● Dark"}
           </button>

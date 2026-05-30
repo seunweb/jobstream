@@ -465,12 +465,13 @@ function ScraperPage({ toast }) {
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [loading, setLoading] = useState(true);
-  const [scrapingId, setScrapingId] = useState(null);
+  const [busyId, setBusyId] = useState(null); // company id currently being scraped
 
   async function load() {
     try {
       const [c, h] = await Promise.all([api("/companies"), api("/scrape/history")]);
-      setCompanies(c); setHistory(h);
+      setCompanies(c);
+      setHistory(h);
     } catch {}
     finally { setLoading(false); }
   }
@@ -481,32 +482,41 @@ function ScraperPage({ toast }) {
     if (!newName || !newUrl) return;
     try {
       await api("/companies", { method: "POST", body: JSON.stringify({ name: newName, url: newUrl }) });
-      setNewName(""); setNewUrl(""); load();
+      setNewName(""); setNewUrl("");
+      load();
       toast(`Added ${newName}`);
     } catch (e) { toast("Failed: " + e.message); }
   }
 
   async function removeCompany(id, name) {
     await api(`/companies/${id}`, { method: "DELETE" });
-    load(); toast(`Removed ${name}`);
+    load();
+    toast(`Removed ${name}`);
   }
 
   async function scrapeOne(id, name) {
-    setScrapingId(id);
+    setBusyId(id);
     try {
       await api(`/scrape/${id}`, { method: "POST" });
-      toast(`Scraping ${name}\u2026 jobs will appear shortly.`);
-      setTimeout(load, 5000);
-    } catch { toast(`Failed to scrape ${name}`); }
-    finally { setScrapingId(null); }
+      toast(`Scraping ${name}... jobs will appear shortly.`);
+      setTimeout(load, 6000);
+    } catch (e) {
+      toast(`Scrape failed: ${e.message}`);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
-  async function forceRescrape(id, name) {
-    setScrapingId(id);
+  async function forceOne(id, name) {
+    setBusyId(id);
     try {
-      const res = await fetch(`${API}/scrape/${id}/force`, { method: "POST", headers: { "Content-Type": "application/json" } });
+      const res = await fetch(`${API}/scrape/${id}/force`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
       if (!res.ok) {
-        const err = await res.text();
-        toast(`Error ${res.status}: ${err}`);
+        const txt = await res.text();
+        toast(`Error ${res.status}: ${txt}`);
         return;
       }
       toast(`Force rescraping ${name}... refresh in 30 seconds.`);
@@ -514,12 +524,15 @@ function ScraperPage({ toast }) {
     } catch (e) {
       toast(`Network error: ${e.message}`);
     } finally {
-      setScrapingId(null);
+      setBusyId(null);
     }
   }
-  }
 
-  const inputStyle = { background: "#141416", border: "1px solid #2a2a32", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#f0f0f2", fontFamily: "'DM Sans', sans-serif", outline: "none" };
+  const inp = {
+    background: "#141416", border: "1px solid #2a2a32", borderRadius: 8,
+    padding: "9px 12px", fontSize: 13, color: "#f0f0f2",
+    fontFamily: "'DM Sans', sans-serif", outline: "none",
+  };
 
   return (
     <div>
@@ -528,37 +541,43 @@ function ScraperPage({ toast }) {
         <div style={{ fontSize: 13, color: "#555", marginTop: 3 }}>Manage career pages to scrape automatically</div>
       </div>
 
-      {/* Companies */}
+      {/* Companies list */}
       <div style={{ background: "#141416", border: "1px solid #2a2a32", borderRadius: 14, padding: "20px 22px", marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: "#f0f0f2", marginBottom: 16 }}>Tracked companies</div>
+
         {loading ? <Spinner /> : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
             {companies.map((c) => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#1C1C20", borderRadius: 8, border: "1px solid #2a2a32" }}>
-                <div style={{ width: 28, height: 28, borderRadius: 6, ...logoColor(c.name), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, background: logoColor(c.name).bg, color: logoColor(c.name).fg }}>
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#1C1C20", borderRadius: 8, border: "1px solid #2a2a32" }}>
+                {/* Logo */}
+                <div style={{ width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, background: logoColor(c.name).bg, color: logoColor(c.name).fg, flexShrink: 0 }}>
                   {initials(c.name)}
                 </div>
-                <div style={{ flex: 1 }}>
+                {/* Name + URL */}
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, color: "#f0f0f2" }}>{c.name}</div>
-                  <div style={{ fontSize: 10, color: "#555", fontFamily: "'DM Mono', monospace" }}>{c.url}</div>
+                  <div style={{ fontSize: 10, color: "#555", fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.url}</div>
                 </div>
+                {/* Scrape button */}
                 <button
                   onClick={() => scrapeOne(c.id, c.name)}
-                  disabled={scrapingId === c.id}
-                  title="Scrape this company only"
-                  style={{ background: scrapingId === c.id ? "#1e1e24" : "rgba(123,110,246,0.15)", border: "1px solid rgba(123,110,246,0.3)", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: scrapingId === c.id ? "#555" : "#a99df8", cursor: scrapingId === c.id ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+                  disabled={busyId === c.id}
+                  style={{ background: "rgba(123,110,246,0.15)", border: "1px solid rgba(123,110,246,0.3)", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: busyId === c.id ? "#555" : "#a99df8", cursor: busyId === c.id ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
                 >
-                  {scrapingId === c.id ? "Scraping\u2026" : "\u27f3 Scrape"}
+                  {busyId === c.id ? "Busy..." : "⟳ Scrape"}
                 </button>
+                {/* Force rescrape button */}
                 <button
-                  onClick={() => forceRescrape(c.id, c.name)}
-                  disabled={scrapingId === c.id}
-                  title="Clear existing jobs and rescrape fresh with descriptions"
-                  style={{ background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.25)", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#f87171", cursor: scrapingId === c.id ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+                  onClick={() => forceOne(c.id, c.name)}
+                  disabled={busyId === c.id}
+                  style={{ background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.3)", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: busyId === c.id ? "#555" : "#f87171", cursor: busyId === c.id ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
                 >
-                  Force
+                  ↺ Force
                 </button>
-                <button onClick={() => removeCompany(c.id, c.name)} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 4 }}
+                {/* Remove button */}
+                <button
+                  onClick={() => removeCompany(c.id, c.name)}
+                  style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 4 }}
                   onMouseEnter={(e) => e.currentTarget.style.color = "#f87171"}
                   onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
                 >✕</button>
@@ -566,9 +585,11 @@ function ScraperPage({ toast }) {
             ))}
           </div>
         )}
+
+        {/* Add company form */}
         <div style={{ display: "flex", gap: 8 }}>
-          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Company name" style={{ ...inputStyle, width: 140 }} />
-          <input value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="https://company.com/careers" style={{ ...inputStyle, flex: 1 }} />
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Company name" style={{ ...inp, width: 140 }} />
+          <input value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="https://company.com/careers" style={{ ...inp, flex: 1 }} />
           <button onClick={addCompany} style={{ background: "#7B6EF6", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>+ Add</button>
         </div>
       </div>
@@ -577,7 +598,7 @@ function ScraperPage({ toast }) {
       <div style={{ background: "#141416", border: "1px solid #2a2a32", borderRadius: 14, padding: "20px 22px" }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: "#f0f0f2", marginBottom: 16 }}>Scrape history</div>
         {history.length === 0 ? (
-          <div style={{ color: "#444", fontSize: 12, fontFamily: "'DM Mono', monospace" }}>No scrape runs yet. Trigger one from the job board.</div>
+          <div style={{ color: "#444", fontSize: 12, fontFamily: "'DM Mono', monospace" }}>No scrape runs yet.</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {history.map((r) => (
@@ -593,6 +614,7 @@ function ScraperPage({ toast }) {
     </div>
   );
 }
+
 
 function ApplicationsPage() {
   const [apps, setApps] = useState([]);

@@ -788,7 +788,7 @@ export default function App() {
         input::placeholder, textarea::placeholder { color: #444; }
         ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a32; border-radius: 3px; }
         select option { background: #141416; color: #f0f0f2; }
-      \`}</style>
+      `}</style>
 
       {/* Sidebar */}
       <aside style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: (isDark ? "1px solid #1e1e24" : "1px solid #e0e0e8"), padding: "22px 14px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "background 0.2s" }}>

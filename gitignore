@@ -1,0 +1,16 @@
+# Python
+scraper/venv/
+scraper/__pycache__/
+scraper/*.pyc
+scraper/*.db
+scraper/.env
+
+# Node
+node_modules/
+dist/
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

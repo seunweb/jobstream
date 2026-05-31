@@ -7,6 +7,8 @@ Run: uvicorn main:app --reload
 import asyncio
 import logging
 import os
+from dotenv import load_dotenv
+load_dotenv()
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional

@@ -1,4 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+// Auth helpers - safe inline implementation
+function getStoredUser() { try { return JSON.parse(localStorage.getItem("js_user")); } catch { return null; } }
+function getAccessToken() { return localStorage.getItem("js_access_token"); }
+function clearAuth() { ["js_access_token","js_refresh_token","js_user"].forEach(k => localStorage.removeItem(k)); }
+async function apiLogout(rt) { try { await fetch(`${API}/auth/logout`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({refresh_token: rt}) }); } catch {} }
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -33,272 +38,71 @@ function initials(name = "") {
   return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 }
 
-// Company logo — fetches real favicon from Google's favicon service
-// Falls back to styled initials if logo fails to load
-// Reusable: same company name = same logo, no image files stored
+// Custom logo overrides
+const CUSTOM_LOGOS = {
+  "t2mobile": "https://www.t2mobile.com.ng/_next/static/media/logos.1d851e63.png",
+};
+
 function CompanyLogo({ name, sourceUrl, size = 42 }) {
   const lc = logoColor(name);
   const ini = initials(name);
-  const [imgError, setImgError] = useState(false);
+  const [error, setError] = useState(false);
 
-  // Extract domain from source URL for favicon lookup
+  const customKey = name.toLowerCase().replace(/\s+/g, "");
+  const customUrl = CUSTOM_LOGOS[customKey];
+
   let domain = "";
   try {
-    if (sourceUrl) {
-      domain = new URL(sourceUrl).hostname.replace("www.", "");
-    }
+    if (sourceUrl) domain = new URL(sourceUrl).hostname.replace("www.", "");
   } catch {}
 
-  const faviconUrl = domain
-    ? `https://www.google.com/s2/favicons?domain=${domain}&sz=${size * 2}`
-    : "";
+  const logoUrl = customUrl || (domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : "");
 
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   const cr = 8 + (h % 6);
 
-  if (faviconUrl && !imgError) {
+  if (logoUrl && !error) {
     return (
-      <div style={{
-        width: size, height: size, borderRadius: cr,
-        background: "transparent", flexShrink: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        overflow: "hidden",
-      }}>
+      <div style={{ width: size, height: size, borderRadius: cr, background: "transparent", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <img
-          src={faviconUrl}
+          src={logoUrl}
           alt={name}
-          onError={() => setImgError(true)}
-          style={{ width: size, height: size, objectFit: "contain" }}
+          onError={() => setError(true)}
+          style={{ width: size * 0.75, height: size * 0.75, objectFit: "contain", display: "block" }}
         />
       </div>
     );
   }
 
-  // Fallback: initials with no background
   return (
-    <div style={{
-      width: size, height: size, borderRadius: cr,
-      background: "transparent", color: lc.fg, flexShrink: 0,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: size * 0.33, fontWeight: 700,
-    }}>
+    <div style={{ width: size, height: size, borderRadius: cr, background: lc.bg, color: lc.fg, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.33, fontWeight: 700 }}>
       {ini}
     </div>
   );
 }
 
-// ── Tiny components ─────────────────────────────────────────────────────────
-function Chip({ children, variant = "default", isDark = true }) {
-  const styles = {
-    default: { background: isDark ? "#1e1e24" : "#efefef", color: isDark ? "#888" : "#444", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d0" },
-    accent:  { background: "rgba(0,113,227,0.1)", color: "#4DA3FF", border: "1px solid rgba(0,113,227,0.2)" },
-    green:   { background: "rgba(61,214,140,0.1)",   color: "#3DD68C", border: "1px solid rgba(61,214,140,0.2)"  },
-    amber:   { background: "rgba(245,166,35,0.1)",   color: "#F5A623", border: "1px solid rgba(245,166,35,0.2)"  },
-    red:     { background: "rgba(245,101,101,0.1)",  color: "#f87171", border: "1px solid rgba(245,101,101,0.2)" },
-  };
-  return (
-    <span style={{
-      ...styles[variant],
-      fontSize: 11, padding: "2px 9px", borderRadius: 20,
-      fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap",
-    }}>
-      {children}
-    </span>
-  );
-}
-
-function Spinner() {
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 48 }}>
-      <div style={{
-        width: 28, height: 28, border: "2px solid #2a2a32",
-        borderTopColor: "#0071E3", borderRadius: "50%",
-        animation: "spin 0.7s linear infinite",
-      }} />
-    </div>
-  );
-}
-
-function Toast({ msg, onClose }) {
-  useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
-  return (
-    <div style={{
-      position: "fixed", bottom: 24, right: 24, zIndex: 999,
-      background: "#1C1C20", border: "1px solid #3DD68C",
-      color: "#3DD68C", padding: "12px 20px", borderRadius: 10,
-      fontSize: 13, fontFamily: "'DM Sans', sans-serif",
-      boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
-      animation: "slideUp 0.25s ease",
-    }}>
-      ✓ {msg}
-    </div>
-  );
-}
-
-// ── Apply Modal ──────────────────────────────────────────────────────────────
-function ApplyModal({ job, onClose, onSuccess }) {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", resume_url: "", cover_note: "" });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  async function submit() {
-    if (!form.name || !form.email) { setError("Name and email are required."); return; }
-    setLoading(true); setError("");
-    try {
-      await api(`/jobs/${job.id}/apply`, { method: "POST", body: JSON.stringify(form) });
-      onSuccess("Application submitted!");
-      onClose();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div onClick={onClose} style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
-      backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
-      justifyContent: "center", zIndex: 200, padding: 20,
-    }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        background: "#141416", border: "1px solid #2a2a32", borderRadius: 16,
-        width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto",
-      }}>
-        <div style={{ padding: "22px 24px 16px", borderBottom: "1px solid #2a2a32", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: "#f0f0f2" }}>{job.title}</div>
-            <div style={{ fontSize: 12, color: "#666", marginTop: 3 }}>{job.company} · {job.location}</div>
-          </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#666", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
-        </div>
-        <div style={{ padding: "20px 24px" }}>
-          {error && <div style={{ background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.3)", color: "#f87171", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>{error}</div>}
-          {[
-            { key: "name", label: "Full name *", placeholder: "Ada Okonkwo", type: "text" },
-            { key: "email", label: "Email *", placeholder: "ada@email.com", type: "email" },
-            { key: "phone", label: "Phone", placeholder: "+234 800 000 0000", type: "tel" },
-            { key: "resume_url", label: "Resume / CV link", placeholder: "https://linkedin.com/in/…", type: "text" },
-          ].map(({ key, label, placeholder, type }) => (
-            <div key={key} style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 10, color: "#666", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</label>
-              <input type={type} value={form[key]} onChange={set(key)} placeholder={placeholder}
-                style={{ width: "100%", boxSizing: "border-box", background: "#1C1C20", border: "1px solid #2a2a32", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#f0f0f2", fontFamily: "'DM Sans', sans-serif", outline: "none" }}
-              />
-            </div>
-          ))}
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 10, color: "#666", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>Cover note</label>
-            <textarea value={form.cover_note} onChange={set("cover_note")} placeholder="Why are you a great fit?"
-              style={{ width: "100%", boxSizing: "border-box", background: "#1C1C20", border: "1px solid #2a2a32", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#f0f0f2", fontFamily: "'DM Sans', sans-serif", outline: "none", height: 90, resize: "vertical" }}
-            />
-          </div>
-        </div>
-        <div style={{ padding: "14px 24px", borderTop: "1px solid #2a2a32", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ background: "none", border: "1px solid #2a2a32", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-          <button onClick={submit} disabled={loading} style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
-            {loading ? "Submitting…" : "Submit →"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-// ── Job Detail Modal ─────────────────────────────────────────────────────────
-function JobDetailModal({ job, onClose, onApply }) {
-  const lc = logoColor(job.company);
-
-  return (
-    <div onClick={onClose} style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
-      backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
-      justifyContent: "center", zIndex: 200, padding: 20,
-    }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        background: "#141416", border: "1px solid #2a2a32", borderRadius: 16,
-        width: "100%", maxWidth: 620, maxHeight: "90vh", overflowY: "auto",
-      }}>
-        {/* Header */}
-        <div style={{ padding: "24px 24px 20px", borderBottom: "1px solid #2a2a32" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: lc.bg, color: lc.fg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 600, flexShrink: 0 }}>
-                {initials(job.company)}
-              </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", letterSpacing: -0.5, lineHeight: 1.2 }}>{job.title}</div>
-                <div style={{ fontSize: 13, color: "#666", marginTop: 3 }}>{job.company}</div>
-              </div>
-            </div>
-            <button onClick={onClose} style={{ background: "none", border: "none", color: "#666", fontSize: 20, cursor: "pointer" }}>✕</button>
-          </div>
-
-          {/* Meta chips */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Chip isDark={isDark}>📍 {job.location}</Chip>
-            <Chip isDark={isDark}>{job.job_type}</Chip>
-            {job.salary && <Chip isDark={isDark}>💰 {job.salary}</Chip>}
-            <Chip variant="accent" isDark={isDark}>{job.department}</Chip>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: "20px 24px" }}>
-          {/* Posted date */}
-          <div style={{ fontSize: 11, color: "#555", fontFamily: "'DM Mono', monospace", marginBottom: 20 }}>
-            🤖 Auto-scraped · {job.scraped_at ? new Date(job.scraped_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}
-          </div>
-
-          {/* Description */}
-          {job.description ? (
-            <div>
-              <div style={{ fontSize: 12, color: "#666", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10, fontWeight: 500 }}>About this role</div>
-              <div style={{ fontSize: 13, color: isDark ? "#b0b0c0" : "#1d1d1f", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{job.description}</div>
-            </div>
-          ) : (
-            <div style={{ background: "#1C1C20", border: "1px solid #2a2a32", borderRadius: 10, padding: "20px 24px", textAlign: "center" }}>
-              <div style={{ fontSize: 24, marginBottom: 8 }}>📄</div>
-              <div style={{ fontSize: 13, color: "#666", marginBottom: 6 }}>Full description on company site</div>
-              <a href={job.apply_url} target="_blank" rel="noreferrer"
-                style={{ fontSize: 12, color: "#0071E3", textDecoration: "none" }}>
-                View original posting →
-              </a>
-            </div>
-          )}
-
-          {/* Original link */}
-          {job.apply_url && (
-            <div style={{ marginTop: 20, padding: "12px 16px", background: "#1C1C20", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 12, color: "#666" }}>Original job posting</span>
-              <a href={job.apply_url} target="_blank" rel="noreferrer"
-                style={{ fontSize: 12, color: "#0071E3", textDecoration: "none" }}>
-                {new URL(job.apply_url.startsWith("http") ? job.apply_url : "https://" + job.apply_url).hostname} →
-              </a>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: "16px 24px", borderTop: "1px solid #2a2a32", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ background: "none", border: "1px solid #2a2a32", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            Close
-          </button>
-          <button onClick={() => { onClose(); onApply(job); }} style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            Apply now →
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Job Card ─────────────────────────────────────────────────────────────────
-function JobCard({ job, onApply, onView, isExpanded, isDark = true }) {
+// Check if job has a direct individual apply URL (not just the listing page)
+function hasDirectApply(job) {
+  if (!job.apply_url) return false;
+  if (!job.source_url) return true;
+  const normalize = (u) => u.trim().replace(/\/+$/, "").toLowerCase();
+  if (normalize(job.apply_url) === normalize(job.source_url)) return false;
+  try {
+    const a = new URL(job.apply_url);
+    const s = new URL(job.source_url);
+    if (a.hostname === s.hostname) {
+      const aPath = a.pathname.replace(/\/+$/, "");
+      const sPath = s.pathname.replace(/\/+$/, "");
+      if (aPath === sPath) return false;
+      if (aPath.length <= sPath.length) return false;
+    }
+  } catch { return false; }
+  return true;
+}
+
+function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuthRequired }) {
   const isNew = (() => {
     try { return (Date.now() - new Date(job.created_at).getTime()) < 86400000 * 2; } catch { return false; }
   })();
@@ -343,22 +147,27 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true }) {
             Posted on {postedDate}
           </span>
           <button
-            onClick={(e) => { e.stopPropagation(); const hasApply = job.apply_url && job.apply_url !== job.source_url; if (hasApply) onApply(job); }}
-            disabled={!job.apply_url || job.apply_url === job.source_url}
-            title={(!job.apply_url || job.apply_url === job.source_url) ? "Use Apply on company website below" : "Apply now"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!hasDirectApply(job)) return; // grayed out
+              if (!user) { onAuthRequired(); return; } // require login
+              onApply(job);
+            }}
+            disabled={!hasDirectApply(job)}
+            title={!hasDirectApply(job) ? "Apply on company website →" : !user ? "Sign in to apply" : "Apply now"}
             style={{
-              background: (!job.apply_url || job.apply_url === job.source_url) ? (isDark ? "#2a2a32" : "#e0e0e0") : "#0071E3",
+              background: !hasDirectApply(job) ? (isDark ? "#2a2a32" : "#e0e0e0") : "#0071E3",
               border: "none", borderRadius: 8,
               padding: "7px 16px", fontSize: 12, fontWeight: 500,
-              color: (!job.apply_url || job.apply_url === job.source_url) ? (isDark ? "#555" : "#999") : "#fff",
-              cursor: (!job.apply_url || job.apply_url === job.source_url) ? "not-allowed" : "pointer",
+              color: !hasDirectApply(job) ? (isDark ? "#555" : "#999") : "#fff",
+              cursor: !hasDirectApply(job) ? "not-allowed" : "pointer",
               fontFamily: "'DM Sans', sans-serif", transition: "background 0.15s",
-              opacity: (!job.apply_url || job.apply_url === job.source_url) ? 0.6 : 1,
+              opacity: !hasDirectApply(job) ? 0.6 : 1,
             }}
-            onMouseEnter={(e) => { const hasApply = job.apply_url && job.apply_url !== job.source_url; if (hasApply) e.currentTarget.style.background = "#0077ED"; }}
-            onMouseLeave={(e) => { const hasApply = job.apply_url && job.apply_url !== job.source_url; if (hasApply) e.currentTarget.style.background = "#0071E3"; }}
+            onMouseEnter={(e) => { if (hasDirectApply(job)) e.currentTarget.style.background = "#0077ED"; }}
+            onMouseLeave={(e) => { if (hasDirectApply(job)) e.currentTarget.style.background = "#0071E3"; }}
           >
-            Apply now →
+            {!hasDirectApply(job) ? "Apply on site →" : !user ? "Sign in to apply" : "Apply now →"}
           </button>
         </div>
       </div>
@@ -401,7 +210,6 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true }) {
                       elements.push(
                         <div key={i} style={{
                           fontWeight: 700,
-                          color: "#f0f0f2",
                           fontSize: isMain ? 14 : 13,
                           marginTop: isMain ? 24 : 14,
                           marginBottom: 8,
@@ -448,8 +256,24 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true }) {
                 Apply on company website →
               </a>
             )}
-            <button onClick={() => onApply(job)} style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-              Apply now →
+            <button
+              onClick={() => {
+                if (!hasDirectApply(job)) return;
+                if (!user) { onAuthRequired(); return; }
+                onApply(job);
+              }}
+              disabled={!hasDirectApply(job)}
+              title={!hasDirectApply(job) ? "Apply on company website →" : !user ? "Sign in to apply" : "Apply now"}
+              style={{
+                background: !hasDirectApply(job) ? (isDark ? "#2a2a32" : "#e0e0e0") : "#0071E3",
+                border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 500,
+                color: !hasDirectApply(job) ? (isDark ? "#555" : "#999") : "#fff",
+                cursor: !hasDirectApply(job) ? "not-allowed" : "pointer",
+                fontFamily: "'DM Sans', sans-serif",
+                opacity: !hasDirectApply(job) ? 0.6 : 1,
+              }}
+            >
+              {!hasDirectApply(job) ? "Apply on site →" : !user ? "Sign in to apply" : "Apply now →"}
             </button>
           </div>
         </div>
@@ -459,7 +283,162 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true }) {
 }
 
 // ── Pages ─────────────────────────────────────────────────────────────────────
-function JobsPage({ onApply, toast, isDark = true }) {
+// ── Apply Modal ──────────────────────────────────────────────────────────────
+// ── Inline Auth Modal ────────────────────────────────────────────────────────
+function InlineAuthModal({ onClose, onSuccess }) {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const inp = {
+    width: "100%", boxSizing: "border-box", padding: "11px 14px",
+    fontSize: 14, border: "1px solid #d0d0d8", borderRadius: 10,
+    background: "#fff", color: "#1d1d1f",
+    fontFamily: "'DM Sans', sans-serif", outline: "none", marginTop: 6,
+  };
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setLoading(true); setError("");
+    try {
+      const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
+      const body = mode === "login"
+        ? { email: email.toLowerCase(), password }
+        : { email: email.toLowerCase(), password, full_name: name };
+      const res = await fetch(`${API}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Something went wrong");
+      localStorage.setItem("js_access_token", data.access_token);
+      localStorage.setItem("js_refresh_token", data.refresh_token);
+      localStorage.setItem("js_user", JSON.stringify(data.user));
+      onSuccess(data.user);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, padding: "36px 32px", width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
+          <div style={{ width: 30, height: 30, background: "#0071E3", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚡</div>
+          <span style={{ fontSize: 17, fontWeight: 700, color: "#1d1d1f" }}>JobStream</span>
+        </div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1d1d1f", marginBottom: 4, letterSpacing: -0.5 }}>
+          {mode === "login" ? "Welcome back" : "Create account"}
+        </h2>
+        <p style={{ fontSize: 13, color: "#888", marginBottom: 24 }}>
+          {mode === "login" ? "Sign in to apply for jobs" : "Join to start applying"}
+        </p>
+        {error && <div style={{ background: "#fff0f0", border: "1px solid #f5c6c6", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#c0392b" }}>{error}</div>}
+        <form onSubmit={handleSubmit}>
+          {mode === "register" && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>Full name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Okonkwo" required style={inp} />
+            </div>
+          )}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" required style={inp} />
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" required style={inp} />
+          </div>
+          <button type="submit" disabled={loading} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 600, background: loading ? "#ccc" : "#0071E3", color: "#fff", border: "none", borderRadius: 10, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+            {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
+          </button>
+        </form>
+        <p style={{ textAlign: "center", marginTop: 18, fontSize: 13, color: "#888" }}>
+          {mode === "login" ? "No account? " : "Have an account? "}
+          <span onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontWeight: 500 }}>
+            {mode === "login" ? "Create one" : "Sign in"}
+          </span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ApplyModal({ job, onClose, onSuccess, user }) {
+  const [form, setForm] = useState({
+    name: user?.full_name || "",
+    email: user?.email || "",
+    phone: "",
+    resume_url: "",
+    cover_note: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  async function submit() {
+    if (!form.name || !form.email) { setError("Name and email are required."); return; }
+    setLoading(true); setError("");
+    try {
+      await api(`/jobs/${job.id}/apply`, { method: "POST", body: JSON.stringify(form) });
+      onSuccess("Application submitted!");
+      onClose();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const inp = { width: "100%", boxSizing: "border-box", background: "#fff", border: "1px solid #d0d0d8", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", border: "1px solid #e0e0e8", borderRadius: 16, width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ padding: "22px 24px 16px", borderBottom: "1px solid #e8e8f0", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: "#1d1d1f" }}>{job.title}</div>
+            <div style={{ fontSize: 12, color: "#888", marginTop: 3 }}>{job.company} · {job.location}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#888", fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ padding: "20px 24px" }}>
+          {error && <div style={{ background: "#fff0f0", border: "1px solid #f5c6c6", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#c0392b", marginBottom: 16 }}>{error}</div>}
+          {[
+            { key: "name", label: "Full name *", placeholder: "Ada Okonkwo", type: "text" },
+            { key: "email", label: "Email *", placeholder: "ada@email.com", type: "email" },
+            { key: "phone", label: "Phone", placeholder: "+234 800 000 0000", type: "tel" },
+            { key: "resume_url", label: "Resume / CV link", placeholder: "https://linkedin.com/in/…", type: "text" },
+          ].map(({ key, label, placeholder, type }) => (
+            <div key={key} style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, color: "#666", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</label>
+              <input type={type} value={form[key]} onChange={set(key)} placeholder={placeholder} style={inp} />
+            </div>
+          ))}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 11, color: "#666", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>Cover note</label>
+            <textarea value={form.cover_note} onChange={set("cover_note")} placeholder="Why are you a great fit?" style={{ ...inp, height: 90, resize: "vertical" }} />
+          </div>
+        </div>
+        <div style={{ padding: "16px 24px", borderTop: "1px solid #e8e8f0", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ background: "none", border: "1px solid #d0d0d8", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#666", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
+          <button onClick={submit} disabled={loading} style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
+            {loading ? "Submitting…" : "Submit →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
   const [jobs, setJobs] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -573,7 +552,7 @@ function JobsPage({ onApply, toast, isDark = true }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {jobs.map((j) => <JobCard key={j.id} job={j} onApply={onApply} onView={(job) => setExpandedId(expandedId === job.id ? null : job.id)} isExpanded={expandedId === j.id} isDark={isDark} />)}
+          {jobs.map((j) => <JobCard key={j.id} job={j} onApply={onApply} onView={(job) => setExpandedId(expandedId === job.id ? null : job.id)} isExpanded={expandedId === j.id} isDark={isDark} user={user} onAuthRequired={onAuthRequired} />)}
         </div>
       )}
     </div>
@@ -820,50 +799,82 @@ function StatsBar({ isDark = true }) {
 }
 
 
-// ── Nav Item with CSS tooltip ────────────────────────────────────────────────
-function NavItem({ icon, label, active, sidebarOpen, isDark, onClick }) {
+// ── Nav Item ─────────────────────────────────────────────────────────────────
+// ── Tiny components ─────────────────────────────────────────────────────────
+function Spinner() {
   return (
-    <div style={{ position: "relative" }} className="nav-item-wrap">
-      <button
-        onClick={onClick}
-        style={{
-          display: "flex", alignItems: "center", gap: 10,
-          padding: sidebarOpen ? "9px 12px" : "10px",
-          width: "100%", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13,
-          fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s",
-          background: active ? "rgba(0,113,227,0.1)" : "none",
-          color: active ? "#0071E3" : (isDark ? "#777" : "#555"),
-          justifyContent: sidebarOpen ? "flex-start" : "center",
-        }}
-      >
-        <span style={{ fontSize: 17, flexShrink: 0, lineHeight: 1 }}>{icon}</span>
-        {sidebarOpen && <span style={{ marginLeft: 2 }}>{label}</span>}
-      </button>
-      {!sidebarOpen && (
-        <span style={{
-          position: "absolute", left: "calc(100% + 10px)", top: "50%",
-          transform: "translateY(-50%)",
-          background: "#111", color: "#fff",
-          fontSize: 12, fontWeight: 500, padding: "5px 12px", borderRadius: 7,
-          whiteSpace: "nowrap", pointerEvents: "none", zIndex: 9999,
-          boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-          opacity: 0, transition: "opacity 0.15s",
-        }} className="nav-tooltip">{label}</span>
-      )}
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 48 }}>
+      <div style={{ width: 28, height: 28, border: "2px solid #e0e0e8", borderTopColor: "#0071E3", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
     </div>
   );
 }
+
+function Chip({ children, variant = "default", isDark = true }) {
+  const styles = {
+    default: { background: isDark ? "#1e1e24" : "#efefef", color: isDark ? "#888" : "#444", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d0" },
+    accent:  { background: "rgba(0,113,227,0.1)", color: "#0071E3", border: "1px solid rgba(0,113,227,0.2)" },
+    green:   { background: "rgba(61,214,140,0.1)", color: "#3DD68C", border: "1px solid rgba(61,214,140,0.2)" },
+    amber:   { background: "rgba(245,166,35,0.1)", color: "#F5A623", border: "1px solid rgba(245,166,35,0.2)" },
+    red:     { background: "rgba(245,101,101,0.1)", color: "#f87171", border: "1px solid rgba(245,101,101,0.2)" },
+  };
+  return (
+    <span style={{ ...styles[variant], fontSize: 11, padding: "2px 9px", borderRadius: 20, fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap" }}>
+      {children}
+    </span>
+  );
+}
+
+function Toast({ msg, onClose }) {
+  useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
+  return (
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, background: "#1d1d1f", border: "1px solid #3DD68C", color: "#3DD68C", padding: "12px 20px", borderRadius: 10, fontSize: 13, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 24px rgba(0,0,0,0.3)", animation: "slideUp 0.25s ease" }}>
+      ✓ {msg}
+    </div>
+  );
+}
+
+function NavItem({ icon, label, active, sidebarOpen, isDark, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      title={!sidebarOpen ? label : ""}
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: sidebarOpen ? "9px 12px" : "10px",
+        width: "100%", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13,
+        fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s",
+        background: active ? "rgba(0,113,227,0.1)" : "none",
+        color: active ? "#0071E3" : (isDark ? "#777" : "#555"),
+        justifyContent: sidebarOpen ? "flex-start" : "center",
+      }}
+    >
+      <span style={{ fontSize: 17, flexShrink: 0, lineHeight: 1 }}>{icon}</span>
+      {sidebarOpen && <span style={{ marginLeft: 2 }}>{label}</span>}
+    </button>
+  );
+}
+
 
 // ── App Shell ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [page, setPage] = useState("jobs");
   const [applyJob, setApplyJob] = useState(null);
   const [toast, setToast] = useState("");
-  const [theme, setTheme] = useState("dark");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [theme, setTheme] = useState("light");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState(getStoredUser());
+  const [showAuth, setShowAuth] = useState(false);
   const isDark = theme === "dark";
 
   const showToast = (msg) => { setToast(msg); };
+
+  async function handleLogout() {
+    const rt = localStorage.getItem("js_refresh_token");
+    if (rt) await apiLogout(rt);
+    clearAuth();
+    setUser(null);
+    showToast("Signed out successfully");
+  }
 
   const NAV = [
     { id: "jobs", icon: "💼", label: "Job Board" },
@@ -878,7 +889,9 @@ export default function App() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .nav-item-wrap { overflow: visible !important; }
         .nav-item-wrap:hover .nav-tooltip { opacity: 1 !important; }
+        aside { overflow: visible !important; }
         input::placeholder, textarea::placeholder { color: #444; }
         ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a32; border-radius: 3px; }
         select option { background: ${isDark ? "#141416" : "#ffffff"}; color: ${isDark ? "#f0f0f2" : "#111111"}; }
@@ -936,6 +949,41 @@ export default function App() {
           />
         ))}
 
+        {/* Auth section */}
+        <div style={{ borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e8e8f0", paddingTop: 12, marginTop: 8 }}>
+          {user ? (
+            <div>
+              {sidebarOpen && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#e0e0e0" : "#1d1d1f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.full_name}
+                  </div>
+                  <div style={{ fontSize: 10, color: isDark ? "#666" : "#999", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.email}
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={handleLogout}
+                title="Sign out"
+                style={{ width: "100%", padding: sidebarOpen ? "8px 12px" : "8px", background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, fontSize: 12, color: isDark ? "#888" : "#666", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: sidebarOpen ? "flex-start" : "center", gap: 6 }}
+              >
+                <span>↪</span>
+                {sidebarOpen && <span>Sign out</span>}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAuth(true)}
+              title="Sign in"
+              style={{ width: "100%", padding: sidebarOpen ? "9px 12px" : "9px", background: "#0071E3", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: sidebarOpen ? "flex-start" : "center", gap: 6 }}
+            >
+              <span>👤</span>
+              {sidebarOpen && <span>Sign in</span>}
+            </button>
+          )}
+        </div>
+
         {/* Streamer active status */}
         <div style={{ marginTop: "auto", background: isDark ? "#141416" : "#f0f0f4", border: isDark ? "1px solid #1e1e24" : "1px solid #d8d8e0", borderRadius: 10, padding: sidebarOpen ? "12px 14px" : "10px 6px", display: "flex", flexDirection: "column", alignItems: sidebarOpen ? "flex-start" : "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -953,12 +1001,13 @@ export default function App() {
       <main style={{ padding: "28px 32px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s", position: "relative" }}>
 
         <StatsBar isDark={isDark} />
-        {page === "jobs" && <JobsPage onApply={setApplyJob} toast={showToast} isDark={isDark} />}
+        {page === "jobs" && <JobsPage onApply={setApplyJob} toast={showToast} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} />}
         {page === "scraper" && <ScraperPage toast={showToast} isDark={isDark} />}
         {page === "applications" && <ApplicationsPage isDark={isDark} />}
       </main>
 
-      {applyJob && <ApplyModal job={applyJob} onClose={() => setApplyJob(null)} onSuccess={showToast} />}
+      {applyJob && <ApplyModal job={applyJob} onClose={() => setApplyJob(null)} onSuccess={showToast} user={user} />}
+      {showAuth && <InlineAuthModal onClose={() => setShowAuth(false)} onSuccess={(u) => { setUser(u); showToast(`Welcome, ${u.full_name}!`); }} />}
       {toast && <Toast msg={toast} onClose={() => setToast("")} />}
     </div>
   );

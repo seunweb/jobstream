@@ -14,6 +14,9 @@ from datetime import datetime
 from typing import Optional
 from pathlib import Path
 
+from auth.router import router as auth_router
+from auth.models import ADD_AUTH_TABLES, ADD_AUTH_TABLES_SQLITE
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,7 +47,13 @@ async def lifespan(app: FastAPI):
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     try:
         init_db()
-        logger.info("Database initialised")
+        schema = ADD_AUTH_TABLES if USE_POSTGRES else ADD_AUTH_TABLES_SQLITE
+        with get_conn() as conn:
+            cur = conn.cursor()
+            for stmt in schema.strip().split(";"):
+                stmt = stmt.strip()
+                if stmt: cur.execute(stmt)
+        logger.info("Database initialised with auth tables")
     except Exception as e:
         logger.error(f"Database init failed: {e}")
         raise
@@ -64,6 +73,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 
 # ---------------------------------------------------------------------------
 # Scrape helpers

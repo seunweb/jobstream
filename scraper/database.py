@@ -300,7 +300,7 @@ def get_jobs(
         cur = conn.cursor()
         cur.execute(f"SELECT COUNT(*) FROM jobs WHERE {where}", params)
         count_row = cur.fetchone()
-        total = list(count_row.values())[0] if USE_POSTGRES else count_row[0]
+        total = int(list(count_row.values())[0]) if USE_POSTGRES else int(count_row[0])
 
         cur.execute(
             f"SELECT * FROM jobs WHERE {where} ORDER BY created_at DESC LIMIT {q('?')} OFFSET {q('?')}",

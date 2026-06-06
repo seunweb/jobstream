@@ -9,10 +9,15 @@ async function apiLogout(rt) { try { await fetch(`${API}/auth/logout`, { method:
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 async function api(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
+  const token = getAccessToken();
+  const headers = { "Content-Type": "application/json", ...opts.headers };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${API}${path}`, { ...opts, headers });
+  if (res.status === 401) {
+    clearAuth();
+    window.location.reload();
+    return;
+  }
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   if (res.status === 204) return null;
   return res.json();
@@ -38,43 +43,67 @@ function initials(name = "") {
   return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 }
 
-// Custom logo overrides
+// Custom logo overrides — add company name key (lowercase no spaces) → URL
 const CUSTOM_LOGOS = {
   "t2mobile": "https://www.t2mobile.com.ng/_next/static/media/logos.1d851e63.png",
 };
 
+function getCustomLogo(name) {
+  if (!name) return null;
+  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const [k, v] of Object.entries(CUSTOM_LOGOS)) {
+    if (k.replace(/[^a-z0-9]/g, "") === key) return v;
+  }
+  return null;
+}
+
+// Company logo — tries multiple logo sources with fallback chain
 function CompanyLogo({ name, sourceUrl, size = 42 }) {
   const lc = logoColor(name);
   const ini = initials(name);
-  const [error, setError] = useState(false);
+  const [srcIndex, setSrcIndex] = useState(0);
 
-  const customKey = name.toLowerCase().replace(/\s+/g, "");
-  const customUrl = CUSTOM_LOGOS[customKey];
+  const customUrl = getCustomLogo(name);
 
   let domain = "";
   try {
     if (sourceUrl) domain = new URL(sourceUrl).hostname.replace("www.", "");
   } catch {}
 
-  const logoUrl = customUrl || (domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : "");
+  // Try multiple sources in order
+  const sources = [
+    customUrl,
+    domain ? `https://logo.clearbit.com/${domain}` : null,
+    domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : null,
+    domain ? `https://icons.duckduckgo.com/ip3/${domain}.ico` : null,
+  ].filter(Boolean);
 
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   const cr = 8 + (h % 6);
 
-  if (logoUrl && !error) {
+  const currentSrc = sources[srcIndex];
+
+  if (currentSrc) {
     return (
       <div style={{ width: size, height: size, borderRadius: cr, background: "transparent", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <img
-          src={logoUrl}
+          src={currentSrc}
           alt={name}
-          onError={() => setError(true)}
+          onError={() => {
+            if (srcIndex < sources.length - 1) {
+              setSrcIndex(srcIndex + 1);
+            } else {
+              setSrcIndex(sources.length); // show fallback
+            }
+          }}
           style={{ width: size * 0.75, height: size * 0.75, objectFit: "contain", display: "block" }}
         />
       </div>
     );
   }
 
+  // Fallback: styled initials
   return (
     <div style={{ width: size, height: size, borderRadius: cr, background: lc.bg, color: lc.fg, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.33, fontWeight: 700 }}>
       {ini}
@@ -82,16 +111,29 @@ function CompanyLogo({ name, sourceUrl, size = 42 }) {
   );
 }
 
+
 // ── Job Card ─────────────────────────────────────────────────────────────────
-// Check if job has a direct individual apply URL (not just the listing page)
+// Determine if a job accepts direct applications on JobStream
+// Rules:
+// - Scraped jobs (source === "scraped" or has source_url) → always redirect to company website
+// - Manually posted jobs with no source_url → accept direct JobStream applications
+// - If apply_url === source_url → no individual job URL found, redirect to company website
 function hasDirectApply(job) {
+  // Manually posted jobs on JobStream (no source_url = posted directly)
+  if (!job.source_url && !job.apply_url) return true;
+  if (!job.source_url && job.apply_url) return true;
+
+  // Scraped jobs — always redirect to company website
+  if (job.source === "scraped") return false;
+
+  // If apply_url is missing or same as source listing page → redirect
   if (!job.apply_url) return false;
-  if (!job.source_url) return true;
-  const normalize = (u) => u.trim().replace(/\/+$/, "").toLowerCase();
-  if (normalize(job.apply_url) === normalize(job.source_url)) return false;
   try {
+    const normalize = (u) => u.trim().replace(/\/+$/, "").toLowerCase();
+    if (normalize(job.apply_url) === normalize(job.source_url)) return false;
     const a = new URL(job.apply_url);
     const s = new URL(job.source_url);
+    // Same host + same/shorter path = still on listing page
     if (a.hostname === s.hostname) {
       const aPath = a.pathname.replace(/\/+$/, "");
       const sPath = s.pathname.replace(/\/+$/, "");
@@ -99,6 +141,10 @@ function hasDirectApply(job) {
       if (aPath.length <= sPath.length) return false;
     }
   } catch { return false; }
+
+  // Has a unique job-level URL but was scraped → still redirect to company
+  if (job.source_url) return false;
+
   return true;
 }
 
@@ -142,7 +188,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
           <Chip variant="accent" isDark={isDark}>{job.department}</Chip>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 14, borderTop: "1px solid #1e1e24" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 14, borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed" }}>
           <span style={{ fontSize: 11, color: isDark ? "#555" : "#888", fontFamily: "'DM Mono', monospace" }}>
             Posted on {postedDate}
           </span>
@@ -174,7 +220,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
 
       {/* Inline expanded detail */}
       {isExpanded && (
-        <div style={{ borderTop: "1px solid #2a2a32", padding: "20px 24px", background: isDark ? "#111113" : "#f8f8fb" }}>
+        <div style={{ borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed", padding: "20px 24px", background: isDark ? "#111113" : "#f8f8fb" }}>
           {/* Description */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 500, marginBottom: 12 }}>About this role</div>
@@ -247,7 +293,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
           </div>
 
           {/* Action buttons */}
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 16, borderTop: isDark ? "1px solid #2a2a32" : "1px solid #e8e8e8" }}>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 16, borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed" }}>
             <button onClick={() => onView(job)} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
               Close
             </button>
@@ -284,12 +330,10 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
 
 // ── Pages ─────────────────────────────────────────────────────────────────────
 // ── Apply Modal ──────────────────────────────────────────────────────────────
-// ── Inline Auth Modal ────────────────────────────────────────────────────────
-function InlineAuthModal({ onClose, onSuccess }) {
-  const [mode, setMode] = useState("login");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+// ── Reset Password Modal ─────────────────────────────────────────────────────
+function ResetPasswordModal({ token, onClose, onSuccess }) {
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -302,8 +346,86 @@ function InlineAuthModal({ onClose, onSuccess }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (password !== confirm) { setError("Passwords do not match"); return; }
     setLoading(true); setError("");
     try {
+      const res = await fetch(`${API}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, new_password: password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Reset failed");
+      onSuccess();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, padding: "36px 32px", width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
+          <div style={{ width: 30, height: 30, background: "#0071E3", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚡</div>
+          <span style={{ fontSize: 17, fontWeight: 700, color: "#1d1d1f" }}>JobStream</span>
+        </div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1d1d1f", marginBottom: 4, letterSpacing: -0.5 }}>Choose new password</h2>
+        <p style={{ fontSize: 13, color: "#888", marginBottom: 24 }}>Enter and confirm your new password below.</p>
+        {error && <div style={{ background: "#fff0f0", border: "1px solid #f5c6c6", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#c0392b" }}>{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>New password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" required style={inp} />
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>Confirm password</label>
+            <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat password" required style={inp} />
+          </div>
+          <button type="submit" disabled={loading} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 600, background: loading ? "#ccc" : "#0071E3", color: "#fff", border: "none", borderRadius: 10, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+            {loading ? "Resetting…" : "Reset password"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Inline Auth Modal ────────────────────────────────────────────────────────
+function InlineAuthModal({ onClose, onSuccess }) {
+  const [mode, setMode] = useState("login"); // login | register | forgot | reset_sent
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const inp = {
+    width: "100%", boxSizing: "border-box", padding: "11px 14px",
+    fontSize: 14, border: "1px solid #d0d0d8", borderRadius: 10,
+    background: "#fff", color: "#1d1d1f",
+    fontFamily: "'DM Sans', sans-serif", outline: "none", marginTop: 6,
+  };
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setLoading(true); setError(""); setSuccess("");
+    try {
+      if (mode === "forgot") {
+        const res = await fetch(`${API}/auth/forgot-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.toLowerCase() }),
+        });
+        const data = await res.json();
+        setSuccess(data.message);
+        setMode("reset_sent");
+        setLoading(false);
+        return;
+      }
       const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
       const body = mode === "login"
         ? { email: email.toLowerCase(), password }
@@ -334,12 +456,16 @@ function InlineAuthModal({ onClose, onSuccess }) {
           <div style={{ width: 30, height: 30, background: "#0071E3", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚡</div>
           <span style={{ fontSize: 17, fontWeight: 700, color: "#1d1d1f" }}>JobStream</span>
         </div>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1d1d1f", marginBottom: 4, letterSpacing: -0.5 }}>
-          {mode === "login" ? "Welcome back" : "Create account"}
-        </h2>
-        <p style={{ fontSize: 13, color: "#888", marginBottom: 24 }}>
-          {mode === "login" ? "Sign in to apply for jobs" : "Join to start applying"}
-        </p>
+        {mode !== "reset_sent" && (
+          <>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1d1d1f", marginBottom: 4, letterSpacing: -0.5 }}>
+              {mode === "login" ? "Welcome back" : mode === "forgot" ? "Reset password" : "Create account"}
+            </h2>
+            <p style={{ fontSize: 13, color: "#888", marginBottom: 24 }}>
+              {mode === "login" ? "Sign in to apply for jobs" : mode === "forgot" ? "Enter your email and we'll send a reset link" : "Join to start applying"}
+            </p>
+          </>
+        )}
         {error && <div style={{ background: "#fff0f0", border: "1px solid #f5c6c6", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#c0392b" }}>{error}</div>}
         <form onSubmit={handleSubmit}>
           {mode === "register" && (
@@ -352,20 +478,42 @@ function InlineAuthModal({ onClose, onSuccess }) {
             <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>Email</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" required style={inp} />
           </div>
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" required style={inp} />
-          </div>
+          {mode !== "forgot" && (
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" required={mode !== "forgot"} style={inp} />
+            </div>
+          )}
+          {mode === "login" && (
+            <div style={{ textAlign: "right", marginBottom: 16, marginTop: -4 }}>
+              <span onClick={() => { setMode("forgot"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontSize: 13 }}>Forgot password?</span>
+            </div>
+          )}
           <button type="submit" disabled={loading} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 600, background: loading ? "#ccc" : "#0071E3", color: "#fff", border: "none", borderRadius: 10, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
+            {loading ? "Please wait…" : mode === "login" ? "Sign in" : mode === "forgot" ? "Send reset link" : "Create account"}
           </button>
         </form>
-        <p style={{ textAlign: "center", marginTop: 18, fontSize: 13, color: "#888" }}>
-          {mode === "login" ? "No account? " : "Have an account? "}
-          <span onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontWeight: 500 }}>
-            {mode === "login" ? "Create one" : "Sign in"}
-          </span>
-        </p>
+        {mode === "reset_sent" ? (
+          <div style={{ textAlign: "center", padding: "16px 0" }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📧</div>
+            <p style={{ fontSize: 14, color: "#1d1d1f", fontWeight: 500, marginBottom: 8 }}>Check your email</p>
+            <p style={{ fontSize: 13, color: "#888", marginBottom: 20 }}>We sent a reset link to <strong>{email}</strong></p>
+            <span onClick={() => { setMode("login"); setError(""); setSuccess(""); }} style={{ color: "#0071E3", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Back to sign in</span>
+          </div>
+        ) : (
+          <>
+    
+            <p style={{ textAlign: "center", marginTop: 18, fontSize: 13, color: "#888" }}>
+              {mode === "forgot" ? (
+                <span onClick={() => { setMode("login"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontWeight: 500 }}>← Back to sign in</span>
+              ) : mode === "login" ? (
+                <>No account? <span onClick={() => { setMode("register"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontWeight: 500 }}>Create one</span></>
+              ) : (
+                <>Have an account? <span onClick={() => { setMode("login"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontWeight: 500 }}>Sign in</span></>
+              )}
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -855,6 +1003,102 @@ function NavItem({ icon, label, active, sidebarOpen, isDark, onClick }) {
 }
 
 
+// ── User Menu Dropdown ───────────────────────────────────────────────────────
+function UserMenu({ user, onLogout, isDark }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const initial = (user.full_name || user.email || "?")[0].toUpperCase();
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          display: "flex", alignItems: "center", gap: 8,
+          background: isDark ? "#1C1C20" : "#ffffff",
+          border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8",
+          borderRadius: 20, padding: "5px 12px 5px 6px",
+          cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+        }}
+      >
+        <div style={{
+          width: 26, height: 26, borderRadius: "50%",
+          background: "#0071E3", color: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 12, fontWeight: 700, flexShrink: 0,
+        }}>{initial}</div>
+        <span style={{ fontSize: 13, fontWeight: 500, color: isDark ? "#e0e0e0" : "#1d1d1f" }}>
+          {user.full_name?.split(" ")[0] || "Account"}
+        </span>
+        <span style={{ fontSize: 10, color: isDark ? "#666" : "#999" }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 8px)", right: 0,
+          background: isDark ? "#1C1C20" : "#ffffff",
+          border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8",
+          borderRadius: 12, minWidth: 200,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+          zIndex: 999, overflow: "hidden",
+        }}>
+          {/* User info */}
+          <div style={{ padding: "14px 16px", borderBottom: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 2 }}>{user.full_name}</div>
+            <div style={{ fontSize: 11, color: isDark ? "#666" : "#999" }}>{user.email}</div>
+            <div style={{ fontSize: 10, color: "#0071E3", marginTop: 4, textTransform: "capitalize" }}>{user.role}</div>
+          </div>
+          {/* Menu items */}
+          <div style={{ padding: "6px 0" }}>
+            {[
+              { icon: "👤", label: "My Profile", action: () => { setOpen(false); } },
+              { icon: "📋", label: "My Applications", action: () => { setOpen(false); } },
+              { icon: "🔖", label: "Saved Jobs", action: () => { setOpen(false); } },
+            ].map(({ icon, label, action }) => (
+              <button key={label} onClick={action} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                width: "100%", padding: "9px 16px",
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: 13, color: isDark ? "#ccc" : "#333",
+                fontFamily: "'DM Sans', sans-serif", textAlign: "left",
+              }}
+                onMouseEnter={(e) => e.currentTarget.style.background = isDark ? "#2a2a32" : "#f5f5f8"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+              >
+                <span>{icon}</span> {label}
+              </button>
+            ))}
+          </div>
+          {/* Sign out */}
+          <div style={{ padding: "6px 0", borderTop: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
+            <button onClick={() => { setOpen(false); onLogout(); }} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              width: "100%", padding: "9px 16px",
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: 13, color: "#f87171",
+              fontFamily: "'DM Sans', sans-serif", textAlign: "left",
+            }}
+              onMouseEnter={(e) => e.currentTarget.style.background = isDark ? "#2a2a32" : "#fff0f0"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+            >
+              <span>↪</span> Sign out
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── App Shell ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [page, setPage] = useState("jobs");
@@ -864,6 +1108,10 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState(getStoredUser());
   const [showAuth, setShowAuth] = useState(false);
+  const [resetToken, setResetToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("token") || "";
+  });
   const isDark = theme === "dark";
 
   const showToast = (msg) => { setToast(msg); };
@@ -924,16 +1172,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* Theme toggle - visible only when expanded */}
-        {sidebarOpen && (
-          <button
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 20, padding: "4px 12px", fontSize: 11, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6, marginBottom: 8, alignSelf: "flex-end" }}
-          >
-            {isDark ? "☀ Light" : "● Dark"}
-          </button>
-        )}
+
 
         {/* Nav items */}
         {NAV.map(({ id, icon, label }) => (
@@ -948,41 +1187,6 @@ export default function App() {
             onClick={() => setPage(id)}
           />
         ))}
-
-        {/* Auth section */}
-        <div style={{ borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e8e8f0", paddingTop: 12, marginTop: 8 }}>
-          {user ? (
-            <div>
-              {sidebarOpen && (
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#e0e0e0" : "#1d1d1f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {user.full_name}
-                  </div>
-                  <div style={{ fontSize: 10, color: isDark ? "#666" : "#999", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {user.email}
-                  </div>
-                </div>
-              )}
-              <button
-                onClick={handleLogout}
-                title="Sign out"
-                style={{ width: "100%", padding: sidebarOpen ? "8px 12px" : "8px", background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, fontSize: 12, color: isDark ? "#888" : "#666", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: sidebarOpen ? "flex-start" : "center", gap: 6 }}
-              >
-                <span>↪</span>
-                {sidebarOpen && <span>Sign out</span>}
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAuth(true)}
-              title="Sign in"
-              style={{ width: "100%", padding: sidebarOpen ? "9px 12px" : "9px", background: "#0071E3", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: sidebarOpen ? "flex-start" : "center", gap: 6 }}
-            >
-              <span>👤</span>
-              {sidebarOpen && <span>Sign in</span>}
-            </button>
-          )}
-        </div>
 
         {/* Streamer active status */}
         <div style={{ marginTop: "auto", background: isDark ? "#141416" : "#f0f0f4", border: isDark ? "1px solid #1e1e24" : "1px solid #d8d8e0", borderRadius: 10, padding: sidebarOpen ? "12px 14px" : "10px 6px", display: "flex", flexDirection: "column", alignItems: sidebarOpen ? "flex-start" : "center" }}>
@@ -1000,7 +1204,30 @@ export default function App() {
       {/* Main */}
       <main style={{ padding: "28px 32px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s", position: "relative" }}>
 
-        <StatsBar isDark={isDark} />
+        {/* Top right auth bar */}
+        <div style={{ position: "absolute", top: 20, right: 28, display: "flex", alignItems: "center", gap: 10, zIndex: 10 }}>
+          {/* Theme toggle */}
+          <button
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 20, padding: "5px 14px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+          >
+            {isDark ? "☀ Light" : "● Dark"}
+          </button>
+
+          {user ? (
+            <UserMenu user={user} onLogout={handleLogout} isDark={isDark} />
+          ) : (
+            <button
+              onClick={() => setShowAuth(true)}
+              style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(0,113,227,0.3)", whiteSpace: "nowrap" }}
+            >
+              Sign in | Register
+            </button>
+          )}
+        </div>
+
+        <div style={{ marginTop: 36 }}><StatsBar isDark={isDark} /></div>
         {page === "jobs" && <JobsPage onApply={setApplyJob} toast={showToast} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} />}
         {page === "scraper" && <ScraperPage toast={showToast} isDark={isDark} />}
         {page === "applications" && <ApplicationsPage isDark={isDark} />}
@@ -1008,6 +1235,7 @@ export default function App() {
 
       {applyJob && <ApplyModal job={applyJob} onClose={() => setApplyJob(null)} onSuccess={showToast} user={user} />}
       {showAuth && <InlineAuthModal onClose={() => setShowAuth(false)} onSuccess={(u) => { setUser(u); showToast(`Welcome, ${u.full_name}!`); }} />}
+      {resetToken && <ResetPasswordModal token={resetToken} onClose={() => { setResetToken(""); window.history.replaceState({}, "", "/"); }} onSuccess={() => { setResetToken(""); window.history.replaceState({}, "", "/"); showToast("Password reset! Please sign in."); setShowAuth(true); }} />}
       {toast && <Toast msg={toast} onClose={() => setToast("")} />}
     </div>
   );

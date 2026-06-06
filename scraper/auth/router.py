@@ -182,12 +182,21 @@ JobStream Team
     msg.attach(MIMEText(html, "html"))
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(from_email, [to_email], msg.as_string())
+        if smtp_port == 465:
+            # SSL connection
+            import ssl
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30, context=ctx) as server:
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(from_email, [to_email], msg.as_string())
+        else:
+            # STARTTLS connection (port 587)
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(from_email, [to_email], msg.as_string())
         log.info(f"Reset email sent successfully to {to_email}")
         return True
     except smtplib.SMTPAuthenticationError as e:

@@ -1,17 +1,16 @@
 """
-Authentication routes: register, login, logout, refresh, me, forgot/reset password.
+Authentication routes with Resend API for email (works on Railway free plan).
 """
 
 import os
 import uuid
-import smtplib
 import logging
+import urllib.request
+import json as json_lib
 from datetime import datetime, timedelta, timezone
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 
 from auth.security import (
@@ -25,8 +24,6 @@ from jose import jwt
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-
-# ── Schemas ──────────────────────────────────────────────────────────────────
 
 class RegisterIn(BaseModel):
     email: EmailStr
@@ -47,8 +44,6 @@ class ResetPasswordIn(BaseModel):
     token: str
     new_password: str
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def get_user_by_email(email: str) -> Optional[dict]:
     with get_conn() as conn:
@@ -79,25 +74,21 @@ def create_session(user_id: str, refresh_token: str, request: Request):
     with get_conn() as conn:
         cur = conn.cursor()
         if USE_POSTGRES:
-            cur.execute("""
-                INSERT INTO sessions (user_id, refresh_token, ip_address, user_agent, expires_at)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (
-                user_id, refresh_token,
-                request.client.host if request.client else None,
-                request.headers.get("user-agent"),
-                expires.isoformat()
-            ))
+            cur.execute(
+                "INSERT INTO sessions (user_id, refresh_token, ip_address, user_agent, expires_at) VALUES (%s, %s, %s, %s, %s)",
+                (user_id, refresh_token,
+                 request.client.host if request.client else None,
+                 request.headers.get("user-agent"),
+                 expires.isoformat())
+            )
         else:
-            cur.execute("""
-                INSERT INTO sessions (user_id, refresh_token, ip_address, user_agent, expires_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                user_id, refresh_token,
-                request.client.host if request.client else None,
-                request.headers.get("user-agent"),
-                expires.isoformat()
-            ))
+            cur.execute(
+                "INSERT INTO sessions (user_id, refresh_token, ip_address, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)",
+                (user_id, refresh_token,
+                 request.client.host if request.client else None,
+                 request.headers.get("user-agent"),
+                 expires.isoformat())
+            )
 
 
 def delete_session(refresh_token: str):
@@ -121,93 +112,76 @@ def session_exists(refresh_token: str) -> bool:
         return cur.fetchone() is not None
 
 
-# ── Email ─────────────────────────────────────────────────────────────────────
-
 def send_reset_email(to_email: str, token: str, full_name: str) -> bool:
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_pass = os.environ.get("SMTP_PASS", "")
-    from_email = os.environ.get("FROM_EMAIL", smtp_user)
+    """Send password reset email via Resend API - works on Railway free plan."""
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    from_email = os.environ.get("FROM_EMAIL", "onboarding@resend.dev")
     app_url = os.environ.get("APP_URL", "http://localhost:3000").rstrip("/")
 
-    log.info(f"Attempting to send reset email to {to_email}")
-    log.info(f"SMTP: {smtp_host}:{smtp_port} user={smtp_user}")
-
-    if not smtp_user or not smtp_pass:
-        log.error("SMTP_USER or SMTP_PASS not set in environment")
-        return False
-
     reset_url = f"{app_url}/reset-password?token={token}"
+    log.info(f"Attempting to send reset email to {to_email}")
     log.info(f"Reset URL: {reset_url}")
 
-    text = f"""Hi {full_name},
-
-Reset your JobStream password by clicking this link (expires in 1 hour):
-
-{reset_url}
-
-If you did not request this, ignore this email.
-
-JobStream Team
-"""
+    if not resend_api_key:
+        log.warning("RESEND_API_KEY not set - email not sent")
+        log.info(f"Manual reset link: {reset_url}")
+        return False
 
     html = f"""<!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;background:#f4f4f6;margin:0;padding:20px;">
 <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:40px;">
-  <h1 style="font-size:20px;color:#1d1d1f;">⚡ JobStream</h1>
-  <h2 style="font-size:22px;color:#1d1d1f;">Reset your password</h2>
-  <p style="color:#666;font-size:14px;line-height:1.6;">Hi {full_name},<br><br>
-  Click the button below to reset your password. This link expires in 1 hour.</p>
-  <div style="text-align:center;margin:28px 0;">
+  <h1 style="font-size:20px;color:#1d1d1f;">&#9889; JobStream</h1>
+  <h2 style="font-size:22px;color:#1d1d1f;margin-bottom:8px;">Reset your password</h2>
+  <p style="color:#666;font-size:14px;line-height:1.6;">
+    Hi {full_name},<br><br>
+    Click the button below to reset your password. This link expires in 1 hour.
+  </p>
+  <div style="text-align:center;margin:32px 0;">
     <a href="{reset_url}"
-       style="display:inline-block;padding:14px 28px;background:#0071E3;color:#fff;
+       style="display:inline-block;padding:14px 32px;background:#0071E3;color:#fff;
               border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;">
       Reset password
     </a>
   </div>
-  <p style="color:#999;font-size:12px;text-align:center;">
+  <p style="color:#bbb;font-size:12px;text-align:center;">
     If you did not request this, ignore this email.
   </p>
+  <hr style="border:none;border-top:1px solid #f0f0f0;margin:24px 0;">
+  <p style="color:#ccc;font-size:11px;text-align:center;">JobStream &middot; Nigeria's Job Platform</p>
 </div>
 </body>
 </html>"""
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Reset your JobStream password"
-    msg["From"] = f"JobStream <{from_email}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(text, "plain"))
-    msg.attach(MIMEText(html, "html"))
+    payload = json_lib.dumps({
+        "from": f"JobStream <{from_email}>",
+        "to": [to_email],
+        "subject": "Reset your JobStream password",
+        "html": html,
+    }).encode("utf-8")
 
     try:
-        if smtp_port == 465:
-            # SSL connection
-            import ssl
-            ctx = ssl.create_default_context()
-            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30, context=ctx) as server:
-                server.login(smtp_user, smtp_pass)
-                server.sendmail(from_email, [to_email], msg.as_string())
-        else:
-            # STARTTLS connection (port 587)
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(smtp_user, smtp_pass)
-                server.sendmail(from_email, [to_email], msg.as_string())
-        log.info(f"Reset email sent successfully to {to_email}")
-        return True
-    except smtplib.SMTPAuthenticationError as e:
-        log.error(f"SMTP authentication failed: {e}")
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json_lib.loads(resp.read())
+            log.info(f"Reset email sent via Resend: id={result.get('id')}")
+            return True
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        log.error(f"Resend API error {e.code}: {body}")
         return False
     except Exception as e:
         log.error(f"Failed to send reset email: {e}")
         return False
 
-
-# ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/register", status_code=201)
 async def register(body: RegisterIn, request: Request):
@@ -216,10 +190,8 @@ async def register(body: RegisterIn, request: Request):
         raise HTTPException(400, "Email already registered")
     if len(body.password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters")
-
     user_id = str(uuid.uuid4())
     password_hash = hash_password(body.password)
-
     with get_conn() as conn:
         cur = conn.cursor()
         if USE_POSTGRES:
@@ -232,11 +204,9 @@ async def register(body: RegisterIn, request: Request):
                 "INSERT INTO users (id, email, password_hash, full_name, role) VALUES (?, ?, ?, ?, 'candidate')",
                 (user_id, email, password_hash, body.full_name.strip())
             )
-
     access_token = create_access_token(user_id, email, "candidate")
     refresh_token = create_refresh_token(user_id)
     create_session(user_id, refresh_token, request)
-
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -253,11 +223,9 @@ async def login(body: LoginIn, request: Request):
         raise HTTPException(401, "Invalid email or password")
     if user["status"] != "active":
         raise HTTPException(403, "Account suspended. Contact support.")
-
     access_token = create_access_token(str(user["id"]), email, user["role"])
     refresh_token = create_refresh_token(str(user["id"]))
     create_session(str(user["id"]), refresh_token, request)
-
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -336,19 +304,13 @@ async def update_profile(request: Request):
 async def forgot_password(body: ForgotPasswordIn):
     email = body.email.lower().strip()
     user = get_user_by_email(email)
-
-    # Always return success to prevent email enumeration
     if not user:
-        log.info(f"Forgot password: no user found for {email}")
         return {"message": "If that email exists, a reset link has been sent"}
-
-    # Create 1-hour reset token
     expire = datetime.now(timezone.utc) + timedelta(hours=1)
     token = jwt.encode(
         {"sub": str(user["id"]), "type": "reset", "exp": expire, "jti": str(uuid.uuid4())},
         SECRET_KEY, algorithm=ALGORITHM
     )
-
     send_reset_email(email, token, user["full_name"] or "there")
     return {"message": "If that email exists, a reset link has been sent"}
 
@@ -360,18 +322,14 @@ async def reset_password(body: ResetPasswordIn):
         raise HTTPException(400, "Invalid or expired reset link")
     if len(body.new_password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters")
-
     user_id = payload["sub"]
     new_hash = hash_password(body.new_password)
-
     with get_conn() as conn:
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, user_id))
         else:
             cur.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
-
-    # Invalidate all sessions
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -379,5 +337,4 @@ async def reset_password(body: ResetPasswordIn):
             else "DELETE FROM sessions WHERE user_id = ?",
             (user_id,)
         )
-
     return {"message": "Password reset successfully. Please sign in with your new password."}

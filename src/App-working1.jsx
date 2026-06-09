@@ -188,7 +188,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
           <Chip variant="accent" isDark={isDark}>{job.department}</Chip>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 14, borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, paddingTop: 14, borderTop: "1px solid #1e1e24" }}>
           <span style={{ fontSize: 11, color: isDark ? "#555" : "#888", fontFamily: "'DM Mono', monospace" }}>
             Posted on {postedDate}
           </span>
@@ -220,7 +220,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
 
       {/* Inline expanded detail */}
       {isExpanded && (
-        <div style={{ borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed", padding: "20px 24px", background: isDark ? "#111113" : "#f8f8fb" }}>
+        <div style={{ borderTop: "1px solid #2a2a32", padding: "20px 24px", background: isDark ? "#111113" : "#f8f8fb" }}>
           {/* Description */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 500, marginBottom: 12 }}>About this role</div>
@@ -293,7 +293,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
           </div>
 
           {/* Action buttons */}
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 16, borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed" }}>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 16, borderTop: isDark ? "1px solid #2a2a32" : "1px solid #e8e8e8" }}>
             <button onClick={() => onView(job)} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
               Close
             </button>
@@ -862,201 +862,6 @@ function ScraperPage({ toast, isDark = true }) {
 }
 
 
-// ── My Applications Page ─────────────────────────────────────────────────────
-function MyApplicationsPage({ isDark = true, user, onAuthRequired }) {
-  const [apps, setApps] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!user) return;
-    api("/applications/mine")
-      .then(setApps)
-      .catch(() => setError("Failed to load applications"))
-      .finally(() => setLoading(false));
-  }, [user]);
-
-  if (!user) return (
-    <div style={{ textAlign: "center", padding: 60 }}>
-      <div style={{ fontSize: 40, marginBottom: 16 }}>📨</div>
-      <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Track your applications</div>
-      <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to see all the jobs you have applied to</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
-    </div>
-  );
-
-  const statusColors = {
-    new:        { bg: "rgba(0,113,227,0.1)",   color: "#0071E3" },
-    reviewing:  { bg: "rgba(245,166,35,0.1)",  color: "#F5A623" },
-    shortlisted:{ bg: "rgba(61,214,140,0.1)",  color: "#3DD68C" },
-    rejected:   { bg: "rgba(245,101,101,0.1)", color: "#f87171" },
-    hired:      { bg: "rgba(61,214,140,0.15)", color: "#3DD68C" },
-  };
-
-  return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", letterSpacing: -0.5, marginBottom: 4 }}>My Applications</h1>
-        <p style={{ fontSize: 13, color: isDark ? "#666" : "#888" }}>{apps.length} application{apps.length !== 1 ? "s" : ""} submitted</p>
-      </div>
-
-      {loading && <Spinner />}
-      {error && <div style={{ color: "#f87171", fontSize: 14 }}>{error}</div>}
-
-      {!loading && apps.length === 0 && (
-        <div style={{ textAlign: "center", padding: 60 }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>📭</div>
-          <div style={{ fontSize: 16, fontWeight: 500, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>No applications yet</div>
-          <div style={{ fontSize: 13, color: isDark ? "#666" : "#888" }}>Jobs you apply to will appear here</div>
-        </div>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {apps.map((a) => {
-          const sc = statusColors[a.status] || statusColors.new;
-          return (
-            <div key={a.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 14 }}>
-              <CompanyLogo name={a.company || "?"} sourceUrl={a.source_url} size={42} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 2 }}>{a.job_title || "Job"}</div>
-                    <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{a.company} · {a.location}</div>
-                  </div>
-                  <span style={{ background: sc.bg, color: sc.color, fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 500, whiteSpace: "nowrap", textTransform: "capitalize" }}>
-                    {a.status || "new"}
-                  </span>
-                </div>
-                <div style={{ fontSize: 11, color: isDark ? "#444" : "#aaa", marginTop: 8, fontFamily: "'DM Mono', monospace" }}>
-                  Applied {new Date(a.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-
-// ── Profile Page ──────────────────────────────────────────────────────────────
-function ProfilePage({ isDark = true, user, setUser, onAuthRequired, toast }) {
-  const [form, setForm] = useState({
-    full_name: user?.full_name || "",
-    phone: "",
-    location: "",
-    bio: "",
-    skills: "",
-    linkedin_url: "",
-    resume_url: "",
-    years_experience: "",
-  });
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  useEffect(() => {
-    if (!user) return;
-    api("/profile/me")
-      .then((data) => {
-        if (data) setForm((f) => ({ ...f, ...data, skills: Array.isArray(data.skills) ? data.skills.join(", ") : data.skills || "" }));
-      })
-      .catch(() => {})
-      .finally(() => setFetching(false));
-  }, [user]);
-
-  async function handleSave(e) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const payload = { ...form, skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean) };
-      await api("/profile/me", { method: "PUT", body: JSON.stringify(payload) });
-      // Update user name in state
-      const updatedUser = { ...user, full_name: form.full_name };
-      localStorage.setItem("js_user", JSON.stringify(updatedUser));
-      setUser(updatedUser);
-      toast("Profile saved!");
-    } catch (e) {
-      toast("Failed to save profile");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (!user) return (
-    <div style={{ textAlign: "center", padding: 60 }}>
-      <div style={{ fontSize: 40, marginBottom: 16 }}>👤</div>
-      <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Your profile</div>
-      <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to create your candidate profile</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
-    </div>
-  );
-
-  const inp = { width: "100%", boxSizing: "border-box", padding: "10px 14px", fontSize: 13, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, background: isDark ? "#141416" : "#ffffff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" };
-
-  const Field = ({ label, field, placeholder, type = "text", hint }) => (
-    <div style={{ marginBottom: 18 }}>
-      <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 6 }}>{label}</label>
-      <input type={type} value={form[field]} onChange={set(field)} placeholder={placeholder} style={inp} />
-      {hint && <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 4 }}>{hint}</div>}
-    </div>
-  );
-
-  return (
-    <div style={{ maxWidth: 640 }}>
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", letterSpacing: -0.5, marginBottom: 4 }}>My Profile</h1>
-        <p style={{ fontSize: 13, color: isDark ? "#666" : "#888" }}>Your profile is prefilled when you apply for jobs</p>
-      </div>
-
-      {fetching ? <Spinner /> : (
-        <form onSubmit={handleSave}>
-          {/* Avatar */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 28, padding: "16px 20px", background: isDark ? "#141416" : "#f8f8fb", borderRadius: 14, border: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
-            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#0071E3", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, flexShrink: 0 }}>
-              {(form.full_name || user.email || "?")[0].toUpperCase()}
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{form.full_name || user.full_name}</div>
-              <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{user.email}</div>
-              <div style={{ fontSize: 11, color: "#0071E3", textTransform: "capitalize", marginTop: 2 }}>{user.role}</div>
-            </div>
-          </div>
-
-          {/* Basic info */}
-          <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px", marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 16 }}>Basic Information</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              <Field label="Full name" field="full_name" placeholder="Ada Okonkwo" />
-              <Field label="Phone" field="phone" placeholder="+234 800 000 0000" type="tel" />
-              <Field label="Location" field="location" placeholder="Lagos, Nigeria" />
-              <Field label="Years of experience" field="years_experience" placeholder="3" type="number" />
-            </div>
-            <div style={{ marginBottom: 18 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 6 }}>Bio</label>
-              <textarea value={form.bio} onChange={set("bio")} placeholder="A brief introduction about yourself..." style={{ ...inp, height: 80, resize: "vertical" }} />
-            </div>
-          </div>
-
-          {/* Professional info */}
-          <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px", marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 16 }}>Professional Details</div>
-            <Field label="Skills" field="skills" placeholder="React, Python, Project Management" hint="Separate skills with commas" />
-            <Field label="LinkedIn URL" field="linkedin_url" placeholder="https://linkedin.com/in/yourname" />
-            <Field label="CV / Resume link" field="resume_url" placeholder="https://drive.google.com/..." hint="Google Drive, Dropbox, or any public link" />
-          </div>
-
-          <button type="submit" disabled={loading} style={{ background: loading ? "#ccc" : "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            {loading ? "Saving…" : "Save profile"}
-          </button>
-        </form>
-      )}
-    </div>
-  );
-}
-
-
 function ApplicationsPage({ isDark = true }) {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1198,101 +1003,6 @@ function NavItem({ icon, label, active, sidebarOpen, isDark, onClick }) {
 }
 
 
-// ── User Menu Dropdown ───────────────────────────────────────────────────────
-function UserMenu({ user, onLogout, isDark }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const initial = (user.full_name || user.email || "?")[0].toUpperCase();
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button
-        onClick={() => setOpen(!open)}
-        style={{
-          display: "flex", alignItems: "center", gap: 8,
-          background: isDark ? "#1C1C20" : "#ffffff",
-          border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8",
-          borderRadius: 20, padding: "5px 12px 5px 6px",
-          cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-        }}
-      >
-        <div style={{
-          width: 26, height: 26, borderRadius: "50%",
-          background: "#0071E3", color: "#fff",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 12, fontWeight: 700, flexShrink: 0,
-        }}>{initial}</div>
-        <span style={{ fontSize: 13, fontWeight: 500, color: isDark ? "#e0e0e0" : "#1d1d1f" }}>
-          {user.full_name?.split(" ")[0] || "Account"}
-        </span>
-        <span style={{ fontSize: 10, color: isDark ? "#666" : "#999" }}>{open ? "▲" : "▼"}</span>
-      </button>
-
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 8px)", right: 0,
-          background: isDark ? "#1C1C20" : "#ffffff",
-          border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8",
-          borderRadius: 12, minWidth: 200,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
-          zIndex: 999, overflow: "hidden",
-        }}>
-          {/* User info */}
-          <div style={{ padding: "14px 16px", borderBottom: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 2 }}>{user.full_name}</div>
-            <div style={{ fontSize: 11, color: isDark ? "#666" : "#999" }}>{user.email}</div>
-            <div style={{ fontSize: 10, color: "#0071E3", marginTop: 4, textTransform: "capitalize" }}>{user.role}</div>
-          </div>
-          {/* Menu items */}
-          <div style={{ padding: "6px 0" }}>
-            {[
-              { icon: "👤", label: "My Profile", action: () => { setOpen(false); setPage("profile"); } },
-              { icon: "📨", label: "My Applications", action: () => { setOpen(false); setPage("myapps"); } },
-            ].map(({ icon, label, action }) => (
-              <button key={label} onClick={action} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                width: "100%", padding: "9px 16px",
-                background: "none", border: "none", cursor: "pointer",
-                fontSize: 13, color: isDark ? "#ccc" : "#333",
-                fontFamily: "'DM Sans', sans-serif", textAlign: "left",
-              }}
-                onMouseEnter={(e) => e.currentTarget.style.background = isDark ? "#2a2a32" : "#f5f5f8"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "none"}
-              >
-                <span>{icon}</span> {label}
-              </button>
-            ))}
-          </div>
-          {/* Sign out */}
-          <div style={{ padding: "6px 0", borderTop: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
-            <button onClick={() => { setOpen(false); onLogout(); }} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              width: "100%", padding: "9px 16px",
-              background: "none", border: "none", cursor: "pointer",
-              fontSize: 13, color: "#f87171",
-              fontFamily: "'DM Sans', sans-serif", textAlign: "left",
-            }}
-              onMouseEnter={(e) => e.currentTarget.style.background = isDark ? "#2a2a32" : "#fff0f0"}
-              onMouseLeave={(e) => e.currentTarget.style.background = "none"}
-            >
-              <span>↪</span> Sign out
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── App Shell ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [page, setPage] = useState("jobs");
@@ -1319,10 +1029,8 @@ export default function App() {
   }
 
   const NAV = [
-    { id: "jobs",         icon: "💼", label: "Job Board" },
-    { id: "myapps",       icon: "📨", label: "My Applications" },
-    { id: "profile",      icon: "👤", label: "My Profile" },
-    { id: "scraper",      icon: "🤖", label: "Streamer" },
+    { id: "jobs", icon: "💼", label: "Job Board" },
+    { id: "scraper", icon: "🤖", label: "Streamer" },
     { id: "applications", icon: "📋", label: "Applications" },
   ];
 
@@ -1368,7 +1076,16 @@ export default function App() {
           </button>
         </div>
 
-
+        {/* Theme toggle - visible only when expanded */}
+        {sidebarOpen && (
+          <button
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 20, padding: "4px 12px", fontSize: 11, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6, marginBottom: 8, alignSelf: "flex-end" }}
+          >
+            {isDark ? "☀ Light" : "● Dark"}
+          </button>
+        )}
 
         {/* Nav items */}
         {NAV.map(({ id, icon, label }) => (
@@ -1383,6 +1100,41 @@ export default function App() {
             onClick={() => setPage(id)}
           />
         ))}
+
+        {/* Auth section */}
+        <div style={{ borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e8e8f0", paddingTop: 12, marginTop: 8 }}>
+          {user ? (
+            <div>
+              {sidebarOpen && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#e0e0e0" : "#1d1d1f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.full_name}
+                  </div>
+                  <div style={{ fontSize: 10, color: isDark ? "#666" : "#999", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.email}
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={handleLogout}
+                title="Sign out"
+                style={{ width: "100%", padding: sidebarOpen ? "8px 12px" : "8px", background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, fontSize: 12, color: isDark ? "#888" : "#666", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: sidebarOpen ? "flex-start" : "center", gap: 6 }}
+              >
+                <span>↪</span>
+                {sidebarOpen && <span>Sign out</span>}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAuth(true)}
+              title="Sign in"
+              style={{ width: "100%", padding: sidebarOpen ? "9px 12px" : "9px", background: "#0071E3", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: sidebarOpen ? "flex-start" : "center", gap: 6 }}
+            >
+              <span>👤</span>
+              {sidebarOpen && <span>Sign in</span>}
+            </button>
+          )}
+        </div>
 
         {/* Streamer active status */}
         <div style={{ marginTop: "auto", background: isDark ? "#141416" : "#f0f0f4", border: isDark ? "1px solid #1e1e24" : "1px solid #d8d8e0", borderRadius: 10, padding: sidebarOpen ? "12px 14px" : "10px 6px", display: "flex", flexDirection: "column", alignItems: sidebarOpen ? "flex-start" : "center" }}>
@@ -1400,33 +1152,8 @@ export default function App() {
       {/* Main */}
       <main style={{ padding: "28px 32px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s", position: "relative" }}>
 
-        {/* Top right auth bar */}
-        <div style={{ position: "absolute", top: 20, right: 28, display: "flex", alignItems: "center", gap: 10, zIndex: 10 }}>
-          {/* Theme toggle */}
-          <button
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 20, padding: "5px 14px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
-          >
-            {isDark ? "☀ Light" : "● Dark"}
-          </button>
-
-          {user ? (
-            <UserMenu user={user} onLogout={handleLogout} isDark={isDark} />
-          ) : (
-            <button
-              onClick={() => setShowAuth(true)}
-              style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(0,113,227,0.3)", whiteSpace: "nowrap" }}
-            >
-              Sign in | Register
-            </button>
-          )}
-        </div>
-
-        <div style={{ marginTop: 36 }}><StatsBar isDark={isDark} /></div>
+        <StatsBar isDark={isDark} />
         {page === "jobs" && <JobsPage onApply={setApplyJob} toast={showToast} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} />}
-        {page === "myapps" && <MyApplicationsPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} />}
-        {page === "profile" && <ProfilePage isDark={isDark} user={user} setUser={setUser} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}
         {page === "scraper" && <ScraperPage toast={showToast} isDark={isDark} />}
         {page === "applications" && <ApplicationsPage isDark={isDark} />}
       </main>

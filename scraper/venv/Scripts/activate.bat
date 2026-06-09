@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=C:\Users\user\GLOBAL Dropbox\Oluwaseun Adebayo\My PC (DESKTOP-7FP9SU3)\Downloads\jobstream\scraper\venv
+set VIRTUAL_ENV=C:\Projects\jobstream\scraper\venv
 
 if not defined PROMPT set PROMPT=$P$G
 

@@ -7,8 +7,8 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database import get_conn, USE_POSTGRES
-from auth.models import ADD_AUTH_TABLES, ADD_AUTH_TABLES_SQLITE
+from core.database import get_conn, USE_POSTGRES
+from services.identity.models import ADD_AUTH_TABLES, ADD_AUTH_TABLES_SQLITE
 
 
 def run_migration():

@@ -5,7 +5,8 @@ Authentication routes with Resend API for email (works on Railway free plan).
 import os
 import uuid
 import logging
-
+import urllib.request
+import json as json_lib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -112,9 +113,7 @@ def session_exists(refresh_token: str) -> bool:
 
 
 def send_reset_email(to_email: str, token: str, full_name: str) -> bool:
-    """Send password reset email via Resend API with User-Agent header fix."""
-    import requests
-
+    """Send password reset email via Resend API - works on Railway free plan."""
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("FROM_EMAIL", "onboarding@resend.dev")
     app_url = os.environ.get("APP_URL", "http://localhost:3000").rstrip("/")
@@ -154,33 +153,31 @@ def send_reset_email(to_email: str, token: str, full_name: str) -> bool:
 </body>
 </html>"""
 
-    headers = {
-        "Authorization": f"Bearer {resend_api_key}",
-        "Content-Type": "application/json",
-        "User-Agent": "jobstream/1.0.0",
-    }
-
-    payload = {
+    payload = json_lib.dumps({
         "from": f"JobStream <{from_email}>",
         "to": [to_email],
         "subject": "Reset your JobStream password",
         "html": html,
-    }
+    }).encode("utf-8")
 
     try:
-        response = requests.post(
+        req = urllib.request.Request(
             "https://api.resend.com/emails",
-            headers=headers,
-            json=payload,
-            timeout=15,
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
         )
-        if response.status_code in (200, 201):
-            result = response.json()
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json_lib.loads(resp.read())
             log.info(f"Reset email sent via Resend: id={result.get('id')}")
             return True
-        else:
-            log.error(f"Resend API error {response.status_code}: {response.text}")
-            return False
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        log.error(f"Resend API error {e.code}: {body}")
+        return False
     except Exception as e:
         log.error(f"Failed to send reset email: {e}")
         return False

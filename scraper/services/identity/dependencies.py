@@ -5,8 +5,8 @@ FastAPI dependencies for authentication.
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from auth.security import decode_token
-from database import get_conn, USE_POSTGRES
+from services.identity.security import decode_token
+from core.database import get_conn, USE_POSTGRES
 
 bearer = HTTPBearer(auto_error=False)
 

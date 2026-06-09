@@ -38,7 +38,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="C:\Users\user\GLOBAL Dropbox\Oluwaseun Adebayo\My PC (DESKTOP-7FP9SU3)\Downloads\jobstream\scraper\venv"
+VIRTUAL_ENV="C:\Projects\jobstream\scraper\venv"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

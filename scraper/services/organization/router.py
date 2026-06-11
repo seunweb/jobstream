@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from core.database import get_conn, USE_POSTGRES
+from core.audit import log_org, AuditAction
 
 router = APIRouter(prefix="/organizations", tags=["organization"])
 departments_router = APIRouter(prefix="/departments", tags=["organization"])
@@ -118,7 +119,7 @@ def create_organization(body: OrganizationIn):
             """, (org_id, body.name, body.legal_name, prev_names,
                   body.industry, body.size, body.website, body.logo_url,
                   body.description, body.country, body.rc_number, body.tin))
-            return row_to_dict(cur.fetchone())
+            result = row_to_dict(cur.fetchone())
         else:
             cur.execute("""
                 INSERT INTO organizations
@@ -129,7 +130,11 @@ def create_organization(body: OrganizationIn):
                   body.industry, body.size, body.website, body.logo_url,
                   body.description, body.country, body.rc_number, body.tin))
             cur.execute("SELECT * FROM organizations WHERE id = ?", (org_id,))
-            return row_to_dict(cur.fetchone())
+            result = row_to_dict(cur.fetchone())
+        log_org(AuditAction.ORG_CREATED, "system", result.get("id",""), result.get("name",""))
+        return result
+        log_org(AuditAction.ORG_CREATED, "system", result.get("id",""), result.get("name",""))
+        return result
 
 
 @router.get("/slug/{slug}")

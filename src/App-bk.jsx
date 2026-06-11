@@ -246,12 +246,9 @@ function initials(name = "") {
 
 // Custom logo overrides — add company name key (lowercase no spaces) → URL
 const CUSTOM_LOGOS = {
-  "t2mobile":    "https://www.t2mobile.com.ng/_next/static/media/logos.1d851e63.png",
-  "mtn":         "https://www.mtn.com/wp-content/themes/mtn-refresh/public/img/mtn-logo.svg",
-  "mtnnigeria":  "https://www.mtn.com/wp-content/themes/mtn-refresh/public/img/mtn-logo.svg",
-  "airtel":      "https://www.airtel.africa/sites/default/files/airtel-logo_0.png",
-  "airtelnigeria": "https://www.airtel.africa/sites/default/files/airtel-logo_0.png",
-  "airtelafrica": "https://www.airtel.africa/sites/default/files/airtel-logo_0.png",
+  "t2mobile": "https://www.t2mobile.com.ng/_next/static/media/logos.1d851e63.png",
+  "mtn":      "https://www.mtn.com/wp-content/themes/mtn-refresh/public/img/mtn-logo.svg",
+  "mtnnigeria": "https://www.mtn.com/wp-content/themes/mtn-refresh/public/img/mtn-logo.svg",
 };
 
 function getCustomLogo(name) {

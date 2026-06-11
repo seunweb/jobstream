@@ -23,6 +23,14 @@ from jose import jwt
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Security imports
+from core.security import (
+    check_rate_limit, login_tracker,
+    sanitise, sanitise_email, validate_password,
+)
+# Audit imports
+from core.audit import log_auth, log_action, AuditAction
+
 
 class RegisterIn(BaseModel):
     email: EmailStr
@@ -188,11 +196,19 @@ def send_reset_email(to_email: str, token: str, full_name: str) -> bool:
 
 @router.post("/register", status_code=201)
 async def register(body: RegisterIn, request: Request):
-    email = body.email.lower().strip()
+    # Rate limit registration
+    check_rate_limit(request, "auth")
+
+    email = sanitise_email(body.email)
+    full_name = sanitise(body.full_name, max_length=255)
+
     if get_user_by_email(email):
         raise HTTPException(400, "Email already registered")
-    if len(body.password) < 8:
-        raise HTTPException(400, "Password must be at least 8 characters")
+
+    # Enforce password policy
+    ok, msg = validate_password(body.password)
+    if not ok:
+        raise HTTPException(400, msg)
     user_id = str(uuid.uuid4())
     password_hash = hash_password(body.password)
     with get_conn() as conn:
@@ -200,12 +216,12 @@ async def register(body: RegisterIn, request: Request):
         if USE_POSTGRES:
             cur.execute(
                 "INSERT INTO users (id, email, password_hash, full_name, role) VALUES (%s, %s, %s, %s, 'candidate')",
-                (user_id, email, password_hash, body.full_name.strip())
+                (user_id, email, password_hash, full_name)
             )
         else:
             cur.execute(
                 "INSERT INTO users (id, email, password_hash, full_name, role) VALUES (?, ?, ?, ?, 'candidate')",
-                (user_id, email, password_hash, body.full_name.strip())
+                (user_id, email, password_hash, full_name)
             )
     access_token = create_access_token(user_id, email, "candidate")
     refresh_token = create_refresh_token(user_id)
@@ -214,18 +230,50 @@ async def register(body: RegisterIn, request: Request):
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": {"id": user_id, "email": email, "full_name": body.full_name.strip(), "role": "candidate"}
+        "user": {"id": user_id, "email": email, "full_name": full_name, "role": "candidate"}
     }
 
 
 @router.post("/login")
 async def login(body: LoginIn, request: Request):
-    email = body.email.lower().strip()
+    # Rate limit login attempts
+    check_rate_limit(request, "auth")
+
+    email = sanitise_email(body.email)
+
+    # Check account lockout
+    locked, seconds = login_tracker.is_locked(email)
+    if locked:
+        minutes = max(1, seconds // 60)
+        raise HTTPException(
+            429,
+            f"Account temporarily locked due to too many failed attempts. "
+            f"Try again in {minutes} minute{'s' if minutes != 1 else ''}."
+        )
+
     user = get_user_by_email(email)
     if not user or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(401, "Invalid email or password")
+        login_tracker.record_failure(email)
+        failures = login_tracker.get_failure_count(email)
+        remaining = max(0, login_tracker.MAX_ATTEMPTS - failures)
+        # Audit failed login
+        log_action(
+            AuditAction.USER_LOGIN_FAILED,
+            resource_type="user", resource_id=email,
+            metadata={"email": email, "failures": failures},
+            request=request, module="identity",
+        )
+        detail = "Invalid email or password"
+        if remaining <= 2 and remaining > 0:
+            detail += f" ({remaining} attempt{'s' if remaining != 1 else ''} remaining)"
+        raise HTTPException(401, detail)
+
     if user["status"] != "active":
         raise HTTPException(403, "Account suspended. Contact support.")
+
+    # Clear failed attempts on success
+    login_tracker.record_success(email)
+    log_auth(AuditAction.USER_LOGIN, str(user["id"]), email, request)
     access_token = create_access_token(str(user["id"]), email, user["role"])
     refresh_token = create_refresh_token(str(user["id"]))
     create_session(str(user["id"]), refresh_token, request)
@@ -255,8 +303,9 @@ async def refresh(body: RefreshIn, request: Request):
 
 
 @router.post("/logout")
-async def logout(body: RefreshIn):
+async def logout(body: RefreshIn, request: Request):
     delete_session(body.refresh_token)
+    log_action(AuditAction.USER_LOGOUT, request=request, module="identity")
     return {"message": "Logged out successfully"}
 
 
@@ -340,4 +389,199 @@ async def reset_password(body: ResetPasswordIn):
             else "DELETE FROM sessions WHERE user_id = ?",
             (user_id,)
         )
+    log_action(
+        AuditAction.PASSWORD_RESET_DONE,
+        user_id=user_id,
+        resource_type="user", resource_id=user_id,
+        module="identity",
+    )
     return {"message": "Password reset successfully. Please sign in with your new password."}
+
+
+# ── Session Management ────────────────────────────────────────────────────────
+
+@router.get("/sessions")
+async def list_sessions(request: Request):
+    """List all active sessions for the current user."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_token(auth_header[7:])
+    if not payload:
+        raise HTTPException(401, "Invalid token")
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute("""
+                SELECT id, ip_address, user_agent, last_active_at, created_at, expires_at
+                FROM sessions
+                WHERE user_id = %s AND expires_at > NOW()
+                ORDER BY created_at DESC
+            """, (payload["sub"],))
+        else:
+            cur.execute("""
+                SELECT id, ip_address, user_agent, created_at, expires_at
+                FROM sessions
+                WHERE user_id = ? AND expires_at > datetime('now')
+                ORDER BY created_at DESC
+            """, (payload["sub"],))
+        return [dict(r) for r in cur.fetchall()]
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+async def revoke_session(session_id: str, request: Request):
+    """Revoke a specific session (remote logout)."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_token(auth_header[7:])
+    if not payload:
+        raise HTTPException(401, "Invalid token")
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute(
+                "DELETE FROM sessions WHERE id = %s AND user_id = %s",
+                (session_id, payload["sub"])
+            )
+        else:
+            cur.execute(
+                "DELETE FROM sessions WHERE id = ? AND user_id = ?",
+                (session_id, payload["sub"])
+            )
+
+
+@router.delete("/sessions", status_code=204)
+async def revoke_all_sessions(request: Request):
+    """Revoke all sessions — logs out from all devices."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_token(auth_header[7:])
+    if not payload:
+        raise HTTPException(401, "Invalid token")
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute("DELETE FROM sessions WHERE user_id = %s", (payload["sub"],))
+        else:
+            cur.execute("DELETE FROM sessions WHERE user_id = ?", (payload["sub"],))
+
+
+# ── MFA Setup ─────────────────────────────────────────────────────────────────
+
+@router.post("/mfa/setup")
+async def mfa_setup(request: Request):
+    """Generate MFA secret and QR code URI for the current user."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_token(auth_header[7:])
+    if not payload:
+        raise HTTPException(401, "Invalid token")
+
+    user = get_user_by_id(payload["sub"])
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    from core.mfa import generate_totp_secret, get_totp_uri, get_qr_code_url
+    secret = generate_totp_secret()
+    uri = get_totp_uri(secret, user["email"])
+    qr_url = get_qr_code_url(uri)
+
+    # Store secret temporarily — only activated after user verifies
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute(
+                "UPDATE users SET mfa_secret = %s WHERE id = %s",
+                (secret, payload["sub"])
+            )
+        else:
+            cur.execute(
+                "UPDATE users SET mfa_secret = ? WHERE id = ?",
+                (secret, payload["sub"])
+            )
+
+    return {
+        "secret": secret,
+        "qr_url": qr_url,
+        "message": "Scan the QR code with your authenticator app then verify"
+    }
+
+
+class MFAVerifyIn(BaseModel):
+    code: str
+
+
+@router.post("/mfa/verify")
+async def mfa_verify(body: MFAVerifyIn, request: Request):
+    """Verify TOTP code and enable MFA on the account."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_token(auth_header[7:])
+    if not payload:
+        raise HTTPException(401, "Invalid token")
+
+    user = get_user_by_id(payload["sub"])
+    if not user or not user.get("mfa_secret"):
+        raise HTTPException(400, "MFA not set up. Call /auth/mfa/setup first.")
+
+    from core.mfa import verify_totp
+    if not verify_totp(user["mfa_secret"], body.code):
+        raise HTTPException(400, "Invalid code. Check your authenticator app.")
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute(
+                "UPDATE users SET mfa_enabled = TRUE WHERE id = %s",
+                (payload["sub"],)
+            )
+        else:
+            cur.execute(
+                "UPDATE users SET mfa_enabled = 1 WHERE id = ?",
+                (payload["sub"],)
+            )
+
+    log_auth(AuditAction.MFA_ENABLED, payload["sub"], user["email"], request)
+    return {"message": "MFA enabled successfully"}
+
+
+@router.post("/mfa/disable")
+async def mfa_disable(body: MFAVerifyIn, request: Request):
+    """Disable MFA — requires valid TOTP code to confirm."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_token(auth_header[7:])
+    if not payload:
+        raise HTTPException(401, "Invalid token")
+
+    user = get_user_by_id(payload["sub"])
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    from core.mfa import verify_totp
+    if not verify_totp(user.get("mfa_secret", ""), body.code):
+        raise HTTPException(400, "Invalid code")
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute(
+                "UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = %s",
+                (payload["sub"],)
+            )
+        else:
+            cur.execute(
+                "UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE id = ?",
+                (payload["sub"],)
+            )
+
+    log_auth(AuditAction.MFA_DISABLED, payload["sub"], user["email"], request)
+    return {"message": "MFA disabled"}

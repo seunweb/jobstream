@@ -706,21 +706,109 @@ async def scrape_company(url: str, company: str) -> list[ScrapedJob]:
     return jobs
 
 
+
+# ---------------------------------------------------------------------------
+# Oracle HCM adapter
+# Converts OracleCloudScraper output to ScrapedJob dataclass
+# ---------------------------------------------------------------------------
+
+def scrape_oracle(company_name: str, careers_url: str) -> list[ScrapedJob]:
+    """
+    Scrape an Oracle HCM careers portal and return ScrapedJob objects.
+    Uses the REST API with correct Oracle headers — no Playwright needed.
+    Reference: https://jobo.world/ats/oraclecloud
+    """
+    try:
+        from services.recruitment.oracle_scraper import OracleCloudScraper
+        scraper = OracleCloudScraper(
+            careers_url=careers_url,
+            company_name=company_name,
+            fetch_details=True,
+        )
+        raw_jobs = scraper.run()
+    except Exception as e:
+        logger.error(f"Oracle scraper failed for {company_name}: {e}")
+        return []
+
+    jobs = []
+    for r in raw_jobs:
+        jobs.append(ScrapedJob(
+            title=r.get("title", ""),
+            company=r.get("company", company_name),
+            source_url=r.get("source_url", careers_url),
+            location=r.get("location", "Not specified"),
+            job_type=r.get("job_type", "Full-time"),
+            department=r.get("department", "General"),
+            description=r.get("description", ""),
+            apply_url=r.get("apply_url", careers_url),
+            salary=r.get("salary", ""),
+        ))
+
+    logger.info(f"Oracle adapter: {len(jobs)} jobs for {company_name}")
+    return jobs
+
+
 async def scrape_all(companies: list[dict]) -> list[ScrapedJob]:
-    semaphore = asyncio.Semaphore(3)
+    """
+    Scrape all companies.
+    Oracle HCM portals → fast REST API scraper (no browser needed).
+    All other portals → Playwright browser scraper.
+    """
+    def is_oracle(url: str) -> bool:
+        return any(p in url.lower() for p in [
+            "oraclecloud.com", "hcmui/candidateexperience",
+        ])
 
-    async def guarded_scrape(c):
-        async with semaphore:
-            return await scrape_company(c["url"], c["name"])
+    def try_oracle_api(company: dict) -> tuple[bool, list]:
+        """Try REST API first. If blocked (403), return False to use Playwright."""
+        try:
+            import requests as req
+            from urllib.parse import urlparse
+            parsed = urlparse(company["url"])
+            base = f"{parsed.scheme}://{parsed.netloc}"
+            test_url = f"{base}/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&finder=findReqs;siteNumber=CX_1,limit=1,offset=0"
+            r = req.get(test_url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code == 403 and "allowlist" in r.text.lower():
+                logger.info(f"Oracle API blocked for {company['name']} — using Playwright instead")
+                return False, []
+            jobs = scrape_oracle(company["name"], company["url"])
+            return True, jobs
+        except Exception as e:
+            logger.warning(f"Oracle API attempt failed for {company['name']}: {e} — using Playwright")
+            return False, []
 
-    results = await asyncio.gather(
-        *[guarded_scrape(c) for c in companies], return_exceptions=True
-    )
+    oracle_cos = [c for c in companies if is_oracle(c.get("url", ""))]
+    browser_cos = [c for c in companies if not is_oracle(c.get("url", ""))]
 
-    all_jobs = []
-    for r in results:
-        if isinstance(r, list):
-            all_jobs.extend(r)
+    all_jobs: list[ScrapedJob] = []
+
+    # Oracle — try REST API first, fall back to Playwright if blocked
+    oracle_fallback = []
+    for company in oracle_cos:
+        success, jobs = try_oracle_api(company)
+        if success:
+            all_jobs.extend(jobs)
         else:
-            logger.error(f"Scrape error: {r}")
+            oracle_fallback.append(company)  # will be scraped by Playwright
+
+    browser_cos = browser_cos + oracle_fallback  # merge fallbacks
+
+    # Non-Oracle + Oracle fallbacks — Playwright
+    if browser_cos:
+        semaphore = asyncio.Semaphore(3)
+
+        async def guarded_scrape(c):
+            async with semaphore:
+                return await scrape_company(c["url"], c["name"])
+
+        results = await asyncio.gather(
+            *[guarded_scrape(c) for c in browser_cos], return_exceptions=True
+        )
+        for r in results:
+            if isinstance(r, list):
+                all_jobs.extend(r)
+            else:
+                logger.error(f"Scrape error: {r}")
+
     return all_jobs
+

@@ -1,9 +1,7 @@
 # Python
 scraper/venv/
 scraper/__pycache__/
-scraper/**/__pycache__/
 scraper/*.pyc
-scraper/**/*.pyc
 scraper/*.db
 scraper/.env
 

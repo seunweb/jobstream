@@ -28,6 +28,7 @@ class ScrapedJob:
     location: str = "Not specified"
     job_type: str = "Full-time"
     department: str = "General"
+    industry: str = ""
     salary: str = ""
     description: str = ""
     apply_url: str = ""
@@ -668,15 +669,17 @@ def detect_ats(url: str) -> str:
     return "generic"
 
 
-async def scrape_company(url: str, company: str) -> list[ScrapedJob]:
+async def scrape_company(url: str, company: str, industry: str = "") -> list[ScrapedJob]:
     ats = detect_ats(url)
     logger.info(f"Scraping {company} ({url}) via {ats} strategy")
 
     # Oracle and Workday use direct HTTP API calls — no browser needed
     if ats == "oracle":
-        return await scrape_oracle_hcm(url, company)
+        jobs = await scrape_oracle_hcm(url, company)
+        return _apply_industry(jobs, industry)
     if ats == "workday":
-        return await scrape_workday(url, company)
+        jobs = await scrape_workday(url, company)
+        return _apply_industry(jobs, industry)
 
     # Browser-based scrapers
     async with async_playwright() as pw:
@@ -703,6 +706,14 @@ async def scrape_company(url: str, company: str) -> list[ScrapedJob]:
             await browser.close()
 
     logger.info(f"  -> Found {len(jobs)} jobs at {company}")
+    return _apply_industry(jobs, industry)
+
+
+def _apply_industry(jobs: list[ScrapedJob], industry: str) -> list[ScrapedJob]:
+    """Stamp every scraped job with the company's configured industry."""
+    if industry:
+        for j in jobs:
+            j.industry = industry
     return jobs
 
 
@@ -712,7 +723,7 @@ async def scrape_company(url: str, company: str) -> list[ScrapedJob]:
 # Converts OracleCloudScraper output to ScrapedJob dataclass
 # ---------------------------------------------------------------------------
 
-def scrape_oracle(company_name: str, careers_url: str) -> list[ScrapedJob]:
+def scrape_oracle(company_name: str, careers_url: str, industry: str = "") -> list[ScrapedJob]:
     """
     Scrape an Oracle HCM careers portal and return ScrapedJob objects.
     Uses the REST API with correct Oracle headers — no Playwright needed.
@@ -739,6 +750,7 @@ def scrape_oracle(company_name: str, careers_url: str) -> list[ScrapedJob]:
             location=r.get("location", "Not specified"),
             job_type=r.get("job_type", "Full-time"),
             department=r.get("department", "General"),
+            industry=industry,
             description=r.get("description", ""),
             apply_url=r.get("apply_url", careers_url),
             salary=r.get("salary", ""),
@@ -771,7 +783,7 @@ async def scrape_all(companies: list[dict]) -> list[ScrapedJob]:
             if r.status_code == 403 and "allowlist" in r.text.lower():
                 logger.info(f"Oracle API blocked for {company['name']} — using Playwright instead")
                 return False, []
-            jobs = scrape_oracle(company["name"], company["url"])
+            jobs = scrape_oracle(company["name"], company["url"], company.get("industry", ""))
             return True, jobs
         except Exception as e:
             logger.warning(f"Oracle API attempt failed for {company['name']}: {e} — using Playwright")
@@ -799,7 +811,7 @@ async def scrape_all(companies: list[dict]) -> list[ScrapedJob]:
 
         async def guarded_scrape(c):
             async with semaphore:
-                return await scrape_company(c["url"], c["name"])
+                return await scrape_company(c["url"], c["name"], c.get("industry", ""))
 
         results = await asyncio.gather(
             *[guarded_scrape(c) for c in browser_cos], return_exceptions=True

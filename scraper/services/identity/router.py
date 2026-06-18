@@ -120,21 +120,12 @@ def session_exists(refresh_token: str) -> bool:
 
 
 def send_reset_email(to_email: str, token: str, full_name: str) -> bool:
-    """Send password reset email via Resend API with User-Agent header fix."""
-    import requests
+    """Send password reset email via SMTP (local) or Resend (production)."""
+    from core.email import send_email
 
-    resend_api_key = os.environ.get("RESEND_API_KEY", "")
-    from_email = os.environ.get("FROM_EMAIL", "onboarding@resend.dev")
     app_url = os.environ.get("APP_URL", "http://localhost:3000").rstrip("/")
-
     reset_url = f"{app_url}/reset-password?token={token}"
-    log.info(f"Attempting to send reset email to {to_email}")
-    log.info(f"Reset URL: {reset_url}")
-
-    if not resend_api_key:
-        log.warning("RESEND_API_KEY not set - email not sent")
-        log.info(f"Manual reset link: {reset_url}")
-        return False
+    log.info(f"Sending reset email to {to_email} | reset_url={reset_url}")
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -156,39 +147,12 @@ def send_reset_email(to_email: str, token: str, full_name: str) -> bool:
   <p style="color:#bbb;font-size:12px;text-align:center;">
     If you did not request this, ignore this email.
   </p>
-  <hr style="border:none;border-top:1px solid #f0f0f0;margin:24px 0;">
-  <p style="color:#ccc;font-size:11px;text-align:center;">JobStream &middot; Nigeria's Job Platform</p>
 </div>
 </body>
 </html>"""
-
-    headers = {
-        "Authorization": f"Bearer {resend_api_key}",
-        "Content-Type": "application/json",
-        "User-Agent": "jobstream/1.0.0",
-    }
-
-    payload = {
-        "from": f"JobStream <{from_email}>",
-        "to": [to_email],
-        "subject": "Reset your JobStream password",
-        "html": html,
-    }
-
     try:
-        response = requests.post(
-            "https://api.resend.com/emails",
-            headers=headers,
-            json=payload,
-            timeout=15,
-        )
-        if response.status_code in (200, 201):
-            result = response.json()
-            log.info(f"Reset email sent via Resend: id={result.get('id')}")
-            return True
-        else:
-            log.error(f"Resend API error {response.status_code}: {response.text}")
-            return False
+        send_email(to_email=to_email, subject="Reset your JobStream password", html=html)
+        return True
     except Exception as e:
         log.error(f"Failed to send reset email: {e}")
         return False
@@ -274,6 +238,25 @@ async def login(body: LoginIn, request: Request):
     # Clear failed attempts on success
     login_tracker.record_success(email)
     log_auth(AuditAction.USER_LOGIN, str(user["id"]), email, request)
+
+    # Record last login time and IP
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "")
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute(
+                    "UPDATE users SET last_login_at = NOW(), last_ip = %s WHERE id = %s",
+                    (client_ip[:45], str(user["id"]))
+                )
+            else:
+                cur.execute(
+                    "UPDATE users SET last_login_at = datetime('now'), last_ip = ? WHERE id = ?",
+                    (client_ip[:45], str(user["id"]))
+                )
+    except Exception:
+        pass  # non-critical
+
     access_token = create_access_token(str(user["id"]), email, user["role"])
     refresh_token = create_refresh_token(str(user["id"]))
     create_session(str(user["id"]), refresh_token, request)

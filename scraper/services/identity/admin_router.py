@@ -19,7 +19,7 @@ Tenant Dashboard endpoints (org_owner / hr_admin):
 import logging
 from typing import Optional
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel
 
 from core.database import get_conn, USE_POSTGRES
@@ -78,7 +78,7 @@ async def platform_overview(
         manual_jobs      = count_query(cur, f"SELECT COUNT(*) FROM jobs WHERE source = {ph} AND is_active = 1", ("manual",))
         scraped_jobs     = count_query(cur, f"SELECT COUNT(*) FROM jobs WHERE source = {ph} AND is_active = 1", ("scraped",))
         total_apps       = count_query(cur, "SELECT COUNT(*) FROM applications")
-        total_orgs       = count_query(cur, "SELECT COUNT(*) FROM organizations WHERE is_active = 1")
+        total_orgs       = count_query(cur, ("SELECT COUNT(*) FROM organizations WHERE is_active = TRUE" if USE_POSTGRES else "SELECT COUNT(*) FROM organizations WHERE is_active = 1"))
 
         # New users last 30 days
         if USE_POSTGRES:
@@ -131,6 +131,100 @@ async def platform_overview(
         "top_companies":  top_companies,
         "recent_tenants": recent_tenants,
     }
+
+
+@platform_router.patch("/users/{user_id}/role")
+async def assign_user_role(
+    user_id: str,
+    request: Request,
+    current_user: dict = Depends(require_platform_admin),
+):
+    """Assign a role to any user."""
+    body = await request.json()
+    new_role = body.get("role", "").strip()
+    if not new_role:
+        raise HTTPException(400, "Role required")
+
+    valid_roles = [
+        "candidate", "premium_candidate",
+        "org_owner", "hr_admin", "recruiter", "hiring_manager", "interviewer",
+        "super_admin", "platform_admin", "support_agent",
+    ]
+    if new_role not in valid_roles:
+        raise HTTPException(400, f"Invalid role. Must be one of: {', '.join(valid_roles)}")
+
+    ph = "%s" if USE_POSTGRES else "?"
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(f"UPDATE users SET role = {ph} WHERE id = {ph}", (new_role, user_id))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "User not found")
+
+    log.info(f"Admin {current_user['email']} assigned role {new_role} to user {user_id}")
+    return {"message": f"Role updated to {new_role}"}
+
+
+@platform_router.post("/users", status_code=201)
+async def admin_create_user(
+    request: Request,
+    current_user: dict = Depends(require_platform_admin),
+):
+    """Admin: create a new user account with optional confirmation email."""
+    import bcrypt, uuid as _uuid
+    from core.email import send_email
+
+    body = await request.json()
+    full_name = body.get("full_name", "").strip()
+    email = body.get("email", "").lower().strip()
+    password = body.get("password") or _uuid.uuid4().hex[:12]
+    role = body.get("role", "candidate")
+    send_confirmation = body.get("send_confirmation", True)
+
+    if not email or not full_name:
+        raise HTTPException(400, "full_name and email required")
+
+    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    user_id = str(_uuid.uuid4())
+    ph = "%s" if USE_POSTGRES else "?"
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        try:
+            if USE_POSTGRES:
+                cur.execute("""
+                    INSERT INTO users (id, email, full_name, password_hash, role, status)
+                    VALUES (%s,%s,%s,%s,%s,'active')
+                """, (user_id, email, full_name, pw_hash, role))
+            else:
+                cur.execute("""
+                    INSERT INTO users (id, email, full_name, password_hash, role, status)
+                    VALUES (?,?,?,?,?,'active')
+                """, (user_id, email, full_name, pw_hash, role))
+        except Exception as e:
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                raise HTTPException(409, f"User with email {email} already exists")
+            raise HTTPException(400, str(e))
+
+    if send_confirmation:
+        import os
+        app_url = os.environ.get("APP_URL", "http://localhost:3000")
+        html = f"""<!DOCTYPE html>
+<html><body style="font-family:Arial,sans-serif;background:#f4f4f6;padding:20px;">
+<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:40px;">
+  <h1 style="font-size:20px;color:#1d1d1f;">⚡ JobStream</h1>
+  <h2 style="font-size:18px;color:#1d1d1f;">Your account has been created</h2>
+  <p style="color:#555;font-size:14px;">Hi {full_name},</p>
+  <p style="color:#555;font-size:14px;">Your JobStream account has been created with role: <strong>{role}</strong></p>
+  <p style="color:#555;font-size:14px;">Login at <a href="{app_url}">{app_url}</a></p>
+  <p style="color:#555;font-size:14px;">Temporary password: <code>{password}</code></p>
+  <p style="color:#aaa;font-size:12px;">Please change your password after logging in.</p>
+</div></body></html>"""
+        try:
+            send_email(to_email=email, subject="Your JobStream account", html=html)
+        except Exception as e:
+            log.warning(f"Could not send confirmation to {email}: {e}")
+
+    return {"message": f"User {email} created", "id": user_id, "temp_password": password if not send_confirmation else None}
 
 
 @platform_router.get("/tenants")
@@ -272,7 +366,8 @@ async def list_all_users(
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
-            f"SELECT id, email, full_name, role, status, created_at FROM users {where} ORDER BY created_at DESC LIMIT {ph} OFFSET {ph}",
+            f"SELECT id, email, full_name, role, status, created_at, "
+            f"last_login_at, last_ip, mfa_enabled FROM users {where} ORDER BY created_at DESC LIMIT {ph} OFFSET {ph}",
             params
         )
         users = [dict(r) for r in cur.fetchall()]

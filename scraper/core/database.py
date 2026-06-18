@@ -30,7 +30,15 @@ else:
 @contextmanager
 def get_conn():
     if USE_POSTGRES:
-        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            conn = psycopg2.connect(
+                DATABASE_URL,
+                cursor_factory=psycopg2.extras.RealDictCursor,
+                connect_timeout=5,
+            )
+        except psycopg2.OperationalError as e:
+            logger.error(f"PostgreSQL connection failed: {e}")
+            raise
     else:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -63,6 +71,7 @@ CREATE TABLE IF NOT EXISTS companies (
     id       SERIAL PRIMARY KEY,
     name     TEXT NOT NULL,
     url      TEXT NOT NULL UNIQUE,
+    industry TEXT DEFAULT '',
     active   SMALLINT DEFAULT 1,
     added_at TIMESTAMP DEFAULT NOW()
 );
@@ -76,6 +85,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     location    TEXT DEFAULT 'Not specified',
     job_type    TEXT DEFAULT 'Full-time',
     department  TEXT DEFAULT 'General',
+    industry    TEXT DEFAULT '',
     salary      TEXT DEFAULT '',
     description TEXT DEFAULT '',
     apply_url   TEXT DEFAULT '',
@@ -116,6 +126,7 @@ CREATE TABLE IF NOT EXISTS companies (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     name     TEXT NOT NULL,
     url      TEXT NOT NULL UNIQUE,
+    industry TEXT DEFAULT '',
     active   INTEGER DEFAULT 1,
     added_at TEXT DEFAULT (datetime('now'))
 );
@@ -129,6 +140,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     location    TEXT DEFAULT 'Not specified',
     job_type    TEXT DEFAULT 'Full-time',
     department  TEXT DEFAULT 'General',
+    industry    TEXT DEFAULT '',
     salary      TEXT DEFAULT '',
     description TEXT DEFAULT '',
     apply_url   TEXT DEFAULT '',
@@ -173,8 +185,55 @@ def init_db():
             stmt = stmt.strip()
             if stmt:
                 cur.execute(stmt)
+    _migrate_industry_columns()
+    _migrate_user_tracking_columns()
     _seed_companies()
     logger.info("Database ready")
+
+
+def _migrate_user_tracking_columns():
+    """Add last_login_at, last_ip, mfa_enabled to users if missing."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            for stmt in [
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_ip VARCHAR(45)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN DEFAULT FALSE",
+            ]:
+                try: cur.execute(stmt)
+                except Exception as e: logger.warning(f"Migration skipped: {e}")
+        else:
+            for col, defn in [
+                ("last_login_at", "TEXT"),
+                ("last_ip", "TEXT"),
+                ("mfa_enabled", "INTEGER DEFAULT 0"),
+            ]:
+                try: cur.execute(f"ALTER TABLE users ADD COLUMN {col} {defn}")
+                except Exception: pass
+
+
+def _migrate_industry_columns():
+    """Add industry columns to companies/jobs if missing (older DBs)."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            stmts = [
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS industry TEXT DEFAULT ''",
+                "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS industry TEXT DEFAULT ''",
+                "CREATE INDEX IF NOT EXISTS idx_jobs_industry ON jobs(industry)",
+            ]
+            for s in stmts:
+                try:
+                    cur.execute(s)
+                except Exception as e:
+                    logger.warning(f"Migration skipped: {e}")
+        else:
+            for table in ("companies", "jobs"):
+                try:
+                    cur.execute(f"ALTER TABLE {table} ADD COLUMN industry TEXT DEFAULT ''")
+                except Exception:
+                    pass  # column already exists
 
 
 def _seed_companies():
@@ -213,19 +272,32 @@ def get_companies(active_only=True) -> list[dict]:
         return [row_to_dict(r) for r in cur.fetchall()]
 
 
-def add_company(name: str, url: str) -> dict:
+def add_company(name: str, url: str, industry: str = "") -> dict:
     with get_conn() as conn:
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute(
-                "INSERT INTO companies (name, url, active) VALUES (%s, %s, 1) ON CONFLICT (url) DO UPDATE SET active = 1 RETURNING *",
-                (name, url)
+                "INSERT INTO companies (name, url, industry, active) VALUES (%s, %s, %s, 1) "
+                "ON CONFLICT (url) DO UPDATE SET active = 1, industry = EXCLUDED.industry RETURNING *",
+                (name, url, industry)
             )
             return row_to_dict(cur.fetchone())
         else:
-            cur.execute("INSERT OR IGNORE INTO companies (name, url, active) VALUES (?, ?, 1)", (name, url))
+            cur.execute(
+                "INSERT OR IGNORE INTO companies (name, url, industry, active) VALUES (?, ?, ?, 1)",
+                (name, url, industry)
+            )
+            cur.execute("UPDATE companies SET industry = ? WHERE url = ?", (industry, url))
             cur.execute("SELECT * FROM companies WHERE url = ?", (url,))
             return row_to_dict(cur.fetchone())
+
+
+def update_company_industry(company_id: int, industry: str) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(q("UPDATE companies SET industry = ? WHERE id = ?"), (industry, company_id))
+        cur.execute(q("SELECT * FROM companies WHERE id = ?"), (company_id,))
+        return row_to_dict(cur.fetchone())
 
 
 def delete_company(company_id: int):
@@ -238,27 +310,89 @@ def delete_company(company_id: int):
 # Jobs
 # ---------------------------------------------------------------------------
 
+def _get_company_industry(cur, company_name: str) -> str:
+    """
+    Look up the industry configured for a company in the companies table.
+    Tries exact match first, then case-insensitive LIKE match.
+    """
+    if not company_name:
+        return ""
+    try:
+        # Exact match first
+        cur.execute(
+            q("SELECT industry FROM companies WHERE name = ? AND active = 1"),
+            (company_name,)
+        )
+        row = cur.fetchone()
+        if row:
+            val = dict(row).get("industry") or ""
+            if val.strip():
+                return val.strip()
+
+        # Fuzzy match — company name in DB may differ slightly
+        cur.execute(
+            q("SELECT industry FROM companies WHERE active = 1 AND ? LIKE '%' || name || '%'"),
+            (company_name,)
+        )
+        row = cur.fetchone()
+        if row:
+            val = dict(row).get("industry") or ""
+            if val.strip():
+                return val.strip()
+
+        # Reverse fuzzy — name in DB contains the scraped company name
+        cur.execute(
+            q("SELECT industry FROM companies WHERE active = 1 AND name LIKE ?"),
+            (f"%{company_name}%",)
+        )
+        row = cur.fetchone()
+        if row:
+            val = dict(row).get("industry") or ""
+            return val.strip()
+
+    except Exception:
+        pass
+    return ""
+
+
 def upsert_jobs(scraped) -> tuple[int, int]:
+    from core.classify import classify_job
+
     new_count = 0
     with get_conn() as conn:
         cur = conn.cursor()
         for job in scraped:
+            # Infer a more specific job_type/department when the scraper
+            # only provided the generic defaults (Full-time / General).
+            job_type, department = classify_job(
+                job.title, job.description,
+                getattr(job, "job_type", "Full-time"),
+                getattr(job, "department", "General"),
+            )
+
+            # Industry: use the one from the ScrapedJob if set,
+            # otherwise look up from the companies table by company name.
+            industry = (getattr(job, "industry", "") or "").strip()
+            if not industry:
+                industry = _get_company_industry(cur, job.company)
+
             cur.execute(q("SELECT id FROM jobs WHERE fingerprint = ?"), (job.fingerprint,))
             existing = cur.fetchone()
             if existing:
                 cur.execute(
-                    q("UPDATE jobs SET scraped_at = ?, is_active = 1 WHERE fingerprint = ?"),
-                    (job.scraped_at.isoformat(), job.fingerprint)
+                    q("UPDATE jobs SET scraped_at = ?, is_active = 1, "
+                      "job_type = ?, department = ?, industry = ? WHERE fingerprint = ?"),
+                    (job.scraped_at.isoformat(), job_type, department, industry, job.fingerprint)
                 )
             else:
                 cur.execute(q("""
                     INSERT INTO jobs
                       (fingerprint, title, company, source_url, location,
-                       job_type, department, salary, description, apply_url, is_active, scraped_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                       job_type, department, industry, salary, description, apply_url, is_active, scraped_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                 """), (
                     job.fingerprint, job.title, job.company, job.source_url,
-                    job.location, job.job_type, job.department,
+                    job.location, job_type, department, industry,
                     job.salary, job.description, job.apply_url,
                     job.scraped_at.isoformat()
                 ))
@@ -271,6 +405,7 @@ def get_jobs(
     job_type: str = "",
     department: str = "",
     company: str = "",
+    industry: str = "",
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[list[dict], int]:
@@ -288,11 +423,20 @@ def get_jobs(
         conditions.append(q("job_type = ?"))
         params.append(job_type)
     if department:
-        conditions.append(q("department = ?"))
-        params.append(department)
+        if USE_POSTGRES:
+            conditions.append("department ILIKE %s")
+        else:
+            conditions.append("department LIKE ?")
+        params.append(f"%{department}%")
     if company:
         conditions.append(q("company = ?"))
         params.append(company)
+    if industry:
+        if USE_POSTGRES:
+            conditions.append("industry ILIKE %s")
+        else:
+            conditions.append("industry LIKE ?")
+        params.append(f"%{industry}%")
 
     where = " AND ".join(conditions)
 

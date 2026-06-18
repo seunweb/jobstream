@@ -31,9 +31,13 @@ from services.organization.models import (
     ADD_ORG_COLUMN_TO_JOBS_SQLITE
 )
 from services.recruitment.router import router as recruitment_router
+from services.recruitment.seo_router import router as seo_router
 from services.people.router import router as people_router
 from services.identity.rbac_router import router as rbac_router
 from services.identity.admin_router import platform_router, tenant_router
+from services.identity.ai_router import router as ai_router
+from services.identity.billing_router import router as billing_router
+from services.identity.analytics_router import router as analytics_router
 from services.identity.rbac_models import (
     RBAC_TABLES_POSTGRES, RBAC_TABLES_SQLITE,
     seed_system_roles_and_permissions,
@@ -153,6 +157,185 @@ CREATE INDEX IF NOT EXISTS idx_audit_user_time ON audit_logs(user_id, created_at
 CREATE INDEX IF NOT EXISTS idx_audit_action    ON audit_logs(action);
 """
 
+ADMIN_TABLES_POSTGRES = """
+CREATE TABLE IF NOT EXISTS admin_industries (
+    id         SERIAL PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS admin_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS alert_delivery_log (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    alert_id   TEXT NOT NULL,
+    email      TEXT NOT NULL,
+    keywords   TEXT,
+    jobs_count INTEGER DEFAULT 0,
+    sent_at    TIMESTAMPTZ DEFAULT NOW(),
+    opened_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_adl_alert ON alert_delivery_log(alert_id);
+CREATE INDEX IF NOT EXISTS idx_adl_sent  ON alert_delivery_log(sent_at);
+"""
+
+ADMIN_TABLES_SQLITE = """
+CREATE TABLE IF NOT EXISTS admin_industries (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS admin_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS alert_delivery_log (
+    id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    alert_id   TEXT NOT NULL,
+    email      TEXT NOT NULL,
+    keywords   TEXT,
+    jobs_count INTEGER DEFAULT 0,
+    sent_at    TEXT DEFAULT (datetime('now')),
+    opened_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_adl_alert ON alert_delivery_log(alert_id);
+"""
+
+BILLING_TABLES_POSTGRES = """
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    id          VARCHAR(50) PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL,
+    type        VARCHAR(20) NOT NULL,
+    price_ngn   INTEGER DEFAULT 0,
+    interval    VARCHAR(20),
+    features    JSONB DEFAULT '[]',
+    is_active   BOOLEAN DEFAULT TRUE,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID REFERENCES users(id) ON DELETE CASCADE,
+    plan_id             VARCHAR(50),
+    status              VARCHAR(20) DEFAULT 'active',
+    started_at          TIMESTAMPTZ DEFAULT NOW(),
+    expires_at          TIMESTAMPTZ,
+    cancelled_at        TIMESTAMPTZ,
+    paystack_reference  VARCHAR(100),
+    paystack_sub_code   VARCHAR(100),
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS billing_transactions (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    plan_id     VARCHAR(50),
+    amount      INTEGER NOT NULL,
+    currency    VARCHAR(3) DEFAULT 'NGN',
+    status      VARCHAR(20) DEFAULT 'pending',
+    reference   VARCHAR(100) UNIQUE,
+    metadata    JSONB DEFAULT '{}',
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_subs_user    ON subscriptions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_txn_user     ON billing_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_txn_ref      ON billing_transactions(reference);
+"""
+
+BILLING_TABLES_SQLITE = """
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    type        TEXT NOT NULL,
+    price_ngn   INTEGER DEFAULT 0,
+    interval    TEXT,
+    features    TEXT DEFAULT '[]',
+    is_active   INTEGER DEFAULT 1,
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    user_id             TEXT REFERENCES users(id) ON DELETE CASCADE,
+    plan_id             TEXT,
+    status              TEXT DEFAULT 'active',
+    started_at          TEXT DEFAULT (datetime('now')),
+    expires_at          TEXT,
+    cancelled_at        TEXT,
+    paystack_reference  TEXT,
+    paystack_sub_code   TEXT,
+    created_at          TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS billing_transactions (
+    id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
+    plan_id     TEXT,
+    amount      INTEGER NOT NULL,
+    currency    TEXT DEFAULT 'NGN',
+    status      TEXT DEFAULT 'pending',
+    reference   TEXT UNIQUE,
+    metadata    TEXT DEFAULT '{}',
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_subs_user ON subscriptions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_txn_ref   ON billing_transactions(reference);
+"""
+
+JOB_ALERTS_POSTGRES = """
+CREATE TABLE IF NOT EXISTS job_alerts (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID REFERENCES users(id) ON DELETE CASCADE,
+    email               VARCHAR(255) NOT NULL,
+    keywords            TEXT NOT NULL,
+    location            VARCHAR(255) NOT NULL DEFAULT '',
+    industry            VARCHAR(100),
+    job_type            VARCHAR(50),
+    frequency           VARCHAR(20) DEFAULT 'daily',
+    send_time           VARCHAR(5) DEFAULT '08:00',
+    unsubscribe_token   UUID DEFAULT gen_random_uuid(),
+    is_active           BOOLEAN DEFAULT TRUE,
+    last_sent_at        TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(email, keywords, location)
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_email  ON job_alerts(email);
+CREATE INDEX IF NOT EXISTS idx_alerts_active ON job_alerts(is_active);
+CREATE INDEX IF NOT EXISTS idx_alerts_user   ON job_alerts(user_id);
+"""
+
+JOB_ALERTS_SQLITE = """
+CREATE TABLE IF NOT EXISTS job_alerts (
+    id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    user_id             TEXT REFERENCES users(id) ON DELETE CASCADE,
+    email               TEXT NOT NULL,
+    keywords            TEXT NOT NULL,
+    location            TEXT NOT NULL DEFAULT '',
+    industry            TEXT,
+    job_type            TEXT,
+    frequency           TEXT DEFAULT 'daily',
+    send_time           TEXT DEFAULT '08:00',
+    unsubscribe_token   TEXT DEFAULT (lower(hex(randomblob(16)))),
+    is_active           INTEGER DEFAULT 1,
+    last_sent_at        TEXT,
+    created_at          TEXT DEFAULT (datetime('now')),
+    updated_at          TEXT DEFAULT (datetime('now')),
+    UNIQUE(email, keywords, location)
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_email ON job_alerts(email);
+CREATE INDEX IF NOT EXISTS idx_alerts_user  ON job_alerts(user_id);
+"""
+
 DOMAIN_EVENTS_POSTGRES = """
 CREATE TABLE IF NOT EXISTS domain_events (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -237,6 +420,45 @@ def run_migrations():
         run_single_migration("ALTER TABLE jobs ADD COLUMN tenant_id TEXT")
         run_single_migration("ALTER TABLE applications ADD COLUMN tenant_id TEXT")
 
+    # 3b. Admin tables
+    schema = ADMIN_TABLES_POSTGRES if USE_POSTGRES else ADMIN_TABLES_SQLITE
+    for stmt in schema.strip().split(";"):
+        s = stmt.strip()
+        if s:
+            run_single_migration(s)
+
+    # 3c. Billing tables
+    schema = BILLING_TABLES_POSTGRES if USE_POSTGRES else BILLING_TABLES_SQLITE
+    for stmt in schema.strip().split(";"):
+        s = stmt.strip()
+        if s:
+            run_single_migration(s)
+
+    # 3d. Job alerts table
+    schema = JOB_ALERTS_POSTGRES if USE_POSTGRES else JOB_ALERTS_SQLITE
+    for stmt in schema.strip().split(";"):
+        s = stmt.strip()
+        if s:
+            run_single_migration(s)
+
+    # 3e. Job alerts — add new columns to existing tables (idempotent)
+    if USE_POSTGRES:
+        for stmt in [
+            "ALTER TABLE job_alerts ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE",
+            "ALTER TABLE job_alerts ADD COLUMN IF NOT EXISTS industry VARCHAR(100)",
+            "ALTER TABLE job_alerts ADD COLUMN IF NOT EXISTS send_time VARCHAR(5) DEFAULT '08:00'",
+            "ALTER TABLE job_alerts ALTER COLUMN location SET DEFAULT ''",
+            "CREATE INDEX IF NOT EXISTS idx_alerts_user ON job_alerts(user_id)",
+        ]:
+            run_single_migration(stmt)
+    else:
+        for stmt in [
+            "ALTER TABLE job_alerts ADD COLUMN user_id TEXT",
+            "ALTER TABLE job_alerts ADD COLUMN industry TEXT",
+            "ALTER TABLE job_alerts ADD COLUMN send_time TEXT DEFAULT '08:00'",
+        ]:
+            run_single_migration(stmt)
+
     # 4. Audit logs table
     schema = AUDIT_LOGS_POSTGRES if USE_POSTGRES else AUDIT_LOGS_SQLITE
     for stmt in schema.strip().split(";"):
@@ -274,6 +496,9 @@ def run_migrations():
     # 6. Add new columns safely (each in own connection)
     if USE_POSTGRES:
         column_migrations = [
+            "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS slug VARCHAR(255)",
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ",
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS source VARCHAR(20) DEFAULT 'scraped'",
             "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS slug VARCHAR(255)",
             "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo_url TEXT",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id)",
@@ -325,7 +550,28 @@ async def lifespan(app: FastAPI):
         log.warning(f"RBAC seed failed (may already exist): {e}")
 
     from services.recruitment.tasks import run_scheduled_scrape
-    scheduler.add_job(run_scheduled_scrape, "interval", hours=2, id="auto_scrape")
+    from core.database import get_conn, USE_POSTGRES
+
+    # Load admin-configured interval (default 4 hours)
+    def _get_scrape_interval_hours() -> int:
+        try:
+            with get_conn() as conn:
+                cur = conn.cursor()
+                ph = "%s" if USE_POSTGRES else "?"
+                cur.execute(
+                    f"SELECT value FROM admin_settings WHERE key = {ph}",
+                    ("scrape_interval_hours",)
+                )
+                row = cur.fetchone()
+                if row:
+                    return max(1, int(dict(row)["value"]))
+        except Exception:
+            pass
+        return 4  # default 4 hours
+
+    interval_hours = _get_scrape_interval_hours()
+    log.info(f"Streamer interval: every {interval_hours} hour(s)")
+    scheduler.add_job(run_scheduled_scrape, "interval", hours=interval_hours, id="auto_scrape")
     scheduler.start()
     log.info("Scheduler started")
     yield
@@ -357,6 +603,10 @@ app.include_router(org_router)            # /organizations/*
 app.include_router(departments_router)    # /departments
 app.include_router(recruitment_router)    # /jobs /applications /scrape /companies
 app.include_router(people_router)         # /persons/*
+app.include_router(seo_router)            # /jobs/slug, /sitemap, /job-alerts
+app.include_router(ai_router)             # /ai/*
+app.include_router(billing_router)        # /billing/*
+app.include_router(analytics_router)      # /analytics/*
 app.include_router(rbac_router)           # /rbac/*
 app.include_router(platform_router)       # /admin/*
 app.include_router(tenant_router)         # /workspace/*
@@ -540,7 +790,7 @@ def health():
     return {
         "status": "ok",
         "version": "2.0.0",
-        "modules": ["identity", "organization", "recruitment", "people", "rbac", "admin"],
+        "modules": ["identity", "organization", "recruitment", "people", "rbac", "admin", "seo", "ai", "billing", "analytics"],
         "security": ["rate_limiting", "account_lockout", "security_headers", "mfa"],
         "time": datetime.utcnow().isoformat(),
     }

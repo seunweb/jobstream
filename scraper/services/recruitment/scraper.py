@@ -188,43 +188,209 @@ async def scrape_oracle_hcm(url: str, company: str) -> list[ScrapedJob]:
 # Workday (REST API)
 # ---------------------------------------------------------------------------
 
+def _parse_workday_url(url: str) -> dict:
+    """Extract tenant, site, wd_server from a Workday URL."""
+    import re as _re
+    # Standard format: https://{tenant}.wd{N}.myworkdayjobs.com/{locale}/{site}
+    m = _re.match(
+        r'https://([^.]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([^/?#]+)',
+        url
+    )
+    if m:
+        return {"tenant": m.group(1), "wd_server": m.group(2), "site": m.group(3)}
+    # myworkdaysite.com format
+    m = _re.match(r'https://jobs\.myworkdaysite\.com/recruiting/([^/]+)/([^/?#]+)', url)
+    if m:
+        return {"tenant": m.group(1), "wd_server": "wd1", "site": m.group(2)}
+    # Fallback: parse manually
+    parsed = urlparse(url)
+    tenant = parsed.netloc.split(".")[0]
+    parts = [p for p in parsed.path.strip("/").split("/") if p and p not in ("en-US", "en-GB")]
+    site = parts[-1] if parts else "careers"
+    wd_server = "wd3"
+    for part in parsed.netloc.split("."):
+        if part.startswith("wd") and part[2:].isdigit():
+            wd_server = part
+            break
+    return {"tenant": tenant, "wd_server": wd_server, "site": site}
+
+
+def _workday_html_to_text(html_str: str) -> str:
+    """Convert Workday HTML description to readable plain text."""
+    if not html_str:
+        return ""
+    import html as _html_mod
+    import re as _re
+    NL = chr(10)
+    text = _html_mod.unescape(html_str)
+    text = _re.sub(r"<br\s*/?>", NL, text, flags=_re.IGNORECASE)
+    text = _re.sub(r"</p>", NL + NL, text, flags=_re.IGNORECASE)
+    text = _re.sub(r"</li>", NL, text, flags=_re.IGNORECASE)
+    text = _re.sub(r"<li[^>]*>", "\u2022 ", text, flags=_re.IGNORECASE)
+    text = _re.sub(r"</ul>|</ol>", NL, text, flags=_re.IGNORECASE)
+    for tag in ["h1", "h2", "h3", "h4"]:
+        text = _re.sub(f"<{tag}[^>]*>", NL + NL + "**", text, flags=_re.IGNORECASE)
+        text = _re.sub(f"</{tag}>", "**" + NL, text, flags=_re.IGNORECASE)
+    text = _re.sub(r"<strong[^>]*>|<b[^>]*>", "**", text, flags=_re.IGNORECASE)
+    text = _re.sub(r"</strong>|</b>", "**", text, flags=_re.IGNORECASE)
+    text = _re.sub(r"<[^>]+>", "", text)
+    result, blanks = [], 0
+    for ln in text.split(NL):
+        ln = _re.sub(r" {2,}", " ", ln.strip())
+        if ln == "":
+            blanks += 1
+            if blanks <= 1:
+                result.append(ln)
+        else:
+            blanks = 0
+            result.append(ln)
+    return NL.join(result).strip()
+
 async def scrape_workday(url: str, company: str) -> list[ScrapedJob]:
+    """
+    Scrape all jobs from a Workday career site using the CXS API.
+    Fetches full descriptions for each job.
+    Reference: https://jobo.world/ats/workday
+    """
+    import requests as _requests
+    import time as _time
+
     jobs = []
     try:
-        parsed = urlparse(url)
-        base = f"{parsed.scheme}://{parsed.netloc}"
-        tenant = parsed.netloc.split(".")[0]
-        path_parts = [p for p in parsed.path.strip("/").split("/") if p and p != "en-US"]
-        board = path_parts[-1] if path_parts else "careers"
+        cfg = _parse_workday_url(url)
+        tenant = cfg["tenant"]
+        site = cfg["site"]
+        wd_server = cfg["wd_server"]
+        base = f"https://{tenant}.{wd_server}.myworkdayjobs.com"
 
-        api_url = f"{base}/wday/cxs/{tenant}/{board}/jobs"
-        payload = {"appliedFacets": {}, "limit": 20, "offset": 0, "searchText": ""}
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0",
+            "Accept-Language": "en-US",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Referer": f"{base}/en-US/{site}",
         }
 
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            resp = await client.post(api_url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
+        list_url = f"{base}/wday/cxs/{tenant}/{site}/jobs"
+        batch = 20
+        offset = 0
+        total = None
+        all_postings = []
 
-        for item in data.get("jobPostings", []):
-            title = item.get("title", "").strip()
+        # ── Step 1: fetch all job listings with pagination ───────────────────
+        while True:
+            payload = {
+                "appliedFacets": {},
+                "limit": batch,
+                "offset": offset,
+                "searchText": "",
+            }
+            try:
+                resp = _requests.post(list_url, json=payload, headers=headers, timeout=20)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as e:
+                logger.error(f"Workday list API failed at offset {offset}: {e}")
+                break
+
+            postings = data.get("jobPostings", [])
+            if total is None:
+                total = data.get("total", 0)
+            if not postings:
+                break
+
+            all_postings.extend(postings)
+            logger.info(f"Workday {company}: fetched {len(all_postings)} / {total} jobs")
+
+            if offset + batch >= total:
+                break
+            offset += batch
+            _time.sleep(1.0)
+
+        logger.info(f"Workday {company}: {len(all_postings)} total listings found")
+
+        # ── Step 2: fetch full details for each job ───────────────────────────
+        detail_url_tpl = f"{base}/wday/cxs/{tenant}/{site}/job/{{path}}"
+        detail_headers = {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer": f"{base}/en-US/{site}",
+            "User-Agent": headers["User-Agent"],
+        }
+
+        for i, posting in enumerate(all_postings):
+            title = (posting.get("title") or "").strip()
             if not title:
                 continue
-            location = item.get("locationsText", "Not specified")
-            external_path = item.get("externalPath", "")
+
+            external_path = posting.get("externalPath", "")
+            location = posting.get("locationsText") or "Not specified"
             apply_url = f"{base}{external_path}" if external_path else url
+
+            # Fetch full description
+            description = ""
+            department = ""
+            job_type = "Full-time"
+
+            if external_path:
+                try:
+                    # externalPath already includes leading slash e.g. /en-US/site/job/ID/Title
+                    # Strip to get just the job ID portion
+                    path_for_api = external_path.lstrip("/")
+                    # Remove locale prefix if present
+                    import re as _re
+                    path_for_api = _re.sub(r'^[a-z]{2}-[A-Z]{2}/', '', path_for_api)
+                    # Remove site prefix if present
+                    path_for_api = _re.sub(f'^{_re.escape(site)}/', '', path_for_api)
+                    # Remove leading "job/" if present
+                    path_for_api = _re.sub(r'^job/', '', path_for_api)
+
+                    det_url = detail_url_tpl.format(path=path_for_api)
+                    det_resp = _requests.get(det_url, headers=detail_headers, timeout=20)
+
+                    if det_resp.status_code == 200:
+                        det = det_resp.json()
+                        raw_desc = det.get("jobDescription", "") or ""
+                        description = _workday_html_to_text(raw_desc)
+                        # Time type → job_type
+                        time_type = (det.get("timeType") or "").lower()
+                        if "part" in time_type:
+                            job_type = "Part-time"
+                        elif "contract" in time_type:
+                            job_type = "Contract"
+                        # Department from job category
+                        department = det.get("jobPostingCategory", {}).get("descriptor", "") or ""
+                        logger.debug(
+                            f"  Workday detail {i+1}/{len(all_postings)}: "
+                            f"'{title[:40]}' — {len(description)} chars"
+                        )
+                    else:
+                        logger.debug(f"  Detail {det_resp.status_code} for {title[:30]}")
+                except Exception as e:
+                    logger.debug(f"  Detail fetch failed for '{title[:30]}': {e}")
+
+                _time.sleep(0.5)
+
             jobs.append(ScrapedJob(
-                title=title, company=company, source_url=url,
-                location=location, apply_url=apply_url,
+                title=title,
+                company=company,
+                source_url=url,
+                location=location,
+                job_type=job_type,
+                department=department,
+                description=description,
+                apply_url=apply_url,
             ))
 
-        logger.info(f"Workday: found {len(jobs)} jobs at {company}")
+        logger.info(f"Workday {company}: scraped {len(jobs)} jobs with descriptions")
+
     except Exception as e:
         logger.error(f"Workday scrape failed for {url}: {e}")
+
     return jobs
 
 

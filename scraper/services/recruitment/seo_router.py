@@ -1375,6 +1375,53 @@ async def save_streamer_settings(
     }
 
 
+@router.get("/admin/settings/brand")
+async def get_brand_settings():
+    """Get brand settings (public — loaded on app init)."""
+    default = {"name": "JobStream", "logo_url": ""}
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            ph = "%s" if USE_POSTGRES else "?"
+            cur.execute(
+                f"SELECT value FROM admin_settings WHERE key = {ph}",
+                ("brand_settings",)
+            )
+            row = cur.fetchone()
+            if row:
+                import json as _json
+                return _json.loads(dict(row)["value"])
+    except Exception:
+        pass
+    return default
+
+
+@router.post("/admin/settings/brand")
+async def save_brand_settings(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Admin: save platform name and logo URL."""
+    if current_user.get("role") not in ("super_admin", "platform_admin"):
+        raise HTTPException(403, "Admin only")
+    import json as _json
+    body = await request.json()
+    ph = "%s" if USE_POSTGRES else "?"
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute("""
+                INSERT INTO admin_settings (key, value) VALUES ('brand_settings', %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            """, (_json.dumps(body),))
+        else:
+            cur.execute(
+                "INSERT OR REPLACE INTO admin_settings (key, value) VALUES ('brand_settings', ?)",
+                (_json.dumps(body),)
+            )
+    return {"message": "Brand settings saved", "settings": body}
+
+
 @router.get("/admin/settings/nav")
 async def get_nav_settings():
     """Get nav visibility settings (public — loaded on app init)."""

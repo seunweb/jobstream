@@ -76,6 +76,68 @@ def remove_company(company_id: int):
     delete_company(company_id)
 
 
+@router.get("/companies/export")
+def export_companies(current_user: dict = Depends(get_current_user)):
+    """Export all active companies as JSON — use this to migrate companies between environments."""
+    if current_user.get("role") not in ("super_admin", "platform_admin"):
+        raise HTTPException(403, "Admin only")
+    companies = get_companies(active_only=False)
+    return {"companies": companies, "count": len(companies)}
+
+
+@router.post("/companies/import")
+async def import_companies(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Bulk import companies from a JSON list.
+    Accepts: {"companies": [{"name": "...", "url": "...", "industry": "..."}, ...]}
+    Skips duplicates (by URL). Use to migrate companies from local to Railway.
+    """
+    if current_user.get("role") not in ("super_admin", "platform_admin"):
+        raise HTTPException(403, "Admin only")
+
+    body = await request.json()
+    companies = body.get("companies", [])
+    if not companies:
+        raise HTTPException(400, "No companies provided")
+
+    inserted = 0
+    skipped = 0
+    with get_conn() as conn:
+        cur = conn.cursor()
+        for c in companies:
+            name = (c.get("name") or "").strip()
+            url = (c.get("url") or "").strip()
+            industry = (c.get("industry") or "").strip()
+            if not name or not url:
+                skipped += 1
+                continue
+            try:
+                if USE_POSTGRES:
+                    cur.execute(
+                        "INSERT INTO companies (name, url, industry, active) VALUES (%s, %s, %s, 1) "
+                        "ON CONFLICT (url) DO UPDATE SET name = EXCLUDED.name, industry = EXCLUDED.industry",
+                        (name, url, industry)
+                    )
+                else:
+                    cur.execute(
+                        "INSERT OR REPLACE INTO companies (name, url, industry, active) VALUES (?, ?, ?, 1)",
+                        (name, url, industry)
+                    )
+                inserted += 1
+            except Exception as e:
+                log.warning(f"Import skip {name}: {e}")
+                skipped += 1
+
+    return {
+        "message": f"Imported {inserted} companies, skipped {skipped}",
+        "inserted": inserted,
+        "skipped": skipped,
+    }
+
+
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
 @router.get("/jobs")
@@ -85,10 +147,15 @@ def list_jobs(
     department: str = Query(""),
     company: str = Query(""),
     industry: str = Query(""),
-    limit: int = Query(50, le=200),
+    location: str = Query(""),
+    limit: int = Query(100, le=500),
     offset: int = Query(0),
 ):
-    jobs, total = get_jobs(search, job_type, department, company, industry, limit, offset)
+    jobs, total = get_jobs(
+        search=search, job_type=job_type, department=department,
+        company=company, industry=industry, location=location,
+        limit=limit, offset=offset,
+    )
     return {"total": total, "limit": limit, "offset": offset, "jobs": jobs}
 
 

@@ -537,7 +537,15 @@ async def workspace_overview(
     """Overview stats for the employer workspace dashboard."""
     tenant_id = current_user.get("tenant_id")
     if not tenant_id:
-        raise HTTPException(400, "No workspace found. Create one via POST /tenants/onboard")
+        # Return empty overview so the employer page renders without error
+        return {
+            "tenant": None,
+            "active_jobs": 0,
+            "total_applications": 0,
+            "apps_by_status": [],
+            "recent_applications": [],
+            "message": "No workspace yet. Create one via the Employer onboarding flow.",
+        }
 
     ph = "%s" if USE_POSTGRES else "?"
 

@@ -31,6 +31,7 @@ class OrganizationIn(BaseModel):
     country: Optional[str] = "NG"
     rc_number: Optional[str] = None
     tin: Optional[str] = None
+    slug: Optional[str] = None
 
 
 class DepartmentIn(BaseModel):
@@ -103,36 +104,51 @@ def list_organizations(
 
 @router.post("", status_code=201)
 def create_organization(body: OrganizationIn):
-    """Create a new organization."""
+    """Create a new organization. Auto-generates slug from name if not provided."""
+    import re as _re
     org_id = str(uuid.uuid4())
     prev_names = json.dumps(body.previous_names or [])
 
+    # Generate slug from name if not provided
+    slug = (body.slug or "").strip()
+    if not slug:
+        slug = _re.sub(r"[^a-z0-9]+", "-", body.name.lower()).strip("-")
+
     with get_conn() as conn:
         cur = conn.cursor()
+        # Check for duplicate name or slug
+        if USE_POSTGRES:
+            cur.execute("SELECT id FROM organizations WHERE name ILIKE %s OR slug = %s",
+                        (body.name, slug))
+        else:
+            cur.execute("SELECT id FROM organizations WHERE name LIKE ? OR slug = ?",
+                        (body.name, slug))
+        existing = cur.fetchone()
+        if existing:
+            raise HTTPException(409, f"Organization '{body.name}' already exists")
+
         if USE_POSTGRES:
             cur.execute("""
                 INSERT INTO organizations
                     (id, name, legal_name, previous_names, industry, size,
-                     website, logo_url, description, country, rc_number, tin)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     website, logo_url, description, country, rc_number, tin, slug)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING *
             """, (org_id, body.name, body.legal_name, prev_names,
                   body.industry, body.size, body.website, body.logo_url,
-                  body.description, body.country, body.rc_number, body.tin))
+                  body.description, body.country, body.rc_number, body.tin, slug))
             result = row_to_dict(cur.fetchone())
         else:
             cur.execute("""
                 INSERT INTO organizations
                     (id, name, legal_name, previous_names, industry, size,
-                     website, logo_url, description, country, rc_number, tin)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                     website, logo_url, description, country, rc_number, tin, slug)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (org_id, body.name, body.legal_name, prev_names,
                   body.industry, body.size, body.website, body.logo_url,
-                  body.description, body.country, body.rc_number, body.tin))
+                  body.description, body.country, body.rc_number, body.tin, slug))
             cur.execute("SELECT * FROM organizations WHERE id = ?", (org_id,))
             result = row_to_dict(cur.fetchone())
-        log_org(AuditAction.ORG_CREATED, "system", result.get("id",""), result.get("name",""))
-        return result
         log_org(AuditAction.ORG_CREATED, "system", result.get("id",""), result.get("name",""))
         return result
 

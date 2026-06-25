@@ -137,7 +137,7 @@ function UserMenu({ user, onLogout, isDark, setPage }) {
       >
         <div style={{
           width: 26, height: 26, borderRadius: "50%",
-          background: "#0071E3", color: "#fff",
+          background: "var(--btn-primary)", color: "#fff",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 12, fontWeight: 700, flexShrink: 0,
         }}>{initial}</div>
@@ -439,7 +439,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
               display: hasDirectApply(job) ? "inline-block" : "none",
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "#0077ED"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "#0071E3"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = getComputedStyle(document.documentElement).getPropertyValue("--btn-primary") || "#0071E3"; }}
           >
             {!user ? "Sign in to apply" : "Apply now →"}
           </button>
@@ -626,7 +626,7 @@ function ResetPasswordModal({ token, onClose, onSuccess }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, padding: "36px 32px", width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
-          <div style={{ width: 30, height: 30, background: "#0071E3", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚡</div>
+          <div style={{ width: 30, height: 30, background: "var(--btn-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚡</div>
           <span style={{ fontSize: 17, fontWeight: 700, color: "#1d1d1f" }}>JobStream</span>
         </div>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1d1d1f", marginBottom: 4, letterSpacing: -0.5 }}>Choose new password</h2>
@@ -641,7 +641,7 @@ function ResetPasswordModal({ token, onClose, onSuccess }) {
             <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>Confirm password</label>
             <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat password" required style={inp} />
           </div>
-          <button type="submit" disabled={loading} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 600, background: loading ? "#ccc" : "#0071E3", color: "#fff", border: "none", borderRadius: 10, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+          <button type="submit" disabled={loading} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 600, background: loading ? "#ccc" : "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
             {loading ? "Resetting…" : "Reset password"}
           </button>
         </form>
@@ -710,7 +710,7 @@ function InlineAuthModal({ onClose, onSuccess }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, padding: "36px 32px", width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
-          <div style={{ width: 30, height: 30, background: "#0071E3", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚡</div>
+          <div style={{ width: 30, height: 30, background: "var(--btn-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚡</div>
           <span style={{ fontSize: 17, fontWeight: 700, color: "#1d1d1f" }}>JobStream</span>
         </div>
         {mode !== "reset_sent" && (
@@ -746,7 +746,7 @@ function InlineAuthModal({ onClose, onSuccess }) {
               <span onClick={() => { setMode("forgot"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontSize: 13 }}>Forgot password?</span>
             </div>
           )}
-          <button type="submit" disabled={loading} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 600, background: loading ? "#ccc" : "#0071E3", color: "#fff", border: "none", borderRadius: 10, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+          <button type="submit" disabled={loading} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 600, background: loading ? "#ccc" : "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
             {loading ? "Please wait…" : mode === "login" ? "Sign in" : mode === "forgot" ? "Send reset link" : "Create account"}
           </button>
         </form>
@@ -834,7 +834,7 @@ function ApplyModal({ job, onClose, onSuccess, user }) {
         </div>
         <div style={{ padding: "16px 24px", borderTop: "1px solid #e8e8f0", display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ background: "none", border: "1px solid #d0d0d8", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#666", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-          <button onClick={submit} disabled={loading} style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
+          <button onClick={submit} disabled={loading} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
             {loading ? "Submitting…" : "Submit →"}
           </button>
         </div>
@@ -852,6 +852,8 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
   const [search, setSearch] = useState("");
   const [jobType, setJobType] = useState("");
   const [dept, setDept] = useState("");
+  const [industry, setIndustryFilter] = useState("");
+  const [country, setCountry] = useState("");
   const [scraping, setScraping] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const debounceRef = useRef(null);
@@ -863,18 +865,19 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
     api("/jobs/saved/ids").then(ids => setSavedIds(new Set(ids))).catch(() => {});
   }, [user]);
 
-  const load = useCallback(async (q = search, t = jobType, d = dept) => {
+  const load = useCallback(async (q = search, t = jobType, d = dept, ind = industry, ctr = country) => {
     setLoading(true); setError("");
     try {
-      const params = new URLSearchParams({ search: q, job_type: t, department: d, limit: 100 });
+      const params = new URLSearchParams({ search: q, job_type: t, department: d, industry: ind, limit: 100 });
+      if (ctr) params.set("location", ctr);
       const data = await api(`/jobs?${params}`);
       setJobs(data.jobs); setTotal(data.total);
     } catch (e) {
       setError("Cannot reach API at " + API + ". Is the backend running?");
     } finally { setLoading(false); }
-  }, [search, jobType, dept]);
+  }, [search, jobType, dept, industry, country]);
 
-  useEffect(() => { load("", "", ""); }, []);
+  useEffect(() => { load("", "", "", "", ""); }, []);
   function onSearch(v) {
     setSearch(v);
     clearTimeout(debounceRef.current);
@@ -953,16 +956,38 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
           />
         </div>
         {[
-          { val: jobType, set: (v) => { setJobType(v); load(search, v, dept); }, opts: ["", "Full-time", "Part-time", "Contract", "Internship"], label: "Type" },
-          { val: dept, set: (v) => { setDept(v); load(search, jobType, v); }, opts: [
-            "", "Engineering", "Sales", "Marketing", "Finance",
-            "Human Resources", "Operations", "Customer Service",
-            "Legal", "Product", "Administration", "Healthcare",
+          { val: jobType, set: (v) => { setJobType(v); load(search, v, dept, industry, country); }, opts: [
+            "", "Contract", "Full-time", "Internship", "Part-time",
+          ], label: "Type" },
+          { val: country, set: (v) => { setCountry(v); load(search, jobType, dept, industry, v); }, opts: [
+            "", "Cameroon", "Egypt", "Ethiopia", "Ghana", "Ivory Coast",
+            "Kenya", "Nigeria", "Remote", "Rwanda", "Senegal",
+            "South Africa", "Tanzania", "Uganda", "United Kingdom",
+            "United States", "Zambia", "Zimbabwe",
+          ], label: "Country" },
+          { val: dept, set: (v) => { setDept(v); load(search, jobType, v, industry, country); }, opts: [
+            "", "Administration", "Customer Service", "Engineering",
+            "Finance", "Healthcare", "Human Resources", "Legal",
+            "Marketing", "Operations", "Product", "Sales",
           ], label: "Department" },
+          { val: industry, set: (v) => { setIndustryFilter(v); load(search, jobType, dept, v, country); }, opts: [
+            "", "Agriculture", "Banking & Finance", "Consulting",
+            "Education", "Energy & Utilities", "FMCG",
+            "Government & NGO", "Healthcare", "Hospitality & Tourism",
+            "Information Technology", "Insurance", "Legal",
+            "Logistics & Supply Chain", "Manufacturing",
+            "Media & Entertainment", "Oil & Gas",
+            "Real Estate & Construction", "Retail & E-commerce",
+            "Telecommunications",
+          ], label: "Industry" },
         ].map(({ val, set, opts, label }) => (
           <select key={label} value={val} onChange={(e) => set(e.target.value)}
             style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 9, padding: "9px 12px", fontSize: 13, color: val ? (isDark ? "#f0f0f2" : "#1a1a1a") : (isDark ? "#666" : "#999"), fontFamily: "'DM Sans', sans-serif", outline: "none", cursor: "pointer", colorScheme: isDark ? "dark" : "light" }}>
-            {opts.map((o) => <option key={o} value={o}>{o || `All ${label}s`}</option>)}
+            {opts.map((o, i) => (
+              <option key={o} value={o}>
+                {o || (label === "Country" ? "Country" : label === "Industry" ? "Industry" : label === "Department" ? "Department" : "Type")}
+              </option>
+            ))}
           </select>
         ))}
       </div>
@@ -1102,7 +1127,7 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations = [] })
 
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button type="button" onClick={onClose} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "10px 20px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-            <button type="submit" disabled={loading} style={{ background: "#0071E3", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
+            <button type="submit" disabled={loading} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
               {loading ? "Posting…" : "Post job"}
             </button>
           </div>
@@ -1213,11 +1238,11 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
     Promise.all([
       api("/jobs?source=manual&limit=100"),
       api("/organizations"),
-      api("/tenants/me"),
-    ]).then(([jobsData, orgs, tenantData]) => {
+      api("/workspace/overview").catch(() => null),
+    ]).then(([jobsData, orgs, _workspace]) => {
       setJobs((jobsData.jobs || []).filter(j => j.source === "manual"));
       setOrganizations(orgs);
-      setTenant(tenantData.tenant || null);
+      // tenant is populated separately via onboarding, not needed here
     }).catch(() => {})
     .finally(() => setLoading(false));
   }, [user]);
@@ -1268,7 +1293,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
       <div style={{ fontSize: 40, marginBottom: 16 }}>🏢</div>
       <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Employer Dashboard</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to post jobs and manage applications</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
     </div>
   );
 
@@ -1291,7 +1316,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
           </div>
         </div>
         {(can("job.create") || !user?.tenant_id) && (
-          <button onClick={() => setShowPostJob(true)} style={{ background: "#0071E3", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+          <button onClick={() => setShowPostJob(true)} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
             + Post a job
           </button>
         )}
@@ -1305,7 +1330,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
           {!loading && jobs.length === 0 && (
             <div style={{ textAlign: "center", padding: "32px 20px", background: isDark ? "#141416" : "#f8f8fb", borderRadius: 14, border: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
               <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 12 }}>No jobs posted yet</div>
-              <button onClick={() => setShowPostJob(true)} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Post your first job</button>
+              <button onClick={() => setShowPostJob(true)} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Post your first job</button>
             </div>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1754,6 +1779,8 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
   const [streamerHours, setStreamerHours] = useState(4);
   const [streamerDirty, setStreamerDirty] = useState(false);
   const [backfilling, setBackfillingInd] = useState(false);
+  const [brandSettings, setBrandSettings] = useState({ name: "JobStream", logo_url: "" });
+  const [brandDirty, setBrandDirty] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
   const [jobSearch, setJobSearch] = useState("");
   const [jobStatusFilter, setJobStatusFilter] = useState("");
@@ -1804,11 +1831,12 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
       if (t === "tenants")    setTenants((await api("/admin/tenants?limit=100")).tenants || []);
       if (t === "alerts")     setAlerts((await api("/admin/alerts?limit=100")).alerts || []);
       if (t === "settings") {
-        const [m, tmpl, theme, streamer] = await Promise.all([
+        const [m, tmpl, theme, streamer, brand] = await Promise.all([
           api("/admin/industries"),
           api("/admin/alert-template"),
           api("/admin/settings/theme"),
           api("/admin/settings/streamer"),
+          api("/admin/settings/brand").catch(() => ({ name: "JobStream", logo_url: "" })),
         ]);
         setIndustries(m.industries || []);
         setTemplate(tmpl.template || "");
@@ -1817,6 +1845,8 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
         setThemeDirty(false);
         setStreamerHours(streamer?.scrape_interval_hours || 4);
         setStreamerDirty(false);
+        setBrandSettings(brand || { name: "JobStream", logo_url: "" });
+        setBrandDirty(false);
       }
     } catch (e) { toast("Failed to load data"); }
     finally { setLoading(false); }
@@ -1884,7 +1914,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
     <div style={{ textAlign: "center", padding: 60 }}>
       <div style={{ fontSize: 40, marginBottom: 16 }}>🔐</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Admin access required</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in</button>
     </div>
   );
 
@@ -2015,7 +2045,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
               {users.filter(u => (!userSearch || u.full_name?.toLowerCase().includes(userSearch.toLowerCase()) || u.email?.toLowerCase().includes(userSearch.toLowerCase())) && (!userRoleFilter || u.role === userRoleFilter)).length} users
             </span>
             <button onClick={() => setAddingUser(true)}
-              style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
+              style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
               + Add user
             </button>
           </div>
@@ -2043,7 +2073,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                     setNewUser({ full_name: "", email: "", password: "", role: "candidate", send_confirmation: true });
                     setUsers((await api("/admin/users?limit=100")).users || []);
                   } catch(e) { toast(e.message || "Failed to create user"); }
-                }} style={{ background: "#0071E3", border: "none", borderRadius: 7, padding: "8px 12px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
+                }} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 7, padding: "8px 12px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
                   Create
                 </button>
               </div>
@@ -2136,7 +2166,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
               <option value="0">Unpublished</option>
             </select>
             <button onClick={() => loadTab("jobs")}
-              style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
               Search
             </button>
             <span style={{ fontSize: 12, color: isDark ? "#555" : "#aaa" }}>{jobs.length} jobs</span>
@@ -2274,6 +2304,40 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
 
 
 
+          {/* Brand Settings */}
+          <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>Brand Settings</div>
+            <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa", marginBottom: 16 }}>Customise the platform name and logo shown to all users</div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#666" : "#888", textTransform: "uppercase", letterSpacing: "0.4px", display: "block", marginBottom: 5 }}>Platform name</label>
+              <input value={brandSettings.name || ""} onChange={e => { setBrandSettings(p => ({...p, name: e.target.value})); setBrandDirty(true); }}
+                placeholder="JobStream"
+                style={{ width: "100%", boxSizing: "border-box", padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#666" : "#888", textTransform: "uppercase", letterSpacing: "0.4px", display: "block", marginBottom: 5 }}>Logo URL</label>
+              <input value={brandSettings.logo_url || ""} onChange={e => { setBrandSettings(p => ({...p, logo_url: e.target.value})); setBrandDirty(true); }}
+                placeholder="https://your-domain.com/logo.png"
+                style={{ width: "100%", boxSizing: "border-box", padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
+              {brandSettings.logo_url && (
+                <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10 }}>
+                  <img src={brandSettings.logo_url} alt="preview" style={{ height: 36, objectFit: "contain", borderRadius: 6, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", padding: 4 }} onError={e => e.target.style.display = "none"} />
+                  <span style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>Logo preview</span>
+                </div>
+              )}
+            </div>
+            <button onClick={async () => {
+              try {
+                await api("/admin/settings/brand", { method: "POST", body: JSON.stringify(brandSettings) });
+                setBrandDirty(false);
+                toast("Brand settings saved — reload to see changes");
+              } catch(e) { toast(e.message || "Failed"); }
+            }} disabled={!brandDirty}
+              style={{ background: brandDirty ? "#0071E3" : (isDark ? "#222" : "#ddd"), border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: brandDirty ? "#fff" : (isDark ? "#444" : "#aaa"), cursor: brandDirty ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
+              {brandDirty ? "Save brand" : "✓ Saved"}
+            </button>
+          </div>
+
           {/* Streamer Control */}
           <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>Streamer Settings</div>
@@ -2364,7 +2428,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                 placeholder="e.g. General, Aviation..."
                 onKeyDown={e => e.key === "Enter" && addIndustry()}
                 style={{ flex: 1, padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#1a1a1e" : "#f8f8fb", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
-              <button onClick={addIndustry} style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>+ Add</button>
+              <button onClick={addIndustry} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>+ Add</button>
             </div>
             <div style={{ maxHeight: 300, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
               {industries.map(ind => (
@@ -2419,7 +2483,7 @@ function AdminJobEditModal({ job, isDark, onSave, onClose, jobTypes, departments
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={onClose} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-            <button onClick={handleSave} disabled={saving} style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: saving ? 0.7 : 1 }}>
+            <button onClick={handleSave} disabled={saving} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: saving ? 0.7 : 1 }}>
               {saving ? "Saving…" : "Save changes"}
             </button>
           </div>
@@ -2527,7 +2591,7 @@ function WorkspaceDashboardPage({ isDark = true, user, onAuthRequired, toast }) 
     <div style={{ textAlign: "center", padding: 60 }}>
       <div style={{ fontSize: 40, marginBottom: 16 }}>🏢</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to access your workspace</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in</button>
     </div>
   );
 
@@ -2626,7 +2690,7 @@ function WorkspaceDashboardPage({ isDark = true, user, onAuthRequired, toast }) 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {team.map(m => (
             <div key={m.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#0071E3", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--btn-primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
                 {(m.full_name || m.email || "?")[0].toUpperCase()}
               </div>
               <div style={{ flex: 1 }}>
@@ -2798,7 +2862,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
               {industry ? ` (${industry})` : ""}.
               {user && " Manage it anytime from your profile menu → My Alerts."}
             </div>
-            <button onClick={() => onClose(true)} style={{ background: "#0071E3", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Done</button>
+            <button onClick={() => onClose(true)} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Done</button>
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
@@ -2867,7 +2931,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => onClose(false)} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "10px 20px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-              <button type="submit" disabled={loading} style={{ background: "#0071E3", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.7 : 1 }}>
+              <button type="submit" disabled={loading} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.7 : 1 }}>
                 {loading ? "Saving…" : isEdit ? "Save changes" : "Create alert"}
               </button>
             </div>
@@ -2986,7 +3050,7 @@ function AIPage({ isDark = true, user, onAuthRequired, toast }) {
       <div style={{ fontSize: 40, marginBottom: 16 }}>🤖</div>
       <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>AI Features</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to access AI-powered career tools</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
     </div>
   );
 
@@ -3262,7 +3326,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
       <div style={{ fontSize: 40, marginBottom: 16 }}>💳</div>
       <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Billing & Plans</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to manage your subscription</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in</button>
     </div>
   );
 
@@ -3311,7 +3375,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
             return (
               <div key={plan.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isCurrentPlan ? "2px solid #0071E3" : isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 16, padding: "22px 20px", position: "relative" }}>
                 {isCurrentPlan && (
-                  <div style={{ position: "absolute", top: -1, right: 16, background: "#0071E3", color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: "0 0 8px 8px" }}>CURRENT</div>
+                  <div style={{ position: "absolute", top: -1, right: 16, background: "var(--btn-primary)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: "0 0 8px 8px" }}>CURRENT</div>
                 )}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                   <span style={{ fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{plan.name}</span>
@@ -3338,7 +3402,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
                   <button
                     onClick={() => handleUpgrade(plan.id)}
                     disabled={paying === plan.id}
-                    style={{ width: "100%", background: "#0071E3", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: paying ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: paying === plan.id ? 0.7 : 1 }}
+                    style={{ width: "100%", background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: paying ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: paying === plan.id ? 0.7 : 1 }}
                   >
                     {paying === plan.id ? "Redirecting…" : plan.name === "Enterprise" ? "Contact Sales" : `Upgrade — ₦${plan.price_ngn.toLocaleString()}/mo`}
                   </button>
@@ -3514,7 +3578,7 @@ function AnalyticsPage({ isDark = true, user, onAuthRequired, toast }) {
       <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
       <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Analytics</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to view your analytics</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in</button>
     </div>
   );
 
@@ -3949,7 +4013,7 @@ function MyAlertsPage({ isDark = true, user, onAuthRequired, toast }) {
       <div style={{ fontSize: 40, marginBottom: 16 }}>🔔</div>
       <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Your job alerts</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to manage your job alerts</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
     </div>
   );
 
@@ -3960,7 +4024,7 @@ function MyAlertsPage({ isDark = true, user, onAuthRequired, toast }) {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", letterSpacing: -0.5, marginBottom: 4 }}>My Alerts</h1>
           <p style={{ fontSize: 13, color: isDark ? "#666" : "#888" }}>{alerts.length} alert{alerts.length !== 1 ? "s" : ""} configured</p>
         </div>
-        <button onClick={() => setShowCreate(true)} style={{ background: "#0071E3", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+        <button onClick={() => setShowCreate(true)} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
           + New alert
         </button>
       </div>
@@ -4018,14 +4082,22 @@ function ScraperPage({ toast, isDark = true }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null); // company id currently being scraped
   const [industryOptions, setIndustryOptions] = useState([]);
+  const [companySearch, setCompanySearch] = useState("");
+  const [companyIndustryFilter, setCompanyIndustryFilter] = useState("");
 
   async function load() {
     try {
-      const [c, h] = await Promise.all([api("/companies"), api("/scrape/history")]);
-      setCompanies(c);
-      setHistory(h);
-    } catch {}
-    finally { setLoading(false); }
+      const [c, h] = await Promise.all([
+        api("/companies").catch(() => []),
+        api("/scrape/history").catch(() => []),
+      ]);
+      setCompanies(Array.isArray(c) ? c : []);
+      setHistory(Array.isArray(h) ? h : []);
+    } catch (e) {
+      console.error("ScraperPage load error:", e);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -4055,6 +4127,33 @@ function ScraperPage({ toast, isDark = true }) {
     await api(`/companies/${id}`, { method: "DELETE" });
     load();
     toast(`Removed ${name}`);
+  }
+
+  async function registerAsOrg(company) {
+    try {
+      // Derive a slug from company name
+      const slug = company.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      await api("/organizations", {
+        method: "POST",
+        body: JSON.stringify({
+          name: company.name,
+          legal_name: company.name,
+          website: company.url,
+          industry: company.industry || "",
+          slug,
+          description: "",
+          country: "Nigeria",
+          size: "",
+          logo_url: "",
+          rc_number: "",
+          tin: "",
+          previous_names: [],
+        }),
+      });
+      toast(`${company.name} registered as an organization — company page now available`);
+    } catch (e) {
+      toast(e.message?.includes("already") ? `${company.name} is already an organization` : `Failed: ${e.message}`);
+    }
   }
 
   async function scrapeOne(id, name) {
@@ -4091,6 +4190,36 @@ function ScraperPage({ toast, isDark = true }) {
     }
   }
 
+  async function exportCompanies() {
+    try {
+      const res = await api("/companies/export");
+      const blob = new Blob([JSON.stringify(res, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "jobstream-companies.json";
+      a.click();
+      toast(`Exported ${res.count} companies`);
+    } catch (e) { toast(e.message || "Export failed"); }
+  }
+
+  async function importCompanies() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const res = await api("/companies/import", { method: "POST", body: JSON.stringify(data) });
+        toast(res.message);
+        load();
+      } catch (err) { toast(err.message || "Import failed"); }
+    };
+    input.click();
+  }
+
   const inp = {
     background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8,
     padding: "9px 12px", fontSize: 13, color: isDark ? "#f0f0f2" : "#1a1a1a",
@@ -4100,17 +4229,75 @@ function ScraperPage({ toast, isDark = true }) {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f2", letterSpacing: -0.5 }}>Streamer Config</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f2", letterSpacing: -0.5 }}>Streamer Config</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={exportCompanies} style={{ background: "none", border: "1px solid #2a2a32", borderRadius: 8, padding: "7px 14px", fontSize: 12, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              ↓ Export companies
+            </button>
+            <button onClick={importCompanies} style={{ background: "none", border: "1px solid #2a2a32", borderRadius: 8, padding: "7px 14px", fontSize: 12, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              ↑ Import companies
+            </button>
+          </div>
+        </div>
         <div style={{ fontSize: 13, color: "#555", marginTop: 3 }}>Manage career pages to stream automatically</div>
       </div>
 
       {/* Companies list */}
       <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: isDark ? "#f0f0f2" : "#1a1a1a", marginBottom: 16 }}>Tracked companies</div>
+
+        {/* Add company form — at top */}
+        <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: isDark ? "1px solid #1e1e24" : "1px solid #f0f0f4" }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#666" : "#888", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 8 }}>Add company</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input value={newName} onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addCompany()}
+              placeholder="Company name" style={{ ...inp, width: 160 }} />
+            <select value={newIndustry} onChange={(e) => setNewIndustry(e.target.value)}
+              style={{ ...inp, width: 170, cursor: "pointer", color: newIndustry ? (isDark ? "#f0f0f2" : "#1a1a1a") : (isDark ? "#555" : "#aaa") }}>
+              <option value="">Industry (optional)</option>
+              {industryOptions.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+            </select>
+            <input value={newUrl} onChange={(e) => setNewUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addCompany()}
+              placeholder="https://company.com/careers" style={{ ...inp, flex: 1, minWidth: 200 }} />
+            <button onClick={addCompany}
+              style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>+ Add</button>
+          </div>
+          <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 6 }}>
+            Industry tags every job scraped from this company so job alerts match across companies in that sector.
+          </div>
+        </div>
+
+        {/* Search + filter bar */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            value={companySearch}
+            onChange={e => setCompanySearch(e.target.value)}
+            placeholder="Search company name or URL…"
+            style={{ ...inp, flex: 1, minWidth: 160 }}
+          />
+          <select value={companyIndustryFilter} onChange={e => setCompanyIndustryFilter(e.target.value)}
+            style={{ ...inp, width: 170, cursor: "pointer", color: companyIndustryFilter ? (isDark ? "#f0f0f2" : "#1a1a1a") : (isDark ? "#555" : "#aaa") }}>
+            <option value="">All industries</option>
+            {industryOptions.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+          </select>
+          <span style={{ fontSize: 12, color: isDark ? "#555" : "#aaa", whiteSpace: "nowrap" }}>
+            {companies.filter(c =>
+              (!companySearch || c.name.toLowerCase().includes(companySearch.toLowerCase()) || (c.url || "").toLowerCase().includes(companySearch.toLowerCase())) &&
+              (!companyIndustryFilter || c.industry === companyIndustryFilter)
+            ).length} / {companies.length}
+          </span>
+        </div>
 
         {loading ? <Spinner /> : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-            {companies.map((c) => (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {companies
+              .filter(c =>
+                (!companySearch || c.name.toLowerCase().includes(companySearch.toLowerCase()) || (c.url || "").toLowerCase().includes(companySearch.toLowerCase())) &&
+                (!companyIndustryFilter || c.industry === companyIndustryFilter)
+              )
+              .map((c) => (
               <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: isDark ? "#1C1C20" : "#f8f8fb", borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
                 {/* Logo */}
                 <CompanyLogo name={c.name} sourceUrl={c.url} size={28} />
@@ -4145,6 +4332,14 @@ function ScraperPage({ toast, isDark = true }) {
                 >
                   ↺ Force
                 </button>
+                {/* Register as Org button */}
+                <button
+                  onClick={() => registerAsOrg(c)}
+                  title="Register as organization (enables company page)"
+                  style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 13, padding: "2px 6px", borderRadius: 5, fontFamily: "'DM Sans', sans-serif" }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = "#3DD68C"}
+                  onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
+                >🏢</button>
                 {/* Remove button */}
                 <button
                   onClick={() => removeCompany(c.id, c.name)}
@@ -4157,19 +4352,7 @@ function ScraperPage({ toast, isDark = true }) {
           </div>
         )}
 
-        {/* Add company form */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Company name" style={{ ...inp, width: 140 }} />
-          <select value={newIndustry} onChange={(e) => setNewIndustry(e.target.value)} style={{ ...inp, width: 160, cursor: "pointer", color: newIndustry ? (isDark ? "#f0f0f2" : "#1a1a1a") : (isDark ? "#555" : "#aaa") }}>
-            <option value="">Industry (optional)</option>
-            {industryOptions.map(ind => <option key={ind} value={ind}>{ind}</option>)}
-          </select>
-          <input value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="https://company.com/careers" style={{ ...inp, flex: 1 }} />
-          <button onClick={addCompany} style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>+ Add</button>
-        </div>
-        <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 8 }}>
-          Industry tags every job scraped from this company (e.g. MTN, Airtel, T2 → Telecommunications) so job alerts can match across all companies in that industry.
-        </div>
+
       </div>
 
       {/* Scrape history */}
@@ -4431,7 +4614,7 @@ function SavedJobsPage({ isDark = true, user, onAuthRequired, onApply, toast }) 
       <div style={{ fontSize: 40, marginBottom: 16 }}>🔖</div>
       <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Your saved jobs</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to save jobs and apply later</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
     </div>
   );
 
@@ -4466,7 +4649,7 @@ function SavedJobsPage({ isDark = true, user, onAuthRequired, onApply, toast }) 
                   <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                     <button
                       onClick={() => onApply && onApply(job)}
-                      style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                      style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
                     >
                       Apply →
                     </button>
@@ -4513,7 +4696,7 @@ function MyApplicationsPage({ isDark = true, user, onAuthRequired }) {
       <div style={{ fontSize: 40, marginBottom: 16 }}>📨</div>
       <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Track your applications</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to see all the jobs you have applied to</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
     </div>
   );
 
@@ -4621,7 +4804,7 @@ function ProfilePage({ isDark = true, user, setUser, onAuthRequired, toast }) {
       <div style={{ fontSize: 40, marginBottom: 16 }}>👤</div>
       <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Your profile</div>
       <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in to create your candidate profile</div>
-      <button onClick={onAuthRequired} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
+      <button onClick={onAuthRequired} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
     </div>
   );
 
@@ -4646,7 +4829,7 @@ function ProfilePage({ isDark = true, user, setUser, onAuthRequired, toast }) {
         <form onSubmit={handleSave}>
           {/* Avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 28, padding: "16px 20px", background: isDark ? "#141416" : "#f8f8fb", borderRadius: 14, border: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
-            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#0071E3", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, flexShrink: 0 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--btn-primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, flexShrink: 0 }}>
               {(form.full_name || user.email || "?")[0].toUpperCase()}
             </div>
             <div>
@@ -4679,7 +4862,7 @@ function ProfilePage({ isDark = true, user, setUser, onAuthRequired, toast }) {
             <Field label="CV / Resume link" field="resume_url" placeholder="https://drive.google.com/..." hint="Google Drive, Dropbox, or any public link" />
           </div>
 
-          <button type="submit" disabled={loading} style={{ background: loading ? "#ccc" : "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+          <button type="submit" disabled={loading} style={{ background: loading ? "#ccc" : "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
             {loading ? "Saving…" : "Save profile"}
           </button>
         </form>
@@ -4750,15 +4933,32 @@ export default function App() {
   const [navSettings, setNavSettings] = useState(null);
 
   // Load admin nav/theme settings on mount
+  const [brandName, setBrandName] = useState(() => localStorage.getItem("js_brand_name") || "JobStream");
+  const [brandLogo, setBrandLogo] = useState(() => localStorage.getItem("js_brand_logo") || "");
+
   useEffect(() => {
     Promise.all([
       fetch(`${API}/admin/settings/nav`).then(r => r.ok ? r.json() : null).catch(() => null),
       fetch(`${API}/admin/settings/theme`).then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([nav, thm]) => {
+      fetch(`${API}/admin/settings/brand`).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([nav, thm, brand]) => {
       if (nav) setNavSettings(nav);
-      if (thm?.accent_color) {
-        document.documentElement.style.setProperty("--accent", thm.accent_color);
+      if (thm) {
+        const root = document.documentElement;
+        if (thm.accent_color)    root.style.setProperty("--accent",      thm.accent_color);
+        if (thm.btn_color_dark)  root.style.setProperty("--btn-dark",    thm.btn_color_dark);
+        if (thm.btn_color_light) root.style.setProperty("--btn-light",   thm.btn_color_light);
+        if (thm.bg_dark)         root.style.setProperty("--bg-dark",     thm.bg_dark);
+        if (thm.bg_light)        root.style.setProperty("--bg-light",    thm.bg_light);
+        // Set btn-primary based on current theme mode (dark/light)
+        const isDarkMode = document.documentElement.classList.contains("dark")
+          || localStorage.getItem("js_theme") === "dark";
+        root.style.setProperty("--btn-primary",
+          isDarkMode ? (thm.btn_color_dark || "#0071E3")
+                     : (thm.btn_color_light || "#000000"));
       }
+      if (brand?.name) { setBrandName(brand.name); localStorage.setItem("js_brand_name", brand.name); }
+      if (brand?.logo_url !== undefined) { setBrandLogo(brand.logo_url || ""); localStorage.setItem("js_brand_logo", brand.logo_url || ""); }
     });
   }, []);
   const [myPermissions, setMyPermissions] = useState(new Set());
@@ -4777,6 +4977,7 @@ export default function App() {
     return m ? m[1] : "";
   });
   const isDark = theme === "dark";
+
 
   /** Check if current user has a permission */
   const can = (permission) => {
@@ -4836,42 +5037,47 @@ export default function App() {
     <div style={{ display: "grid", gridTemplateColumns: sidebarOpen ? "220px 1fr" : "52px 1fr", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", background: isDark ? "#0D0D0F" : "#f4f4f6", color: isDark ? "#f0f0f2" : "#1a1a1a", transition: "all 0.25s ease" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+        :root {
+          --accent:      #0071E3;
+          --btn-dark:    #0071E3;
+          --btn-light:   #000000;
+          --bg-dark:     #0a0a0c;
+          --bg-light:    #f5f5f7;
+          --btn-primary: #0071E3;
+        }
+        /* Switch btn-primary based on colour scheme */
+        @media (prefers-color-scheme: light) {
+          :root { --btn-primary: var(--btn-light, #000000); }
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .nav-item-wrap { overflow: visible !important; }
         .nav-item-wrap:hover .nav-tooltip { opacity: 1 !important; }
-        aside { overflow: visible !important; }
         input::placeholder, textarea::placeholder { color: #444; }
         ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a32; border-radius: 3px; }
         select option { background: ${isDark ? "#141416" : "#ffffff"}; color: ${isDark ? "#f0f0f2" : "#111111"}; }
         select { color-scheme: ${isDark ? "dark" : "light"}; }
+        /* Admin-controlled button colour — applied via CSS variables */
+        .js-btn-primary {
+          background: ${isDark ? "var(--btn-dark, #0071E3)" : "var(--btn-light, #000000)"} !important;
+        }
       `}</style>
 
       {/* Sidebar */}
-      <aside style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: isDark ? "1px solid #1e1e24" : "1px solid #e0e0e8", padding: sidebarOpen ? "20px 14px" : "12px 8px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "all 0.25s ease", overflow: "hidden", width: sidebarOpen ? "220px" : "52px", minWidth: sidebarOpen ? "220px" : "52px" }}>
+      <aside style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: isDark ? "1px solid #1e1e24" : "1px solid #e0e0e8", padding: sidebarOpen ? "20px 14px" : "12px 8px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "all 0.25s ease", overflowY: "auto", overflowX: "hidden", width: sidebarOpen ? "220px" : "52px", minWidth: sidebarOpen ? "220px" : "52px", scrollbarWidth: "thin", scrollbarColor: isDark ? "#2a2a32 transparent" : "#d0d0d8 transparent" }}>
 
-        {/* Header: burger always on top, logo below */}
-        <div style={{ display: "flex", flexDirection: "column", marginBottom: 20 }}>
-          {/* Burger row */}
-          <div style={{ display: "flex", justifyContent: sidebarOpen ? "flex-end" : "center", marginBottom: 12 }}>
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              title={sidebarOpen ? "Collapse menu" : "Expand menu"}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", flexDirection: "column", gap: 3, alignItems: "center", justifyContent: "center" }}
-            >
-              <span style={{ display: "block", width: 16, height: 2, background: isDark ? "#666" : "#999", borderRadius: 2 }} />
-              <span style={{ display: "block", width: 16, height: 2, background: isDark ? "#666" : "#999", borderRadius: 2 }} />
-              <span style={{ display: "block", width: 16, height: 2, background: isDark ? "#666" : "#999", borderRadius: 2 }} />
-            </button>
-          </div>
-          {/* Logo + name row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: sidebarOpen ? "flex-start" : "center" }}>
-            <div style={{ width: 28, height: 28, background: "#0071E3", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>⚡</div>
-            {sidebarOpen && (
-              <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.3, whiteSpace: "nowrap" }}>JobStream</div>
-            )}
-          </div>
+        {/* Burger only — logo moved to main top bar */}
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16, paddingTop: 4 }}>
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            title={sidebarOpen ? "Collapse menu" : "Expand menu"}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 6, display: "flex", flexDirection: "column", gap: 4, alignItems: "center", justifyContent: "center", borderRadius: 6 }}
+          >
+            <span style={{ display: "block", width: 18, height: 2, background: isDark ? "#555" : "#aaa", borderRadius: 2 }} />
+            <span style={{ display: "block", width: 18, height: 2, background: isDark ? "#555" : "#aaa", borderRadius: 2 }} />
+            <span style={{ display: "block", width: 18, height: 2, background: isDark ? "#555" : "#aaa", borderRadius: 2 }} />
+          </button>
         </div>
 
 
@@ -4910,6 +5116,15 @@ export default function App() {
       {/* Main */}
       <main style={{ padding: "28px 32px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s", position: "relative" }}>
 
+        {/* Brand bar — logo + name top left, auth top right */}
+        <div style={{ position: "absolute", top: 16, left: 24, display: "flex", alignItems: "center", gap: 10, zIndex: 10 }}>
+          {brandLogo
+            ? <img src={brandLogo} alt={brandName} style={{ height: 28, width: "auto", objectFit: "contain", borderRadius: 6 }} onError={e => { e.target.style.display = "none"; }} />
+            : <div style={{ width: 28, height: 28, background: "var(--btn-primary)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>⚡</div>
+          }
+          <span style={{ fontSize: 15, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.3, whiteSpace: "nowrap" }}>{brandName}</span>
+        </div>
+
         {/* Top right auth bar */}
         <div style={{ position: "absolute", top: 20, right: 28, display: "flex", alignItems: "center", gap: 10, zIndex: 10 }}>
           {/* Theme toggle */}
@@ -4934,7 +5149,7 @@ export default function App() {
           ) : (
             <button
               onClick={() => setShowAuth(true)}
-              style={{ background: "#0071E3", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(0,113,227,0.3)", whiteSpace: "nowrap" }}
+              style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(0,113,227,0.3)", whiteSpace: "nowrap" }}
             >
               Sign in | Register
             </button>
@@ -4962,7 +5177,7 @@ export default function App() {
               <div style={{ fontSize: 36, marginBottom: 16 }}>➕</div>
               <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Post a Job</div>
               <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in or create an account to post jobs</div>
-              <button onClick={() => setShowAuth(true)} style={{ background: "#0071E3", color: "#fff", border: "none", borderRadius: 10, padding: "11px 28px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
+              <button onClick={() => setShowAuth(true)} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "11px 28px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
             </div>
         )}
         {page === "workspace"  && <WorkspaceDashboardPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}

@@ -237,24 +237,44 @@ def _migrate_industry_columns():
 
 
 def _seed_companies():
+    """
+    Seed default companies on first boot.
+    Only inserts if the company URL does not already exist.
+    Edit this list to match your actual target companies.
+    """
     defaults = [
-        ("Stripe",      "https://stripe.com/jobs"),
-        ("Paystack",    "https://paystack.com/careers"),
-        ("Flutterwave", "https://flutterwave.com/careers"),
-        ("Andela",      "https://andela.com/talent"),
+        # Nigerian Telecom
+        ("MTN Nigeria",    "https://ehle.fa.em2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/jobs",            "Telecommunications"),
+        ("Airtel Nigeria", "https://airtel.wd3.myworkdayjobs.com/Airtel_Nigeria",                                          "Telecommunications"),
+        ("Glo Nigeria",    "https://gloworld.com/ng/careers",                                                              "Telecommunications"),
+        # Nigerian Banks
+        ("Guaranty Trust Bank", "https://gtbank.com/careers",                                                              "Banking & Finance"),
+        ("Zenith Bank",    "https://www.zenithbank.com/careers",                                                           "Banking & Finance"),
+        ("Access Bank",    "https://www.accessbankplc.com/careers",                                                        "Banking & Finance"),
+        ("UBA",            "https://www.ubagroup.com/careers",                                                             "Banking & Finance"),
+        # Fintech
+        ("Paystack",       "https://paystack.com/careers",                                                                 "Banking & Finance"),
+        ("Flutterwave",    "https://flutterwave.com/careers",                                                              "Banking & Finance"),
+        # Oil & Gas
+        ("Shell Nigeria",  "https://shell.wd3.myworkdayjobs.com/ShellCareers",                                            "Oil & Gas"),
+        ("TotalEnergies",  "https://careers.totalenergies.com",                                                            "Oil & Gas"),
+        # Tech
+        ("Andela",         "https://andela.com/talent",                                                                    "Information Technology"),
+        ("Interswitch",    "https://interswitchgroup.com/careers",                                                         "Banking & Finance"),
     ]
     with get_conn() as conn:
         cur = conn.cursor()
-        for name, url in defaults:
+        for name, url, industry in defaults:
             if USE_POSTGRES:
                 cur.execute(
-                    "INSERT INTO companies (name, url, active) VALUES (%s, %s, 1) ON CONFLICT (url) DO NOTHING",
-                    (name, url)
+                    "INSERT INTO companies (name, url, industry, active) VALUES (%s, %s, %s, 1) "
+                    "ON CONFLICT (url) DO NOTHING",
+                    (name, url, industry)
                 )
             else:
                 cur.execute(
-                    "INSERT OR IGNORE INTO companies (name, url, active) VALUES (?, ?, 1)",
-                    (name, url)
+                    "INSERT OR IGNORE INTO companies (name, url, industry, active) VALUES (?, ?, ?, 1)",
+                    (name, url, industry)
                 )
 
 
@@ -406,6 +426,7 @@ def get_jobs(
     department: str = "",
     company: str = "",
     industry: str = "",
+    location: str = "",
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[list[dict], int]:
@@ -437,6 +458,12 @@ def get_jobs(
         else:
             conditions.append("industry LIKE ?")
         params.append(f"%{industry}%")
+    if location:
+        if USE_POSTGRES:
+            conditions.append("location ILIKE %s")
+        else:
+            conditions.append("location LIKE ?")
+        params.append(f"%{location}%")
 
     where = " AND ".join(conditions)
 

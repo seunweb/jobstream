@@ -601,7 +601,7 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
                 to_email=alert["email"],
                 keywords=keywords,
                 jobs=matching_jobs,
-                token=alert["unsubscribe_token"],
+                token=alert.get("unsubscribe_token") or str(uuid.uuid4()),
                 alert_id=str(alert["id"]),
                 location=alert.get("location", "") or "",
                 industry=alert.get("industry", "") or "",
@@ -1181,19 +1181,22 @@ async def send_alert_now(
         pass
 
     try:
+        token = alert.get("unsubscribe_token") or str(uuid.uuid4())
         log_id = _send_alert_email(
             app_url=app_url,
             to_email=alert["email"],
             keywords=keywords,
             jobs=matching_jobs,
-            token=alert["unsubscribe_token"],
+            token=token,
             alert_id=alert_id,
             location=alert.get("location", "") or "",
             industry=alert.get("industry", "") or "",
             template=template,
         )
     except Exception as e:
-        raise HTTPException(502, str(e))
+        import traceback
+        log.error(f"send-now failed: {traceback.format_exc()}")
+        raise HTTPException(502, f"Email failed: {e}")
 
     if log_id:
         try:

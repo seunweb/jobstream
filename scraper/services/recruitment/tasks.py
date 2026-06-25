@@ -26,6 +26,16 @@ async def _do_scrape(companies: list[dict]):
             total_new += new
             mark_jobs_inactive(url, [j.fingerprint for j in jobs])
         log.info(f"Scrape complete: {total_found} found, {total_new} new")
+
+        # ── Dispatch job alerts after every scrape that found new jobs ────────
+        if total_new > 0:
+            try:
+                from services.recruitment.seo_router import _dispatch_job_alerts
+                sent = await _dispatch_job_alerts(respect_send_time=False)
+                log.info(f"Post-scrape alerts: sent {sent} email(s) for {total_new} new jobs")
+            except Exception as alert_err:
+                log.warning(f"Post-scrape alert dispatch failed: {alert_err}")
+
     except Exception as e:
         error_msg = str(e)
         log.error(f"Scrape failed: {e}")

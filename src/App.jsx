@@ -25,11 +25,37 @@ async function api(path, opts = {}) {
   const headers = { "Content-Type": "application/json", ...opts.headers };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${API}${path}`, { ...opts, headers });
+
   if (res.status === 401) {
+    // Try to refresh the token before giving up
+    const rt = localStorage.getItem("js_refresh_token");
+    if (rt) {
+      try {
+        const refreshRes = await fetch(`${API}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: rt }),
+        });
+        if (refreshRes.ok) {
+          const data = await refreshRes.json();
+          localStorage.setItem("js_access_token", data.access_token);
+          if (data.refresh_token) localStorage.setItem("js_refresh_token", data.refresh_token);
+          // Retry the original request with the new token
+          headers["Authorization"] = `Bearer ${data.access_token}`;
+          const retry = await fetch(`${API}${path}`, { ...opts, headers });
+          if (retry.ok) {
+            if (retry.status === 204) return null;
+            return retry.json();
+          }
+        }
+      } catch {}
+    }
+    // Refresh failed — clear auth and reload
     clearAuth();
     window.location.reload();
     return;
   }
+
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   if (res.status === 204) return null;
   return res.json();
@@ -453,7 +479,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 500, marginBottom: 12 }}>About this role</div>
             {job.description && job.description.trim() ? (
-              <div style={{ fontSize: 15, color: "#1d1d1f", lineHeight: 1.9 }}>
+              <div style={{ fontSize: 18, color: isDark ? "#e8e8ed" : "#1d1d1f", lineHeight: 1.9 }}>
                 {(() => {
                   const lines = job.description.trim().split("\n");
                   const elements = [];
@@ -465,8 +491,8 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
                         <ul key={`ul-${elements.length}`} style={{ paddingLeft: 0, margin: "6px 0 10px 0", listStyle: "none" }}>
                           {bulletGroup.map((b, bi) => (
                             <li key={bi} style={{ display: "flex", gap: 10, marginBottom: 5, alignItems: "flex-start" }}>
-                              <span style={{ color: "#0071E3", flexShrink: 0, fontSize: 16, lineHeight: 1.4 }}>•</span>
-                              <span style={{ flex: 1 }}>{b}</span>
+                              <span style={{ color: isDark ? "#4DA3FF" : "#0071E3", flexShrink: 0, fontSize: 16, lineHeight: 1.4 }}>•</span>
+                              <span style={{ flex: 1, fontSize: 18, lineHeight: 1.9 }}>{b}</span>
                             </li>
                           ))}
                         </ul>
@@ -484,14 +510,14 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
                       elements.push(
                         <div key={i} style={{
                           fontWeight: 700,
-                          fontSize: isMain ? 14 : 13,
-                          marginTop: isMain ? 24 : 14,
+                          fontSize: isMain ? 17 : 19,
+                          marginTop: isMain ? 24 : 16,
                           marginBottom: 8,
-                          borderBottom: isMain ? "1px solid #2a2a32" : "none",
+                          borderBottom: isMain ? (isDark ? "1px solid #333338" : "1px solid #e0e0e8") : "none",
                           paddingBottom: isMain ? 6 : 0,
                           textTransform: isMain ? "uppercase" : "none",
                           letterSpacing: isMain ? "0.5px" : "normal",
-                          color: isMain ? (isDark ? "#f0f0f2" : "#1d1d1f") : (isDark ? "#4DA3FF" : "#0071E3"),
+                          color: isMain ? (isDark ? "#ffffff" : "#1d1d1f") : (isDark ? "#4DA3FF" : "#000000"),
                         }}>
                           {headingText}
                         </div>
@@ -504,7 +530,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
                     } else {
                       flushBullets();
                       elements.push(
-                        <p key={i} style={{ margin: "0 0 8px 0", color: isDark ? "#b0b0c0" : "#1d1d1f" }}>{line}</p>
+                        <p key={i} style={{ margin: "0 0 10px 0", fontSize: 18, lineHeight: 1.9, color: isDark ? "#c0c0cc" : "#1d1d1f" }}>{line}</p>
                       );
                     }
                   });
@@ -520,64 +546,62 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
             )}
           </div>
 
-          {/* Action buttons */}
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 16, borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed" }}>
-            {/* Share buttons */}
-            <div style={{ display: "flex", gap: 6 }}>
-              <a
-                href={`https://wa.me/?text=${encodeURIComponent(`${job.title} at ${job.company} — Apply on JobStream: ${window.location.origin}`)}`}
-                target="_blank" rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                style={{ display: "flex", alignItems: "center", gap: 4, background: "#25D366", border: "none", borderRadius: 8, padding: "9px 14px", fontSize: 12, color: "#fff", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", fontWeight: 500 }}
-              >
-                📱 Share
-              </a>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigator.clipboard.writeText(`${job.title} at ${job.company} — ${window.location.origin}`);
-                  toast && toast("Link copied!");
-                }}
-                style={{ background: isDark ? "#1e1e24" : "#f0f0f4", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 14px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
-              >
-                🔗 Copy link
-              </button>
-            </div>
-
+          {/* Action buttons — wraps on mobile */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", paddingTop: 16, borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed" }}>
+            {/* Share */}
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(`${job.title} at ${job.company} — Apply on JobStream: ${window.location.origin}`)}`}
+              target="_blank" rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{ display: "flex", alignItems: "center", gap: 4, background: "#25D366", border: "none", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#fff", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", fontWeight: 500, whiteSpace: "nowrap" }}
+            >
+              📱 <span className="hide-on-xs">Share</span>
+            </a>
+            {/* Copy link */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(`${job.title} at ${job.company} — ${window.location.origin}`);
+                toast && toast("Link copied!");
+              }}
+              style={{ background: isDark ? "#1e1e24" : "#f0f0f4", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+            >
+              🔗 <span className="hide-on-xs">Copy link</span>
+            </button>
+            {/* Save */}
             <button
               onClick={(e) => { e.stopPropagation(); onToggleSave && onToggleSave(job); }}
               title={isSaved ? "Remove from saved" : "Save job"}
-              style={{ background: isSaved ? "rgba(0,113,227,0.1)" : "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 14px", fontSize: 13, color: isSaved ? "#0071E3" : (isDark ? "#888" : "#555"), cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+              style={{ background: isSaved ? "rgba(0,113,227,0.1)" : "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: isSaved ? "#0071E3" : (isDark ? "#888" : "#555"), cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
             >
-              {isSaved ? "🔖 Saved" : "🔖 Save"}
+              {isSaved ? "🔖" : "🔖"} <span className="hide-on-xs">{isSaved ? "Saved" : "Save"}</span>
             </button>
-            <button onClick={() => onView(job)} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-              Close
+            {/* Close */}
+            <button
+              onClick={() => onView(job)}
+              style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+            >
+              ✕ <span className="hide-on-xs">Close</span>
             </button>
+            {/* Apply on company website */}
             {job.apply_url && (
-              <a href={job.apply_url} target="_blank" rel="noreferrer" style={{ background: isDark ? "#1e1e2e" : "#e8e8ed", border: isDark ? "1px solid rgba(0,113,227,0.35)" : "1px solid #c7c7cc", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: isDark ? "#4DA3FF" : "#1d1d1f", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "none", fontWeight: 500 }}>
-                Apply on company website →
+              <a href={job.apply_url} target="_blank" rel="noreferrer"
+                style={{ background: isDark ? "#1e1e2e" : "#e8e8ed", border: isDark ? "1px solid rgba(0,113,227,0.35)" : "1px solid #c7c7cc", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: isDark ? "#4DA3FF" : "#1d1d1f", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "none", fontWeight: 500, whiteSpace: "nowrap" }}>
+                🌐 <span className="hide-on-xs">Apply on company website →</span><span className="show-on-xs" style={{ display: "none" }}>Apply →</span>
               </a>
             )}
-            <button
-              onClick={() => {
-                if (!hasDirectApply(job)) return;
-                if (!user) { onAuthRequired(); return; }
-                onApply(job);
-              }}
-              disabled={!hasDirectApply(job)}
-              title={!hasDirectApply(job) ? "Apply on company website →" : !user ? "Sign in to apply" : "Apply now"}
-              style={{
-                background: !hasDirectApply(job) ? (isDark ? "#2a2a32" : "#e0e0e0") : "#0071E3",
-                border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 500,
-                color: "#fff",
-                cursor: "pointer",
-                fontFamily: "'DM Sans', sans-serif",
-                display: hasDirectApply(job) ? "inline-block" : "none",
-              }}
-            >
-              {!user ? "Sign in to apply" : "Apply now →"}
-            </button>
+            {/* Apply now (direct) */}
+            {hasDirectApply(job) && (
+              <button
+                onClick={() => {
+                  if (!user) { onAuthRequired(); return; }
+                  onApply(job);
+                }}
+                style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+              >
+                {!user ? "Sign in to apply" : "Apply now →"}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -2225,8 +2249,14 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
       {/* Alerts monitoring */}
       {tab === "alerts" && !loading && (
         <div>
-          <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa", marginBottom: 12 }}>
-            {alerts.length} alerts — monitor delivery and open rates
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa" }}>
+              {alerts.length} alerts — open count updates when recipient clicks a job link
+            </div>
+            <button onClick={() => loadTab("alerts")}
+              style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "5px 12px", fontSize: 11, color: isDark ? "#666" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              ↺ Refresh
+            </button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {alerts.map(a => (
@@ -5062,6 +5092,17 @@ export default function App() {
         .js-btn-primary {
           background: ${isDark ? "var(--btn-dark, #0071E3)" : "var(--btn-light, #000000)"} !important;
         }
+        /* Mobile responsive fixes */
+        @media (max-width: 480px) {
+          .hide-on-xs { display: none !important; }
+          .show-on-xs { display: inline !important; }
+        }
+        @media (min-width: 481px) {
+          .show-on-xs { display: none !important; }
+        }
+        @media (max-width: 640px) {
+          main { padding: 12px 12px 24px !important; }
+        }
       `}</style>
 
       {/* Sidebar */}
@@ -5114,49 +5155,54 @@ export default function App() {
       </aside>
 
       {/* Main */}
-      <main style={{ padding: "28px 32px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s", position: "relative" }}>
+      <main style={{ padding: "16px 16px 28px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s", position: "relative" }}>
 
-        {/* Brand bar — logo + name top left, auth top right */}
-        <div style={{ position: "absolute", top: 16, left: 24, display: "flex", alignItems: "center", gap: 10, zIndex: 10 }}>
-          {brandLogo
-            ? <img src={brandLogo} alt={brandName} style={{ height: 28, width: "auto", objectFit: "contain", borderRadius: 6 }} onError={e => { e.target.style.display = "none"; }} />
-            : <div style={{ width: 28, height: 28, background: "var(--btn-primary)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>⚡</div>
-          }
-          <span style={{ fontSize: 15, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.3, whiteSpace: "nowrap" }}>{brandName}</span>
-        </div>
+        {/* Header row — brand left, auth controls right. Wraps on mobile instead of overlapping. */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          flexWrap: "wrap", gap: "10px 12px", marginBottom: 20,
+        }}>
+          {/* Brand */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 0 }}>
+            {brandLogo
+              ? <img src={brandLogo} alt={brandName} style={{ height: 26, width: "auto", objectFit: "contain", borderRadius: 6, flexShrink: 0 }} onError={e => { e.target.style.display = "none"; }} />
+              : <div style={{ width: 26, height: 26, background: "var(--btn-primary)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0 }}>⚡</div>
+            }
+            <span style={{ fontSize: 15, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.3, whiteSpace: "nowrap" }}>{brandName}</span>
+          </div>
 
-        {/* Top right auth bar */}
-        <div style={{ position: "absolute", top: 20, right: 28, display: "flex", alignItems: "center", gap: 10, zIndex: 10 }}>
-          {/* Theme toggle */}
-          <button
-            onClick={() => setShowJobAlerts(true)}
-            title="Get job alerts by email"
-            style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 20, padding: "5px 14px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
-          >
-            🔔 Alerts
-          </button>
-
-          <button
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 20, padding: "5px 14px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
-          >
-            {isDark ? "☀ Light" : "● Dark"}
-          </button>
-
-          {user ? (
-            <UserMenu user={user} onLogout={handleLogout} isDark={isDark} setPage={setPage} />
-          ) : (
+          {/* Auth controls — wraps below brand on narrow screens */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button
-              onClick={() => setShowAuth(true)}
-              style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(0,113,227,0.3)", whiteSpace: "nowrap" }}
+              onClick={() => setShowJobAlerts(true)}
+              title="Get job alerts by email"
+              style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 20, padding: "5px 12px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
             >
-              Sign in | Register
+              🔔 <span className="hide-on-xs">Alerts</span>
             </button>
-          )}
+
+            <button
+              onClick={() => setTheme(isDark ? "light" : "dark")}
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 20, padding: "5px 12px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+            >
+              {isDark ? "☀" : "●"} <span className="hide-on-xs">{isDark ? "Light" : "Dark"}</span>
+            </button>
+
+            {user ? (
+              <UserMenu user={user} onLogout={handleLogout} isDark={isDark} setPage={setPage} />
+            ) : (
+              <button
+                onClick={() => setShowAuth(true)}
+                style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 8px rgba(0,113,227,0.3)", whiteSpace: "nowrap" }}
+              >
+                Sign in | Register
+              </button>
+            )}
+          </div>
         </div>
 
-        {isAdmin && <div style={{ marginTop: 36 }}><StatsBar isDark={isDark} /></div>}
+        {isAdmin && <div style={{ marginBottom: 20 }}><StatsBar isDark={isDark} /></div>}
         {page === "jobs" && <JobsPage onApply={setApplyJob} toast={showToast} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} />}
         {page === "myapps" && <MyApplicationsPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} />}
         {page === "saved" && <SavedJobsPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} onApply={setApplyJob} toast={showToast} />}

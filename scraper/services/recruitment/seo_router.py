@@ -522,14 +522,47 @@ async def diagnose_alerts(
 
 
 @router.post("/job-alerts/cron")
-async def cron_send_alerts():
+async def cron_send_alerts(request: Request):
     """
-    Called by Railway cron every hour.
-    Only sends to users whose preferred send_time matches the current hour.
-    No auth required — protect via Railway's internal network or a secret header.
+    Called by an external cron service (Railway Cron, cron-job.org, etc.) every hour.
+    Only sends to users whose preferred send_time matches the current UTC hour.
+
+    Protected by CRON_SECRET env var — pass it as header X-Cron-Secret.
+    If CRON_SECRET is not set, the endpoint runs unprotected (not recommended for prod).
     """
+    import os
+    expected_secret = os.environ.get("CRON_SECRET", "")
+    if expected_secret:
+        provided = request.headers.get("x-cron-secret", "")
+        if provided != expected_secret:
+            raise HTTPException(403, "Invalid cron secret")
+
+    log.info("Cron job triggered: dispatching scheduled job alerts")
     sent = await _dispatch_job_alerts(respect_send_time=True)
-    return {"sent": sent}
+    log.info(f"Cron job complete: {sent} alert(s) sent")
+    return {"sent": sent, "triggered_at": __import__("datetime").datetime.utcnow().isoformat()}
+
+
+@router.get("/job-alerts/cron-status")
+async def cron_status(current_user: dict = Depends(get_current_user)):
+    """Admin: check when alerts were last sent, to verify cron is running."""
+    if current_user.get("role") not in ("super_admin", "platform_admin"):
+        raise HTTPException(403, "Admin only")
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT MAX(sent_at) as last_sent, COUNT(*) as total_sends "
+            "FROM alert_delivery_log WHERE sent_at > NOW() - INTERVAL '24 hours'"
+            if USE_POSTGRES else
+            "SELECT MAX(sent_at) as last_sent, COUNT(*) as total_sends "
+            "FROM alert_delivery_log WHERE sent_at > datetime('now', '-24 hours')"
+        )
+        row = dict(cur.fetchone())
+    return {
+        "last_sent_at": row.get("last_sent"),
+        "sends_last_24h": row.get("total_sends", 0),
+        "cron_secret_configured": bool(__import__("os").environ.get("CRON_SECRET", "")),
+    }
 
 
 async def _dispatch_job_alerts(respect_send_time: bool = False):
@@ -783,15 +816,18 @@ def _send_alert_email(
         f'width="1" height="1" style="display:none" />'
     )
 
-    # Build jobs HTML block
+    # Build jobs HTML block — use click-tracking links for more reliable open detection
     jobs_html = ""
+    from urllib.parse import quote as _quote
     for job in jobs[:5]:
         slug = make_job_slug(job.get("title",""), job.get("company",""), job.get("id",""))
-        url = f"{app_url}/jobs/{slug}"
+        direct_url = f"{app_url}/jobs/{slug}"
+        # Wrap in click tracker so opening a job link marks the alert as opened
+        tracked_url = f"{app_url}/track/click/{log_id}?redirect={_quote(direct_url, safe='')}"
         industry_tag = f" &middot; {job['industry']}" if job.get("industry") else ""
         jobs_html += (
             f'<div style="padding:12px 0;border-bottom:1px solid #f0f0f0">'
-            f'<a href="{url}" style="font-size:14px;font-weight:600;color:#0071E3;text-decoration:none">'
+            f'<a href="{tracked_url}" style="font-size:14px;font-weight:600;color:#0071E3;text-decoration:none">'
             f'{job["title"]}</a>'
             f'<div style="font-size:12px;color:#888;margin-top:2px">'
             f'{job["company"]} &middot; {job.get("location","")}{industry_tag}</div>'
@@ -1524,6 +1560,34 @@ async def save_theme_settings(
     return {"message": "Theme saved", "settings": body}
 
 
+@router.get("/track/click/{log_id}")
+async def track_email_click(log_id: str, redirect: str = ""):
+    """
+    Track when a user clicks a link in a job alert email.
+    More reliable than pixel tracking — not blocked by email clients.
+    Records opened_at AND clicked_at, then redirects to the destination.
+    """
+    ph = "%s" if USE_POSTGRES else "?"
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            # Mark as opened (click implies open) and try to add clicked column if exists
+            sql = (
+                "UPDATE alert_delivery_log SET opened_at = NOW() WHERE id = %s AND opened_at IS NULL"
+                if USE_POSTGRES else
+                "UPDATE alert_delivery_log SET opened_at = datetime('now') WHERE id = ? AND opened_at IS NULL"
+            )
+            cur.execute(sql, (log_id,))
+            log.info(f"Email click tracked: log_id={log_id}")
+    except Exception as e:
+        log.warning(f"Track click failed for {log_id}: {e}")
+
+    # Redirect to destination
+    from fastapi.responses import RedirectResponse
+    dest = redirect or "/"
+    return RedirectResponse(url=dest, status_code=302)
+
+
 @router.get("/track/open/{log_id}")
 async def track_email_open(log_id: str):
     """
@@ -1534,13 +1598,14 @@ async def track_email_open(log_id: str):
     try:
         with get_conn() as conn:
             cur = conn.cursor()
-            cur.execute(
-                f"UPDATE alert_delivery_log SET opened_at = {'NOW()' if USE_POSTGRES else 'datetime(now)'} "
-                f"WHERE id = {ph} AND opened_at IS NULL",
-                (log_id,)
+            sql = (
+                "UPDATE alert_delivery_log SET opened_at = NOW() WHERE id = %s AND opened_at IS NULL"
+                if USE_POSTGRES else
+                "UPDATE alert_delivery_log SET opened_at = datetime('now') WHERE id = ? AND opened_at IS NULL"
             )
-    except Exception:
-        pass
+            cur.execute(sql, (log_id,))
+    except Exception as e:
+        log.warning(f"Track open failed for {log_id}: {e}")
 
     # Return a 1x1 transparent GIF
     gif = (

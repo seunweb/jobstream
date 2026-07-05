@@ -283,6 +283,7 @@ class JobAlertIn(BaseModel):
     job_type: Optional[str] = ""
     frequency: Optional[str] = "daily"   # daily | weekly
     send_time: Optional[str] = "08:00"   # preferred delivery time
+    timezone: Optional[str] = "Africa/Lagos"  # IANA timezone e.g. "Europe/London"
     captcha_answer: Optional[int] = None
     captcha_expected: Optional[int] = None
 
@@ -294,6 +295,7 @@ class JobAlertUpdateIn(BaseModel):
     job_type: Optional[str] = None
     frequency: Optional[str] = None
     send_time: Optional[str] = None
+    timezone: Optional[str] = None
     is_active: Optional[bool] = None
 
 
@@ -355,7 +357,7 @@ async def create_job_alert(body: JobAlertIn, request: Request):
                     user_id = EXCLUDED.user_id, updated_at = NOW()
             """, (alert_id, user_id, email, body.keywords, body.location,
                   body.industry, body.job_type, body.frequency, body.send_time,
-                  body.timezone or "Africa/Lagos", token))
+                  getattr(body, "timezone", None) or "Africa/Lagos", token))
         else:
             cur.execute("""
                 INSERT OR REPLACE INTO job_alerts
@@ -364,7 +366,7 @@ async def create_job_alert(body: JobAlertIn, request: Request):
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,1,datetime('now'))
             """, (alert_id, user_id, email, body.keywords, body.location,
                   body.industry, body.job_type, body.frequency, body.send_time,
-                  body.timezone or "Africa/Lagos", token))
+                  getattr(body, "timezone", None) or "Africa/Lagos", token))
 
     log.info(f"Job alert created for {email}: {body.keywords} in {body.location}")
     return {

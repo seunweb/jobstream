@@ -112,6 +112,25 @@ def _send_via_resend(
             "Set FROM_EMAIL to a verified domain address on resend.com"
         )
 
+    # Try the official Resend SDK first (avoids Cloudflare 1010 errors)
+    try:
+        import resend as resend_sdk
+        resend_sdk.api_key = api_key
+        params = {
+            "from": f"{from_name} <{from_email}>",
+            "to": [to_email],
+            "subject": subject,
+            "html": html,
+        }
+        result = resend_sdk.Emails.send(params)
+        log.info(f"Resend SDK → {to_email}: id={result.get('id')}")
+        return True
+    except ImportError:
+        log.debug("Resend SDK not installed, falling back to HTTP")
+    except Exception as sdk_err:
+        log.warning(f"Resend SDK failed: {sdk_err}, trying HTTP fallback")
+
+    # Fallback: direct HTTP with full browser-like headers
     payload = json.dumps({
         "from": f"{from_name} <{from_email}>",
         "to": [to_email],
@@ -125,13 +144,16 @@ def _send_via_resend(
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; JobStream/1.0)",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
         },
         method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             body = resp.read().decode()
-            log.info(f"Resend → {to_email}: {body}")
+            log.info(f"Resend HTTP → {to_email}: {body}")
         return True
     except urllib.error.HTTPError as e:
         err = e.read().decode()

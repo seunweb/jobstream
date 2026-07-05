@@ -610,8 +610,13 @@ async def cron_send_alerts(request: Request):
     except Exception as e:
         log.warning(f"Could not record cron run: {e}")
 
-    sent = await _dispatch_job_alerts(respect_send_time=True)
-    log.info(f"Cron job complete: {sent} alert(s) sent at {triggered_at}")
+    try:
+        sent = await _dispatch_job_alerts(respect_send_time=True)
+        log.info(f"Cron job complete: {sent} alert(s) sent at {triggered_at}")
+    except Exception as cron_err:
+        import traceback
+        log.error(f"Cron dispatch error: {traceback.format_exc()}")
+        return {"sent": 0, "triggered_at": triggered_at, "error": str(cron_err)}
     return {"sent": sent, "triggered_at": triggered_at}
 
 
@@ -783,13 +788,24 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
 
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute(
-            "SELECT id, email, keywords, location, industry, frequency, send_time, "
-            "timezone, unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = TRUE"
-            if USE_POSTGRES else
-            "SELECT id, email, keywords, location, industry, frequency, send_time, "
-            "timezone, unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = 1"
-        )
+        # Select with timezone column — fall back if column doesn't exist yet
+        try:
+            cur.execute(
+                "SELECT id, email, keywords, location, industry, frequency, send_time, "
+                "timezone, unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = TRUE"
+                if USE_POSTGRES else
+                "SELECT id, email, keywords, location, industry, frequency, send_time, "
+                "timezone, unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = 1"
+            )
+        except Exception:
+            # timezone column doesn't exist yet — select without it
+            cur.execute(
+                "SELECT id, email, keywords, location, industry, frequency, send_time, "
+                "unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = TRUE"
+                if USE_POSTGRES else
+                "SELECT id, email, keywords, location, industry, frequency, send_time, "
+                "unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = 1"
+            )
         alerts = [dict(r) for r in cur.fetchall()]
 
     for alert in alerts:
@@ -802,10 +818,15 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
             alert_time = (alert.get("send_time") or "08:00").strip()[:5]
             alert_tz   = (alert.get("timezone")  or "Africa/Lagos").strip()
             try:
-                import zoneinfo as _zi
-                local_now = _dt.now(_zi.ZoneInfo(alert_tz)).strftime("%H:00")
+                try:
+                    import zoneinfo as _zi
+                    local_now = _dt.now(_zi.ZoneInfo(alert_tz)).strftime("%H:00")
+                except ImportError:
+                    # Python < 3.9 fallback
+                    import pytz as _pytz
+                    local_now = _dt.now(_pytz.timezone(alert_tz)).strftime("%H:00")
             except Exception:
-                local_now = now_hour  # fallback
+                local_now = now_hour  # fallback to UTC
             log.info(
                 f"Alert {alert.get('email','')[:6]}*** | "
                 f"send_time={alert_time} | tz={alert_tz} | "

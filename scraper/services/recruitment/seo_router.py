@@ -797,6 +797,7 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
                 "SELECT id, email, keywords, location, industry, frequency, send_time, "
                 "timezone, unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = 1"
             )
+            alerts = [dict(r) for r in cur.fetchall()]
         except Exception:
             # timezone column doesn't exist yet — select without it
             cur.execute(
@@ -806,6 +807,7 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
                 "SELECT id, email, keywords, location, industry, frequency, send_time, "
                 "unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = 1"
             )
+            alerts = [dict(r) for r in cur.fetchall()]
         alerts = [dict(r) for r in cur.fetchall()]
 
     for alert in alerts:

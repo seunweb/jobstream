@@ -574,8 +574,8 @@ async def create_manual_job(
                     (title, company, location, job_type, department,
                      description, salary, apply_url, source_url,
                      source, is_active, fingerprint, organization_id,
-                     tenant_id, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',1,%s,%s,%s,NOW())
+                     tenant_id, scraped_at, created_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',TRUE,%s,%s,%s,NOW(),NOW())
                 RETURNING id
             """, (
                 body.title, body.company, body.location, body.job_type,
@@ -590,8 +590,8 @@ async def create_manual_job(
                     (title, company, location, job_type, department,
                      description, salary, apply_url, source_url,
                      source, is_active, fingerprint, organization_id,
-                     tenant_id, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,'manual',1,?,?,?,datetime('now'))
+                     tenant_id, scraped_at, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,'manual',1,?,?,?,datetime('now'),datetime('now'))
             """, (
                 body.title, body.company, body.location, body.job_type,
                 body.department, body.description, body.salary,

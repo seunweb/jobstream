@@ -545,7 +545,7 @@ async def create_manual_job(
                 with get_conn() as conn:
                     cur = conn.cursor()
                     cur.execute(
-                        "SELECT COUNT(*) FROM jobs WHERE tenant_id = %s AND is_active = 1 AND source = 'manual'" if USE_POSTGRES
+                        "SELECT COUNT(*) FROM jobs WHERE tenant_id = %s AND is_active = TRUE AND source = 'manual'" if USE_POSTGRES
                         else "SELECT COUNT(*) FROM jobs WHERE tenant_id = ? AND is_active = 1 AND source = 'manual'",
                         (tenant_id,)
                     )

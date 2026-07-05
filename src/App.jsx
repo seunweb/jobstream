@@ -1043,7 +1043,7 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
 
 // ── Post Job Modal ────────────────────────────────────────────────────────────
 function RichTextarea({ value, onChange, isDark, inp }) {
-  const taRef = React.useRef(null);
+  const taRef = useRef(null);
 
   function wrap(before, after, placeholder) {
     const ta = taRef.current;
@@ -1151,15 +1151,25 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.title || !form.company) { setError("Title and company are required"); return; }
-    if (!form.apply_url && !form.apply_email) { setError("Provide an apply URL or email"); return; }
+    // Validate — company name is set from org selection
+    const companyName = form.company || (organizations.find(o => o.id === form.organization_id)?.name || "");
+    if (!form.title) { setError("Job title is required"); return; }
+    if (!companyName && !form.organization_id) { setError("Please select a company"); return; }
+    if (!form.apply_url && !form.apply_email) { setError("Provide an apply URL or apply email"); return; }
+
+    const payload = {
+      ...form,
+      company: companyName || form.company,
+      source: "manual",
+    };
+
     setLoading(true); setError("");
     try {
-      await api("/jobs", { method: "POST", body: JSON.stringify(form) });
+      await api("/jobs", { method: "POST", body: JSON.stringify(payload) });
       onSuccess("Job posted successfully!");
       onClose();
-    } catch (e) {
-      setError("Failed to post job");
+    } catch (err) {
+      setError(err.message || "Failed to post job — check all required fields");
     } finally {
       setLoading(false);
     }
@@ -5417,9 +5427,9 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 0 }}>
             {brandLogo
               ? <img src={brandLogo} alt={brandName} style={{ height: 26, width: "auto", objectFit: "contain", borderRadius: 6, flexShrink: 0 }} onError={e => { e.target.style.display = "none"; }} />
-              : <div style={{ width: 26, height: 26, background: "var(--btn-primary)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0 }}>⚡</div>
+              : <div onClick={() => setPage("jobs")} style={{ width: 26, height: 26, background: "var(--btn-primary)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, cursor: "pointer" }}>⚡</div>
             }
-            <span style={{ fontSize: 15, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.3, whiteSpace: "nowrap" }}>{brandName}</span>
+            <span onClick={() => setPage("jobs")} style={{ fontSize: 15, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.3, whiteSpace: "nowrap", cursor: "pointer" }}>{brandName}</span>
           </div>
 
           {/* Auth controls — wraps below brand on narrow screens */}

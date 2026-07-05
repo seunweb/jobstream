@@ -1042,6 +1042,89 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
 }
 
 // ── Post Job Modal ────────────────────────────────────────────────────────────
+function RichTextarea({ value, onChange, isDark, inp }) {
+  const taRef = React.useRef(null);
+
+  function wrap(before, after, placeholder) {
+    const ta = taRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = value.slice(start, end) || placeholder;
+    const newVal = value.slice(0, start) + before + selected + after + value.slice(end);
+    onChange(newVal);
+    setTimeout(() => {
+      ta.focus();
+      ta.setSelectionRange(start + before.length, start + before.length + selected.length);
+    }, 0);
+  }
+
+  function insertLine(prefix) {
+    const ta = taRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const newVal = value.slice(0, lineStart) + prefix + value.slice(lineStart);
+    onChange(newVal);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + prefix.length, start + prefix.length); }, 0);
+  }
+
+  const btnStyle = {
+    background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8",
+    borderRadius: 6, padding: "3px 8px", fontSize: 12, cursor: "pointer",
+    color: isDark ? "#aaa" : "#444", fontFamily: "'DM Sans', sans-serif",
+    lineHeight: 1.4,
+  };
+
+  const tools = [
+    { label: "B",      title: "Bold",           style: { fontWeight: 700 }, action: () => wrap("**", "**", "bold text") },
+    { label: "I",      title: "Italic",         style: { fontStyle: "italic" }, action: () => wrap("_", "_", "italic text") },
+    { label: "H1",     title: "Heading 1",      style: { fontWeight: 700 }, action: () => insertLine("# ") },
+    { label: "H2",     title: "Heading 2",      style: { fontWeight: 700 }, action: () => insertLine("## ") },
+    { label: "•",      title: "Bullet list",    style: {}, action: () => insertLine("• ") },
+    { label: "1.",     title: "Numbered list",  style: {}, action: () => insertLine("1. ") },
+    { label: "———",    title: "Divider",        style: { letterSpacing: -1 }, action: () => {
+      const ta = taRef.current;
+      if (!ta) return;
+      const pos = ta.selectionStart;
+      const insert = "\n---\n";
+      onChange(value.slice(0, pos) + insert + value.slice(pos));
+      setTimeout(() => { ta.focus(); ta.setSelectionRange(pos + insert.length, pos + insert.length); }, 0);
+    }},
+  ];
+
+  return (
+    <div style={{ border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, overflow: "hidden" }}>
+      {/* Toolbar */}
+      <div style={{ display: "flex", gap: 4, padding: "6px 8px", background: isDark ? "#1a1a1e" : "#f5f5f7", borderBottom: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", flexWrap: "wrap" }}>
+        {tools.map(t => (
+          <button key={t.label} type="button" title={t.title} onClick={t.action}
+            style={{ ...btnStyle, ...t.style }}>
+            {t.label}
+          </button>
+        ))}
+        <div style={{ width: 1, background: isDark ? "#2a2a32" : "#d0d0d8", margin: "0 4px" }} />
+        <button type="button" title="Clear formatting" onClick={() => {
+          const ta = taRef.current;
+          if (!ta) return;
+          const s = ta.selectionStart, e = ta.selectionEnd;
+          const sel = value.slice(s, e).replace(/[*_#•]/g, "").trim();
+          onChange(value.slice(0, s) + sel + value.slice(e));
+        }} style={btnStyle}>Tx</button>
+      </div>
+      {/* Textarea */}
+      <textarea
+        ref={taRef}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="Describe the role, responsibilities, and requirements…"
+        style={{ ...inp, border: "none", borderRadius: 0, height: 200, resize: "vertical", outline: "none", width: "100%", boxSizing: "border-box" }}
+      />
+    </div>
+  );
+}
+
+
 function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsProp = [] }) {
   const [form, setForm] = useState({
     title: "", company: "", organization_id: "",
@@ -1103,17 +1186,19 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
             </div>
             <div>
               <Label>Company *</Label>
-              <select value={form.organization_id} onChange={e => {
+              {organizations.length === 0 ? (
+                <div style={{ padding: "10px 14px", fontSize: 13, color: "#f87171", background: "rgba(248,113,113,0.08)", borderRadius: 8, border: "1px solid rgba(248,113,113,0.3)" }}>
+                  No registered companies found. Go to Streamer → click 🏢 on your company to register it first.
+                </div>
+              ) : (
+                <select value={form.organization_id} onChange={e => {
                   const org = organizations.find(o => o.id === e.target.value);
-                  setForm(f => ({ ...f, organization_id: e.target.value, company: org?.name || f.company }));
-                }} style={{ ...sel, marginBottom: 6 }}>
-                  <option value="">— Select from registered companies —</option>
+                  setForm(f => ({ ...f, organization_id: e.target.value, company: org?.name || "" }));
+                }} required style={sel}>
+                  <option value="">— Select company —</option>
                   {organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
-              <input value={form.company} onChange={set("company")}
-                placeholder={form.organization_id ? "" : "Or type company name manually"}
-                style={{ ...inp, opacity: form.organization_id ? 0.5 : 1 }}
-              />
+              )}
             </div>
           </div>
 
@@ -1143,7 +1228,12 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
 
           <div style={{ marginBottom: 16 }}>
             <Label>Job description</Label>
-            <textarea value={form.description} onChange={set("description")} placeholder="Describe the role, responsibilities, and requirements…" style={{ ...inp, height: 120, resize: "vertical" }} />
+            <RichTextarea
+              value={form.description}
+              onChange={val => setForm(f => ({ ...f, description: val }))}
+              isDark={isDark}
+              inp={inp}
+            />
           </div>
 
           <div style={{ background: isDark ? "#1a1a1e" : "#f8f8fb", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>

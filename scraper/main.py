@@ -720,6 +720,30 @@ async def onboard_tenant(
             currency=body.currency,
         )
         link_user_to_tenant(str(current_user["id"]), tenant["id"], "org_owner")
+
+        # Auto-create matching organization so it appears in the job posting dropdown
+        try:
+            with get_conn() as conn:
+                cur = conn.cursor()
+                import uuid as _uuid
+                org_id = str(_uuid.uuid4())
+                org_slug = slug
+                if USE_POSTGRES:
+                    cur.execute("""
+                        INSERT INTO organizations
+                            (id, tenant_id, name, slug, country, is_active, created_at)
+                        VALUES (%s, %s, %s, %s, %s, TRUE, NOW())
+                        ON CONFLICT (slug) DO NOTHING
+                    """, (org_id, tenant["id"], body.name, org_slug, body.country or "NG"))
+                else:
+                    cur.execute("""
+                        INSERT OR IGNORE INTO organizations
+                            (id, tenant_id, name, slug, country, is_active, created_at)
+                        VALUES (?, ?, ?, ?, ?, 1, datetime('now'))
+                    """, (org_id, tenant["id"], body.name, org_slug, body.country or "NG"))
+        except Exception as org_err:
+            log.warning(f"Could not auto-create organization for tenant: {org_err}")
+
         log_action(
             "tenant.created",
             user_id=str(current_user["id"]),

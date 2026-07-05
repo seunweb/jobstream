@@ -763,7 +763,7 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
     # Each alert uses its own timezone — now_hour is UTC reference only
     now_utc = _dt.now(_tz.utc)
     now_hour = now_utc.strftime("%H:00")  # UTC fallback for alerts without timezone
-    log.info(f"Cron dispatch: UTC={now_hour}, checking {len(alerts)} active alerts")
+    log.info(f"Cron dispatch: UTC={now_hour}")
 
     resend_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("FROM_EMAIL", "onboarding@resend.dev")

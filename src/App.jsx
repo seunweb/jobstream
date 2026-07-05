@@ -4062,6 +4062,10 @@ function MyAlertsPage({ isDark = true, user, onAuthRequired, toast }) {
   }
 
   async function removeAlert(alert) {
+    const confirmed = window.confirm(
+      `Delete alert for "${alert.keywords}"?\n\nYou will no longer receive job notifications for this search.`
+    );
+    if (!confirmed) return;
     try {
       await api(`/job-alerts/mine/${alert.id}`, { method: "DELETE" });
       setAlerts(prev => prev.filter(a => a.id !== alert.id));
@@ -5270,6 +5274,7 @@ export default function App() {
       {showAuth && <InlineAuthModal onClose={() => setShowAuth(false)} onSuccess={(u) => { setUser(u); showToast(`Welcome, ${u.full_name}!`); }} />}
       {urlJobSlug && <JobSlugHandler slug={urlJobSlug} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} onClose={() => { setUrlJobSlug(""); window.history.replaceState({}, "", "/"); }} />}
       {urlOrgSlug && <OrgSlugHandler slug={urlOrgSlug} isDark={isDark} onBack={() => { setUrlOrgSlug(""); window.history.replaceState({}, "", "/companies"); setPage("companies"); }} onApply={setApplyJob} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}
+
       {showJobAlerts && <JobAlertsModal isDark={isDark} user={user} onClose={() => setShowJobAlerts(false)} toast={showToast} />}
       {resetToken && <ResetPasswordModal token={resetToken} onClose={() => { setResetToken(""); window.history.replaceState({}, "", "/"); }} onSuccess={() => { setResetToken(""); window.history.replaceState({}, "", "/"); showToast("Password reset! Please sign in."); setShowAuth(true); }} />}
       {/* Footer */}

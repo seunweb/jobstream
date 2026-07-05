@@ -1014,14 +1014,13 @@ def _send_alert_email(
     )
 
     # Build jobs HTML block — use job ID directly (most reliable, no slug parsing)
+    import os as _os, base64 as _b64
+    _frontend_url = _os.environ.get("FRONTEND_URL", app_url).rstrip("/")
     jobs_html = ""
-    import base64 as _b64
     for job in jobs[:5]:
         job_id = str(job.get("id", ""))
-        # Destination: frontend URL with job ID param
-        direct_url = f"{frontend_url}/?jobid={job_id}"
+        direct_url = f"{_frontend_url}/?jobid={job_id}"
         encoded_dest = _b64.urlsafe_b64encode(direct_url.encode()).decode()
-        # Track click goes to BACKEND (app_url), then redirects to frontend
         tracked_url = f"{app_url}/track/click/{log_id}?dest={encoded_dest}"
         industry_tag = f" &middot; {job['industry']}" if job.get("industry") else ""
         jobs_html += (

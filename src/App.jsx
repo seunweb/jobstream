@@ -2769,7 +2769,20 @@ function JobSlugHandler({ slug, isDark, user, onAuthRequired, toast, onClose }) 
   }, [job]);
 
   if (loading) return <Spinner />;
-  if (error || !job) return null;
+  if (error || !job) {
+    // Fallback: extract title from slug and search jobs page
+    const titleFromSlug = slug.replace(/-\d+$/, "").replace(/-[a-f0-9-]{35,}$/, "").replace(/-/g, " ");
+    return (
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 20 }}>
+        <div style={{ background: isDark ? "#141416" : "#fff", borderRadius: 16, padding: "32px 28px", maxWidth: 420, width: "100%", textAlign: "center" }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Job not found</div>
+          <div style={{ fontSize: 13, color: isDark ? "#666" : "#888", marginBottom: 20 }}>This job may have been filled or removed.</div>
+          <button onClick={onClose} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Browse all jobs</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 8000, padding: 20 }}>

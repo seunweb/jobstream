@@ -57,52 +57,60 @@ def get_job_by_slug(slug: str):
             r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
             slug, re.IGNORECASE
         )
+        # PostgreSQL uses boolean TRUE, SQLite uses integer 1
+        active_check = "is_active = TRUE" if USE_POSTGRES else "is_active = 1"
+
         if uuid_match:
             job_id = uuid_match.group(1)
             cur.execute(
-                "SELECT * FROM jobs WHERE id = %s AND is_active = 1" if USE_POSTGRES
-                else "SELECT * FROM jobs WHERE id = ? AND is_active = 1",
+                f"SELECT * FROM jobs WHERE id = {'%s' if USE_POSTGRES else '?'} AND {active_check}",
                 (job_id,)
             )
             row = cur.fetchone()
             if row:
                 return dict(row)
 
-        # Strategy 2: extract numeric ID from end of slug (SQLite / legacy)
+        # Strategy 2: extract numeric ID from end of slug
         int_match = re.search(r"-(\d+)$", slug)
         if int_match:
             job_id = int(int_match.group(1))
             cur.execute(
-                "SELECT * FROM jobs WHERE id = %s AND is_active = 1" if USE_POSTGRES
-                else "SELECT * FROM jobs WHERE id = ? AND is_active = 1",
+                f"SELECT * FROM jobs WHERE id = {'%s' if USE_POSTGRES else '?'} AND {active_check}",
+                (job_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                return dict(row)
+            # Also try without is_active filter (job might be unpublished)
+            cur.execute(
+                f"SELECT * FROM jobs WHERE id = {'%s' if USE_POSTGRES else '?'}",
                 (job_id,)
             )
             row = cur.fetchone()
             if row:
                 return dict(row)
 
-        # Strategy 3: title/company fuzzy match — last resort
-        # Slug format is title-company-id, split on last 2 hyphens
+        # Strategy 3: fuzzy title match
         parts = slug.rsplit("-", 1)
         if len(parts) == 2:
-            title_company = parts[0].replace("-", " ")
+            title_part = parts[0].replace("-", " ")
             if USE_POSTGRES:
                 cur.execute(
-                    "SELECT * FROM jobs WHERE is_active = 1 "
-                    "AND (title ILIKE %s OR company ILIKE %s) LIMIT 1",
-                    (f"%{title_company}%", f"%{title_company}%")
+                    f"SELECT * FROM jobs WHERE {active_check} "
+                    "AND title ILIKE %s ORDER BY created_at DESC LIMIT 1",
+                    (f"%{title_part}%",)
                 )
             else:
                 cur.execute(
-                    "SELECT * FROM jobs WHERE is_active = 1 "
-                    "AND (title LIKE ? OR company LIKE ?) LIMIT 1",
-                    (f"%{title_company}%", f"%{title_company}%")
+                    f"SELECT * FROM jobs WHERE {active_check} "
+                    "AND title LIKE ? ORDER BY created_at DESC LIMIT 1",
+                    (f"%{title_part}%",)
                 )
             row = cur.fetchone()
             if row:
                 return dict(row)
 
-        raise HTTPException(404, "Job not found")
+        raise HTTPException(404, f"Job not found for slug: {slug}")
 
 
 @router.get("/organizations/by-slug/{slug}")

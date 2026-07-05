@@ -943,15 +943,13 @@ def _send_alert_email(
         f'width="1" height="1" style="display:none" />'
     )
 
-    # Build jobs HTML block — use click-tracking links for open detection
+    # Build jobs HTML block — use job ID directly (most reliable, no slug parsing)
     jobs_html = ""
-    from urllib.parse import quote as _quote
+    import base64 as _b64
     for job in jobs[:5]:
-        slug = make_job_slug(job.get("title",""), job.get("company",""), job.get("id",""))
-        # Use ?job=slug so the SPA opens the correct job regardless of current page
-        direct_url = f"{app_url}/?job={slug}"
-        # Base64-encode the redirect URL to avoid nested ?param issues
-        import base64 as _b64
+        job_id = str(job.get("id", ""))
+        # ?jobid=ID param — read by frontend to open specific job by database ID
+        direct_url = f"{app_url}/?jobid={job_id}"
         encoded_dest = _b64.urlsafe_b64encode(direct_url.encode()).decode()
         tracked_url = f"{app_url}/track/click/{log_id}?dest={encoded_dest}"
         industry_tag = f" &middot; {job['industry']}" if job.get("industry") else ""

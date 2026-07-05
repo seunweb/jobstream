@@ -4,6 +4,7 @@ Modules: Identity, Organization, Recruitment
 All existing endpoints preserved — zero breaking changes.
 """
 
+import sys
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -13,6 +14,13 @@ from typing import Optional
 
 from dotenv import load_dotenv
 load_dotenv()
+
+# ── Windows: Playwright requires ProactorEventLoop ────────────────────────────
+# SelectorEventLoop (Windows default) does not support subprocesses.
+# Must be set before any asyncio usage.
+if sys.platform == "win32":
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -586,12 +594,31 @@ app = FastAPI(
 )
 
 # Hardened CORS — only allow known origins
+# Build allowed origins — always include wildcard fallback for Railway
+_cors_origins = get_cors_origins()
+# Ensure both Railway services can talk to each other
+_extra_origins = os.environ.get("ALLOWED_ORIGINS", "")
+if _extra_origins:
+    for _o in _extra_origins.split(","):
+        _o = _o.strip().rstrip("/")
+        if _o and _o not in _cors_origins:
+            _cors_origins.append(_o)
+
+# Also add APP_URL variants (with and without trailing slash)
+_app_url = os.environ.get("APP_URL", "").rstrip("/")
+if _app_url and _app_url not in _cors_origins:
+    _cors_origins.append(_app_url)
+
+import logging as _logging
+_logging.getLogger(__name__).info(f"CORS origins: {_cors_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(),
+    allow_origins=_cors_origins,
+    allow_origin_regex=r"https://.*\.up\.railway\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Cron-Secret"],
 )
 
 # Security headers on every response
@@ -883,3 +910,10 @@ async def update_my_profile(
                 cur.execute("UPDATE users SET full_name=? WHERE id=?", (body.full_name, user_id))
 
     return {"message": "Profile saved"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    # WindowsProactorEventLoopPolicy is set above — uvicorn inherits it
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True,
+                loop="asyncio")  # "asyncio" uses the policy set above

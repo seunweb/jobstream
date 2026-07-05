@@ -2739,6 +2739,40 @@ function WorkspaceDashboardPage({ isDark = true, user, onAuthRequired, toast }) 
 
 
 // ── Job Slug Handler ─────────────────────────────────────────────────────────
+function JobIdHandler({ jobId, isDark, user, onAuthRequired, toast, onClose }) {
+  const [job, setJob] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api(`/jobs/${jobId}`)
+      .then(setJob)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [jobId]);
+
+  if (loading) return <Spinner />;
+  if (!job) return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 20 }}>
+      <div style={{ background: isDark ? "#141416" : "#fff", borderRadius: 16, padding: "32px 28px", maxWidth: 420, width: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Job not found</div>
+        <div style={{ fontSize: 13, color: isDark ? "#666" : "#888", marginBottom: 20 }}>This job may have been filled or removed.</div>
+        <button onClick={onClose} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Browse all jobs</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 680, maxHeight: "90vh", overflowY: "auto", padding: "28px 32px" }}>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: isDark ? "#666" : "#888", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 20, padding: 0 }}>← Back to jobs</button>
+        <JobCard job={job} onApply={() => {}} onView={() => {}} isExpanded={true} isDark={isDark} user={user} onAuthRequired={onAuthRequired} isSaved={false} onToggleSave={() => {}} />
+      </div>
+    </div>
+  );
+}
+
+
 function JobSlugHandler({ slug, isDark, user, onAuthRequired, toast, onClose }) {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -5045,13 +5079,17 @@ export default function App() {
     return params.get("token") || "";
   });
   const [urlJobSlug, setUrlJobSlug] = useState(() => {
-    // Support both /jobs/slug path AND ?job=slug query param (used in alert emails)
     const params = new URLSearchParams(window.location.search);
     const jobParam = params.get("job");
     if (jobParam) return jobParam;
     const path = window.location.pathname;
     const m = path.match(/^\/jobs\/(.+)/);
     return m ? m[1] : "";
+  });
+  // ?jobid=ID — direct job ID from alert emails (most reliable)
+  const [urlJobId, setUrlJobId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("jobid") || "";
   });
   const [urlOrgSlug, setUrlOrgSlug] = useState(() => {
     const path = window.location.pathname;
@@ -5285,7 +5323,8 @@ export default function App() {
 
       {applyJob && <ApplyModal job={applyJob} onClose={() => setApplyJob(null)} onSuccess={showToast} user={user} />}
       {showAuth && <InlineAuthModal onClose={() => setShowAuth(false)} onSuccess={(u) => { setUser(u); showToast(`Welcome, ${u.full_name}!`); }} />}
-      {urlJobSlug && <JobSlugHandler slug={urlJobSlug} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} onClose={() => { setUrlJobSlug(""); window.history.replaceState({}, "", "/"); }} />}
+      {urlJobId && <JobIdHandler jobId={urlJobId} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} onClose={() => { setUrlJobId(""); window.history.replaceState({}, "", "/"); }} />}
+      {urlJobSlug && !urlJobId && <JobSlugHandler slug={urlJobSlug} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} onClose={() => { setUrlJobSlug(""); window.history.replaceState({}, "", "/"); }} />}
       {urlOrgSlug && <OrgSlugHandler slug={urlOrgSlug} isDark={isDark} onBack={() => { setUrlOrgSlug(""); window.history.replaceState({}, "", "/companies"); setPage("companies"); }} onApply={setApplyJob} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}
 
       {showJobAlerts && <JobAlertsModal isDark={isDark} user={user} onClose={() => setShowJobAlerts(false)} toast={showToast} />}

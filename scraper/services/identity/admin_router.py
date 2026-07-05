@@ -457,6 +457,36 @@ async def list_all_jobs(
     return {"jobs": jobs, "total": total}
 
 
+@platform_router.patch("/jobs/{job_id}")
+async def admin_patch_job(
+    job_id: int,
+    request: Request,
+    current_user: dict = Depends(require_platform_admin),
+):
+    """Update job fields — is_active, title, description, etc."""
+    body = await request.json()
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if "is_active" in body:
+            val = 1 if body["is_active"] else 0
+            pg_val = True if body["is_active"] else False
+            if USE_POSTGRES:
+                cur.execute("UPDATE jobs SET is_active = %s WHERE id = %s", (pg_val, job_id))
+            else:
+                cur.execute("UPDATE jobs SET is_active = ? WHERE id = ?", (val, job_id))
+        if "title" in body:
+            if USE_POSTGRES:
+                cur.execute("UPDATE jobs SET title = %s WHERE id = %s", (body["title"], job_id))
+            else:
+                cur.execute("UPDATE jobs SET title = ? WHERE id = ?", (body["title"], job_id))
+        if "description" in body:
+            if USE_POSTGRES:
+                cur.execute("UPDATE jobs SET description = %s WHERE id = %s", (body["description"], job_id))
+            else:
+                cur.execute("UPDATE jobs SET description = ? WHERE id = ?", (body["description"], job_id))
+    return {"message": "Job updated"}
+
+
 @platform_router.delete("/jobs/{job_id}", status_code=204)
 async def admin_delete_job(
     job_id: int,
@@ -466,13 +496,13 @@ async def admin_delete_job(
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
-            "UPDATE jobs SET is_active = 0 WHERE id = %s" if USE_POSTGRES
-            else "UPDATE jobs SET is_active = 0 WHERE id = ?",
+            "DELETE FROM jobs WHERE id = %s" if USE_POSTGRES
+            else "DELETE FROM jobs WHERE id = ?",
             (job_id,)
         )
     from core.audit import log_action
     log_action(
-        "job.moderated",
+        "job.deleted",
         user_id=str(current_user["id"]),
         resource_type="job",
         resource_id=str(job_id),

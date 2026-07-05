@@ -181,18 +181,41 @@ def create_tenant(
 
 
 def link_user_to_tenant(user_id: str, tenant_id: str, role: str = "org_owner"):
-    """Link a user to a tenant with a role."""
+    """Link a user to a tenant with a role.
+    Admin/super_admin roles are preserved — tenant linking only sets tenant_id for them.
+    """
     from core.database import get_conn, USE_POSTGRES
+    PROTECTED_ROLES = ("super_admin", "platform_admin")
     with get_conn() as conn:
         cur = conn.cursor()
-        if USE_POSTGRES:
-            cur.execute("""
-                UPDATE users SET tenant_id = %s, role = %s WHERE id = %s
-            """, (tenant_id, role, user_id))
+        # Check current role — never downgrade admins
+        ph = "%s" if USE_POSTGRES else "?"
+        cur.execute(f"SELECT role FROM users WHERE id = {ph}", (user_id,))
+        row = cur.fetchone()
+        current_role = (dict(row).get("role") or "") if row else ""
+        if current_role in PROTECTED_ROLES:
+            # Only update tenant_id, keep their admin role
+            if USE_POSTGRES:
+                cur.execute(
+                    "UPDATE users SET tenant_id = %s WHERE id = %s",
+                    (tenant_id, user_id)
+                )
+            else:
+                cur.execute(
+                    "UPDATE users SET tenant_id = ? WHERE id = ?",
+                    (tenant_id, user_id)
+                )
         else:
-            cur.execute("""
-                UPDATE users SET tenant_id = ?, role = ? WHERE id = ?
-            """, (tenant_id, role, user_id))
+            if USE_POSTGRES:
+                cur.execute(
+                    "UPDATE users SET tenant_id = %s, role = %s WHERE id = %s",
+                    (tenant_id, role, user_id)
+                )
+            else:
+                cur.execute(
+                    "UPDATE users SET tenant_id = ?, role = ? WHERE id = ?",
+                    (tenant_id, role, user_id)
+                )
 
 
 # ── Plan limits ───────────────────────────────────────────────────────────────

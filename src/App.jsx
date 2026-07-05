@@ -1042,7 +1042,7 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
 }
 
 // ── Post Job Modal ────────────────────────────────────────────────────────────
-function PostJobModal({ isDark = true, onClose, onSuccess, organizations = [] }) {
+function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsProp = [] }) {
   const [form, setForm] = useState({
     title: "", company: "", organization_id: "",
     location: "Lagos, Nigeria", job_type: "Full-time",
@@ -1051,7 +1051,15 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations = [] })
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [organizations, setOrganizations] = useState(orgsProp);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  // Always load fresh organizations so newly created ones appear
+  useEffect(() => {
+    api("/organizations").then(orgs => {
+      if (Array.isArray(orgs) && orgs.length > 0) setOrganizations(orgs);
+    }).catch(() => {});
+  }, []);
 
   const inp = { width: "100%", boxSizing: "border-box", padding: "10px 14px", fontSize: 13, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, background: isDark ? "#141416" : "#ffffff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" };
   const sel = { ...inp, cursor: "pointer" };
@@ -1809,6 +1817,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
   const [jobSearch, setJobSearch] = useState("");
   const [jobStatusFilter, setJobStatusFilter] = useState("");
   const [jobPage, setJobPage] = useState(0);
+  const [selectedJobs, setSelectedJobs] = useState(new Set());
   const JOB_PAGE_SIZE = 20;
   const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(true);
@@ -2175,7 +2184,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
       {tab === "jobs" && !loading && (
         <div>
           {/* Search + filter bar */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
             <input
               value={jobSearch}
               onChange={e => setJobSearch(e.target.value)}
@@ -2196,9 +2205,69 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
             <span style={{ fontSize: 12, color: isDark ? "#555" : "#aaa" }}>{jobs.length} jobs</span>
           </div>
 
+          {/* Bulk actions bar */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer" }}>
+              <input type="checkbox"
+                checked={selectedJobs.size === jobs.slice(jobPage * JOB_PAGE_SIZE, (jobPage + 1) * JOB_PAGE_SIZE).length && jobs.length > 0}
+                onChange={e => {
+                  const pageJobs = jobs.slice(jobPage * JOB_PAGE_SIZE, (jobPage + 1) * JOB_PAGE_SIZE);
+                  setSelectedJobs(e.target.checked ? new Set(pageJobs.map(j => j.id)) : new Set());
+                }}
+              />
+              Select page
+            </label>
+            {selectedJobs.size > 0 && (
+              <>
+                <span style={{ fontSize: 12, color: isDark ? "#888" : "#555" }}>{selectedJobs.size} selected</span>
+                <button onClick={async () => {
+                  if (!window.confirm(`Unpublish ${selectedJobs.size} jobs?`)) return;
+                  await Promise.all([...selectedJobs].map(id =>
+                    api(`/admin/jobs/${id}`, { method: "PATCH", body: JSON.stringify({ is_active: false }) })
+                  ));
+                  setSelectedJobs(new Set());
+                  loadTab("jobs");
+                  toast(`${selectedJobs.size} jobs unpublished`);
+                }} style={{ background: "#f87171", border: "none", borderRadius: 7, padding: "6px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  Unpublish selected
+                </button>
+                <button onClick={async () => {
+                  if (!window.confirm(`Publish ${selectedJobs.size} jobs?`)) return;
+                  await Promise.all([...selectedJobs].map(id =>
+                    api(`/admin/jobs/${id}`, { method: "PATCH", body: JSON.stringify({ is_active: true }) })
+                  ));
+                  setSelectedJobs(new Set());
+                  loadTab("jobs");
+                  toast(`${selectedJobs.size} jobs published`);
+                }} style={{ background: "#3DD68C", border: "none", borderRadius: 7, padding: "6px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  Publish selected
+                </button>
+                <button onClick={async () => {
+                  if (!window.confirm(`Permanently delete ${selectedJobs.size} jobs? This cannot be undone.`)) return;
+                  await Promise.all([...selectedJobs].map(id =>
+                    api(`/admin/jobs/${id}`, { method: "DELETE" })
+                  ));
+                  setSelectedJobs(new Set());
+                  loadTab("jobs");
+                  toast(`${selectedJobs.size} jobs deleted`);
+                }} style={{ background: "none", border: "1px solid #f87171", borderRadius: 7, padding: "6px 14px", fontSize: 12, color: "#f87171", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                  Delete selected
+                </button>
+              </>
+            )}
+          </div>
+
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {jobs.slice(jobPage * JOB_PAGE_SIZE, (jobPage + 1) * JOB_PAGE_SIZE).map(j => (
-              <div key={j.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div key={j.id} style={{ background: selectedJobs.has(j.id) ? (isDark ? "#1a1a2e" : "#f0f4ff") : (isDark ? "#141416" : "#ffffff"), border: selectedJobs.has(j.id) ? "1px solid #0071E3" : (isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8"), borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <input type="checkbox" checked={selectedJobs.has(j.id)}
+                  onChange={e => setSelectedJobs(prev => {
+                    const next = new Set(prev);
+                    e.target.checked ? next.add(j.id) : next.delete(j.id);
+                    return next;
+                  })}
+                  style={{ flexShrink: 0, cursor: "pointer", width: 15, height: 15 }}
+                />
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{j.title}</div>
                   <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 2 }}>

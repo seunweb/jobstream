@@ -47,25 +47,62 @@ def get_job_by_slug(slug: str):
     """
     Get job by SEO slug.
     Slug format: {title}-{company}-{id}
-    Extract ID from end of slug for lookup.
+    Tries multiple extraction strategies to handle both UUID and integer IDs.
     """
-    # Extract numeric ID from end of slug
-    match = re.search(r"-(\d+)$", slug)
-    if not match:
-        raise HTTPException(404, "Job not found")
-
-    job_id = int(match.group(1))
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute(
-            "SELECT * FROM jobs WHERE id = %s AND is_active = 1" if USE_POSTGRES
-            else "SELECT * FROM jobs WHERE id = ? AND is_active = 1",
-            (job_id,)
+
+        # Strategy 1: extract UUID from end of slug (PostgreSQL)
+        uuid_match = re.search(
+            r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+            slug, re.IGNORECASE
         )
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(404, "Job not found")
-        return dict(row)
+        if uuid_match:
+            job_id = uuid_match.group(1)
+            cur.execute(
+                "SELECT * FROM jobs WHERE id = %s AND is_active = 1" if USE_POSTGRES
+                else "SELECT * FROM jobs WHERE id = ? AND is_active = 1",
+                (job_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                return dict(row)
+
+        # Strategy 2: extract numeric ID from end of slug (SQLite / legacy)
+        int_match = re.search(r"-(\d+)$", slug)
+        if int_match:
+            job_id = int(int_match.group(1))
+            cur.execute(
+                "SELECT * FROM jobs WHERE id = %s AND is_active = 1" if USE_POSTGRES
+                else "SELECT * FROM jobs WHERE id = ? AND is_active = 1",
+                (job_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                return dict(row)
+
+        # Strategy 3: title/company fuzzy match — last resort
+        # Slug format is title-company-id, split on last 2 hyphens
+        parts = slug.rsplit("-", 1)
+        if len(parts) == 2:
+            title_company = parts[0].replace("-", " ")
+            if USE_POSTGRES:
+                cur.execute(
+                    "SELECT * FROM jobs WHERE is_active = 1 "
+                    "AND (title ILIKE %s OR company ILIKE %s) LIMIT 1",
+                    (f"%{title_company}%", f"%{title_company}%")
+                )
+            else:
+                cur.execute(
+                    "SELECT * FROM jobs WHERE is_active = 1 "
+                    "AND (title LIKE ? OR company LIKE ?) LIMIT 1",
+                    (f"%{title_company}%", f"%{title_company}%")
+                )
+            row = cur.fetchone()
+            if row:
+                return dict(row)
+
+        raise HTTPException(404, "Job not found")
 
 
 @router.get("/organizations/by-slug/{slug}")
@@ -905,8 +942,10 @@ def _send_alert_email(
         slug = make_job_slug(job.get("title",""), job.get("company",""), job.get("id",""))
         # Use ?job=slug so the SPA opens the correct job regardless of current page
         direct_url = f"{app_url}/?job={slug}"
-        # Wrap in click tracker so opening a job link marks the alert as opened
-        tracked_url = f"{app_url}/track/click/{log_id}?redirect={_quote(direct_url, safe='')}"
+        # Base64-encode the redirect URL to avoid nested ?param issues
+        import base64 as _b64
+        encoded_dest = _b64.urlsafe_b64encode(direct_url.encode()).decode()
+        tracked_url = f"{app_url}/track/click/{log_id}?dest={encoded_dest}"
         industry_tag = f" &middot; {job['industry']}" if job.get("industry") else ""
         jobs_html += (
             f'<div style="padding:12px 0;border-bottom:1px solid #f0f0f0">'
@@ -1644,31 +1683,45 @@ async def save_theme_settings(
 
 
 @router.get("/track/click/{log_id}")
-async def track_email_click(log_id: str, redirect: str = ""):
+async def track_email_click(log_id: str, dest: str = "", redirect: str = ""):
     """
     Track when a user clicks a link in a job alert email.
-    More reliable than pixel tracking — not blocked by email clients.
-    Records opened_at AND clicked_at, then redirects to the destination.
+    Accepts either:
+      - dest: base64-encoded destination URL (preferred — handles nested params)
+      - redirect: plain URL (legacy fallback)
     """
-    ph = "%s" if USE_POSTGRES else "?"
+    import base64 as _b64
+
+    # Decode destination URL
+    final_url = "/"
+    if dest:
+        try:
+            final_url = _b64.urlsafe_b64decode(dest.encode()).decode()
+        except Exception:
+            final_url = dest  # use as-is if decode fails
+    elif redirect:
+        final_url = redirect
+
+    # Record the open/click in delivery log
     try:
         with get_conn() as conn:
             cur = conn.cursor()
-            # Mark as opened (click implies open) and try to add clicked column if exists
             sql = (
-                "UPDATE alert_delivery_log SET opened_at = NOW() WHERE id = %s AND opened_at IS NULL"
+                "UPDATE alert_delivery_log SET opened_at = NOW() "
+                "WHERE id = %s AND opened_at IS NULL"
                 if USE_POSTGRES else
-                "UPDATE alert_delivery_log SET opened_at = datetime('now') WHERE id = ? AND opened_at IS NULL"
+                "UPDATE alert_delivery_log SET opened_at = datetime('now') "
+                "WHERE id = ? AND opened_at IS NULL"
             )
+            ph = "%s" if USE_POSTGRES else "?"
             cur.execute(sql, (log_id,))
-            log.info(f"Email click tracked: log_id={log_id}")
+            rows_updated = cur.rowcount
+            log.info(f"Email click: log_id={log_id} rows_updated={rows_updated} → {final_url}")
     except Exception as e:
-        log.warning(f"Track click failed for {log_id}: {e}")
+        log.warning(f"Track click DB update failed: {e}")
 
-    # Redirect to destination
     from fastapi.responses import RedirectResponse
-    dest = redirect or "/"
-    return RedirectResponse(url=dest, status_code=302)
+    return RedirectResponse(url=final_url, status_code=302)
 
 
 @router.get("/track/open/{log_id}")

@@ -7,11 +7,12 @@ Powers company profile pages on the job board.
 import uuid
 import json
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from core.database import get_conn, USE_POSTGRES
 from core.audit import log_org, AuditAction
+from services.identity.dependencies import get_current_user
 
 router = APIRouter(prefix="/organizations", tags=["organization"])
 departments_router = APIRouter(prefix="/departments", tags=["organization"])
@@ -70,6 +71,21 @@ def q(pg, sq="?"):
 
 
 # ── Organization Routes ───────────────────────────────────────────────────────
+
+@router.get("/all")
+def list_all_organizations(
+    current_user: dict = Depends(get_current_user),
+):
+    """Return all organizations including inactive — for admin job posting dropdowns."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, name, industry, website, logo_url FROM organizations ORDER BY name"
+            if USE_POSTGRES else
+            "SELECT id, name, industry, website, logo_url FROM organizations ORDER BY name"
+        )
+        return [dict(r) for r in cur.fetchall()]
+
 
 @router.get("")
 def list_organizations(

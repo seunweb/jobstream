@@ -1054,10 +1054,12 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
   const [organizations, setOrganizations] = useState(orgsProp);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  // Always load fresh organizations so newly created ones appear
+  // Always load fresh organizations — include all so newly created ones appear
   useEffect(() => {
-    api("/organizations").then(orgs => {
-      if (Array.isArray(orgs) && orgs.length > 0) setOrganizations(orgs);
+    // Try fetching with higher limit to get all orgs
+    api("/organizations/all").then(data => {
+      const orgs = Array.isArray(data) ? data : (data?.organizations || []);
+      if (orgs.length > 0) setOrganizations(orgs);
     }).catch(() => {});
   }, []);
 
@@ -1101,17 +1103,17 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
             </div>
             <div>
               <Label>Company *</Label>
-              {organizations.length > 0 ? (
-                <select value={form.organization_id} onChange={e => {
+              <select value={form.organization_id} onChange={e => {
                   const org = organizations.find(o => o.id === e.target.value);
                   setForm(f => ({ ...f, organization_id: e.target.value, company: org?.name || f.company }));
-                }} style={sel}>
-                  <option value="">Select company…</option>
+                }} style={{ ...sel, marginBottom: 6 }}>
+                  <option value="">— Select from registered companies —</option>
                   {organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
-              ) : (
-                <input value={form.company} onChange={set("company")} placeholder="Company name" required style={inp} />
-              )}
+              <input value={form.company} onChange={set("company")}
+                placeholder={form.organization_id ? "" : "Or type company name manually"}
+                style={{ ...inp, opacity: form.organization_id ? 0.5 : 1 }}
+              />
             </div>
           </div>
 

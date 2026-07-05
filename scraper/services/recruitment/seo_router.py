@@ -586,10 +586,76 @@ async def cron_send_alerts(request: Request):
         if provided != expected_secret:
             raise HTTPException(403, "Invalid cron secret")
 
-    log.info("Cron job triggered: dispatching scheduled job alerts")
+    import os as _os
+    from datetime import datetime as _dt2, timezone as _tz2
+    triggered_at = _dt2.now(_tz2.utc).isoformat()
+    log.info(f"Cron job triggered at {triggered_at}")
+
+    # Record this cron execution so admin can verify it's running
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            ph = "%s" if USE_POSTGRES else "?"
+            if USE_POSTGRES:
+                cur.execute("""
+                    INSERT INTO admin_settings (key, value, updated_at)
+                    VALUES ('cron_last_run', %s, NOW())
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+                """, (triggered_at,))
+            else:
+                cur.execute(
+                    "INSERT OR REPLACE INTO admin_settings (key, value) VALUES ('cron_last_run', ?)",
+                    (triggered_at,)
+                )
+    except Exception as e:
+        log.warning(f"Could not record cron run: {e}")
+
     sent = await _dispatch_job_alerts(respect_send_time=True)
-    log.info(f"Cron job complete: {sent} alert(s) sent")
-    return {"sent": sent, "triggered_at": __import__("datetime").datetime.utcnow().isoformat()}
+    log.info(f"Cron job complete: {sent} alert(s) sent at {triggered_at}")
+    return {"sent": sent, "triggered_at": triggered_at}
+
+
+@router.get("/job-alerts/cron-status")
+async def public_cron_status():
+    """Public endpoint — shows when cron last ran and how many alerts were active."""
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            ph = "%s" if USE_POSTGRES else "?"
+            cur.execute(
+                f"SELECT value FROM admin_settings WHERE key = {ph}",
+                ("cron_last_run",)
+            )
+            row = cur.fetchone()
+            last_run = dict(row)["value"] if row else None
+
+            cur.execute(
+                "SELECT COUNT(*) FROM job_alerts WHERE is_active = TRUE"
+                if USE_POSTGRES else
+                "SELECT COUNT(*) FROM job_alerts WHERE is_active = 1"
+            )
+            row = cur.fetchone()
+            active_alerts = int(list(dict(row).values())[0]) if USE_POSTGRES else int(row[0])
+
+            cur.execute(
+                "SELECT COUNT(*) FROM alert_delivery_log WHERE sent_at > NOW() - INTERVAL '24 hours'"
+                if USE_POSTGRES else
+                "SELECT COUNT(*) FROM alert_delivery_log WHERE sent_at > datetime('now', '-24 hours')"
+            )
+            row = cur.fetchone()
+            sent_24h = int(list(dict(row).values())[0]) if USE_POSTGRES else int(row[0])
+
+    except Exception as e:
+        return {"error": str(e)}
+
+    from datetime import datetime as _dt2, timezone as _tz2
+    return {
+        "cron_last_run": last_run,
+        "current_utc": _dt2.now(_tz2.utc).isoformat(),
+        "active_alerts": active_alerts,
+        "emails_sent_last_24h": sent_24h,
+        "status": "✓ Cron is running" if last_run else "⚠ Cron has never run — check cron-job.org",
+    }
 
 
 @router.get("/job-alerts/debug")
@@ -739,8 +805,12 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
                 import zoneinfo as _zi
                 local_now = _dt.now(_zi.ZoneInfo(alert_tz)).strftime("%H:00")
             except Exception:
-                from datetime import timedelta as _td
-                local_now = now_hour  # fallback to default tz
+                local_now = now_hour  # fallback
+            log.info(
+                f"Alert {alert.get('email','')[:6]}*** | "
+                f"send_time={alert_time} | tz={alert_tz} | "
+                f"local_now={local_now} | match={'YES' if alert_time == local_now else 'NO'}"
+            )
             if alert_time != local_now:
                 continue  # Not this alert's hour yet in their timezone
 

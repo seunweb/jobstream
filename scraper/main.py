@@ -1,3 +1,10 @@
+# ── Serve built React frontend from FastAPI (same domain = no CORS) ──────────
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import pathlib as _pathlib
+
+_DIST = _pathlib.Path(__file__).parent.parent / "dist"
+
 """
 JobStream API v2.0 — Modular Architecture
 Modules: Identity, Organization, Recruitment
@@ -912,8 +919,31 @@ async def update_my_profile(
     return {"message": "Profile saved"}
 
 
+# ── Serve React SPA from FastAPI (same domain = zero CORS) ──────────────────
+if _DIST.exists():
+    # Serve /assets/* statically
+    app.mount("/assets", StaticFiles(directory=str(_DIST / "assets")), name="assets")
+    log.info(f"Serving React frontend from {_DIST}")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        """Catch-all: return index.html for any non-API path (React Router)."""
+        # Let actual API routes 404 normally
+        api_prefixes = (
+            "auth/", "jobs", "companies", "organizations", "applications",
+            "scrape", "billing", "analytics", "ai/", "rbac/", "admin/",
+            "workspace/", "persons/", "departments", "job-alerts", "track/",
+            "sitemap", "health", "docs", "openapi", "redoc",
+        )
+        if any(full_path.startswith(p) for p in api_prefixes):
+            from fastapi import HTTPException
+            raise HTTPException(404)
+        return FileResponse(str(_DIST / "index.html"))
+else:
+    log.info(f"No dist/ folder found at {_DIST} — frontend served separately")
+
+
 if __name__ == "__main__":
     import uvicorn
-    # WindowsProactorEventLoopPolicy is set above — uvicorn inherits it
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True,
-                loop="asyncio")  # "asyncio" uses the policy set above
+                loop="asyncio")

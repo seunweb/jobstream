@@ -187,8 +187,27 @@ def init_db():
                 cur.execute(stmt)
     _migrate_industry_columns()
     _migrate_user_tracking_columns()
+    _migrate_alert_timezone_column()
     _seed_companies()
     logger.info("Database ready")
+
+
+def _migrate_alert_timezone_column():
+    """Add timezone column to job_alerts if missing."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            try:
+                cur.execute(
+                    "ALTER TABLE job_alerts ADD COLUMN IF NOT EXISTS timezone VARCHAR(60) DEFAULT 'Africa/Lagos'"
+                )
+            except Exception as e:
+                logger.warning(f"Migration skipped: {e}")
+        else:
+            try:
+                cur.execute("ALTER TABLE job_alerts ADD COLUMN timezone TEXT DEFAULT 'Africa/Lagos'")
+            except Exception:
+                pass
 
 
 def _migrate_user_tracking_columns():

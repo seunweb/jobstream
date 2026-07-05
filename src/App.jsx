@@ -2820,6 +2820,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
   const [industry, setIndustry] = useState(existingAlert?.industry || "");
   const [frequency, setFrequency] = useState(existingAlert?.frequency || "daily");
   const [sendTime, setSendTime] = useState(existingAlert?.send_time || "08:00");
+  const [timezone, setTimezone] = useState(existingAlert?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Lagos");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
@@ -2856,7 +2857,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
     setLoading(true);
     try {
       const payload = {
-        email, keywords, location, industry, frequency, send_time: sendTime,
+        email, keywords, location, industry, frequency, send_time: sendTime, timezone,
         ...(!user ? { captcha_answer: Number(captchaAnswer), captcha_expected: captchaA + captchaB } : {}),
       };
       if (isEdit) {
@@ -2936,6 +2937,36 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
                 <label style={lbl}>Preferred time</label>
                 <select value={sendTime} onChange={e => setSendTime(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
                   {(meta.send_times || ["06:00","08:00","12:00","17:00","20:00"]).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={lbl}>Timezone</label>
+                <select value={timezone} onChange={e => setTimezone(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+                  {[
+                    ["Africa/Lagos",       "Lagos (WAT UTC+1)"],
+                    ["Africa/Accra",       "Accra (GMT UTC+0)"],
+                    ["Africa/Nairobi",     "Nairobi (EAT UTC+3)"],
+                    ["Africa/Johannesburg","Johannesburg (SAST UTC+2)"],
+                    ["Africa/Cairo",       "Cairo (EET UTC+2)"],
+                    ["Africa/Casablanca",  "Casablanca (WET UTC+0)"],
+                    ["Europe/London",      "London (GMT/BST)"],
+                    ["Europe/Paris",       "Paris (CET UTC+1)"],
+                    ["Europe/Berlin",      "Berlin (CET UTC+1)"],
+                    ["Europe/Moscow",      "Moscow (MSK UTC+3)"],
+                    ["Asia/Dubai",         "Dubai (GST UTC+4)"],
+                    ["Asia/Kolkata",       "India (IST UTC+5:30)"],
+                    ["Asia/Singapore",     "Singapore (SGT UTC+8)"],
+                    ["Asia/Tokyo",         "Tokyo (JST UTC+9)"],
+                    ["Asia/Shanghai",      "China (CST UTC+8)"],
+                    ["Australia/Sydney",   "Sydney (AEDT UTC+11)"],
+                    ["Pacific/Auckland",   "Auckland (NZDT UTC+13)"],
+                    ["America/New_York",   "New York (ET UTC-5)"],
+                    ["America/Chicago",    "Chicago (CT UTC-6)"],
+                    ["America/Denver",     "Denver (MT UTC-7)"],
+                    ["America/Los_Angeles","Los Angeles (PT UTC-8)"],
+                    ["America/Sao_Paulo",  "São Paulo (BRT UTC-3)"],
+                    ["America/Toronto",    "Toronto (ET UTC-5)"],
+                  ].map(([tz, label]) => <option key={tz} value={tz}>{label}</option>)}
                 </select>
               </div>
             </div>
@@ -4997,6 +5028,10 @@ export default function App() {
     return params.get("token") || "";
   });
   const [urlJobSlug, setUrlJobSlug] = useState(() => {
+    // Support both /jobs/slug path AND ?job=slug query param (used in alert emails)
+    const params = new URLSearchParams(window.location.search);
+    const jobParam = params.get("job");
+    if (jobParam) return jobParam;
     const path = window.location.pathname;
     const m = path.match(/^\/jobs\/(.+)/);
     return m ? m[1] : "";

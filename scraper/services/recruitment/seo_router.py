@@ -346,23 +346,25 @@ async def create_job_alert(body: JobAlertIn, request: Request):
             cur.execute("""
                 INSERT INTO job_alerts
                     (id, user_id, email, keywords, location, industry, job_type,
-                     frequency, send_time, unsubscribe_token, is_active, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,NOW())
+                     frequency, send_time, timezone, unsubscribe_token, is_active, created_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,NOW())
                 ON CONFLICT (email, keywords, location) DO UPDATE SET
                     is_active = TRUE, industry = EXCLUDED.industry,
                     job_type = EXCLUDED.job_type, frequency = EXCLUDED.frequency,
-                    send_time = EXCLUDED.send_time, user_id = EXCLUDED.user_id,
-                    updated_at = NOW()
+                    send_time = EXCLUDED.send_time, timezone = EXCLUDED.timezone,
+                    user_id = EXCLUDED.user_id, updated_at = NOW()
             """, (alert_id, user_id, email, body.keywords, body.location,
-                  body.industry, body.job_type, body.frequency, body.send_time, token))
+                  body.industry, body.job_type, body.frequency, body.send_time,
+                  body.timezone or "Africa/Lagos", token))
         else:
             cur.execute("""
                 INSERT OR REPLACE INTO job_alerts
                     (id, user_id, email, keywords, location, industry, job_type,
-                     frequency, send_time, unsubscribe_token, is_active, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,1,datetime('now'))
+                     frequency, send_time, timezone, unsubscribe_token, is_active, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,1,datetime('now'))
             """, (alert_id, user_id, email, body.keywords, body.location,
-                  body.industry, body.job_type, body.frequency, body.send_time, token))
+                  body.industry, body.job_type, body.frequency, body.send_time,
+                  body.timezone or "Africa/Lagos", token))
 
     log.info(f"Job alert created for {email}: {body.keywords} in {body.location}")
     return {
@@ -640,7 +642,10 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
     import urllib.request
     from datetime import datetime as _dt, timezone as _tz
 
-    now_hour = _dt.now(_tz.utc).strftime("%H:00")  # e.g. "08:00"
+    # Each alert uses its own timezone — now_hour is UTC reference only
+    now_utc = _dt.now(_tz.utc)
+    now_hour = now_utc.strftime("%H:00")  # UTC fallback for alerts without timezone
+    log.info(f"Cron dispatch: UTC={now_hour}, checking {len(alerts)} active alerts")
 
     resend_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("FROM_EMAIL", "onboarding@resend.dev")
@@ -666,8 +671,11 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
-            "SELECT * FROM job_alerts WHERE is_active = TRUE" if USE_POSTGRES
-            else "SELECT * FROM job_alerts WHERE is_active = 1"
+            "SELECT id, email, keywords, location, industry, frequency, send_time, "
+            "timezone, unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = TRUE"
+            if USE_POSTGRES else
+            "SELECT id, email, keywords, location, industry, frequency, send_time, "
+            "timezone, unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = 1"
         )
         alerts = [dict(r) for r in cur.fetchall()]
 
@@ -676,11 +684,18 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
         if not keywords:
             continue
 
-        # Check preferred send_time if we're being called by cron
+        # Check preferred send_time in the alert's own timezone
         if respect_send_time:
             alert_time = (alert.get("send_time") or "08:00").strip()[:5]
-            if alert_time != now_hour:
-                continue  # Not this alert's hour yet
+            alert_tz   = (alert.get("timezone")  or "Africa/Lagos").strip()
+            try:
+                import zoneinfo as _zi
+                local_now = _dt.now(_zi.ZoneInfo(alert_tz)).strftime("%H:00")
+            except Exception:
+                from datetime import timedelta as _td
+                local_now = now_hour  # fallback to default tz
+            if alert_time != local_now:
+                continue  # Not this alert's hour yet in their timezone
 
         hours = 24 if alert.get("frequency") == "daily" else 168
         matching_jobs = _find_matching_jobs(
@@ -881,12 +896,13 @@ def _send_alert_email(
         f'width="1" height="1" style="display:none" />'
     )
 
-    # Build jobs HTML block — use click-tracking links for more reliable open detection
+    # Build jobs HTML block — use click-tracking links for open detection
     jobs_html = ""
     from urllib.parse import quote as _quote
     for job in jobs[:5]:
         slug = make_job_slug(job.get("title",""), job.get("company",""), job.get("id",""))
-        direct_url = f"{app_url}/jobs/{slug}"
+        # Use ?job=slug so the SPA opens the correct job regardless of current page
+        direct_url = f"{app_url}/?job={slug}"
         # Wrap in click tracker so opening a job link marks the alert as opened
         tracked_url = f"{app_url}/track/click/{log_id}?redirect={_quote(direct_url, safe='')}"
         industry_tag = f" &middot; {job['industry']}" if job.get("industry") else ""

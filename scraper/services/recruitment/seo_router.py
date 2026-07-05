@@ -1018,9 +1018,10 @@ def _send_alert_email(
     import base64 as _b64
     for job in jobs[:5]:
         job_id = str(job.get("id", ""))
-        # ?jobid=ID param — read by frontend to open specific job by database ID
-        direct_url = f"{app_url}/?jobid={job_id}"
+        # Destination: frontend URL with job ID param
+        direct_url = f"{frontend_url}/?jobid={job_id}"
         encoded_dest = _b64.urlsafe_b64encode(direct_url.encode()).decode()
+        # Track click goes to BACKEND (app_url), then redirects to frontend
         tracked_url = f"{app_url}/track/click/{log_id}?dest={encoded_dest}"
         industry_tag = f" &middot; {job['industry']}" if job.get("industry") else ""
         jobs_html += (

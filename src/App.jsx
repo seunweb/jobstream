@@ -6,9 +6,7 @@ function clearAuth() { ["js_access_token","js_refresh_token","js_user"].forEach(
 async function apiLogout(rt) { try { await fetch(`${API}/auth/logout`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({refresh_token: rt}) }); } catch {} }
 
 // ── Config ──────────────────────────────────────────────────────────────────
-// API is always relative — frontend is served from the same FastAPI backend.
-// In local dev, vite.config.js proxies /api/* to http://localhost:8000.
-const API = "";
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function slugify(text) {
   return (text || "").toLowerCase().trim()

@@ -507,7 +507,7 @@ def get_jobs(
         conditions.append("source = %s" if USE_POSTGRES else "source = ?")
         params.append(source)
 
-    where = " AND ".join(conditions)
+    where = " AND ".join(conditions) if conditions else "1=1"
 
     with get_conn() as conn:
         cur = conn.cursor()

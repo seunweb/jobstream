@@ -168,6 +168,35 @@ def list_jobs(
     return {"total": total, "limit": limit, "offset": offset, "jobs": jobs}
 
 
+@router.get("/jobs/mine")
+def get_my_jobs(
+    current_user: dict = Depends(get_current_user),
+):
+    """Get all jobs posted by the current user's tenant — all statuses."""
+    tenant_id = current_user.get("tenant_id")
+    user_id = str(current_user.get("id", ""))
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if tenant_id:
+            # Get jobs by tenant
+            cur.execute(
+                "SELECT * FROM jobs WHERE (tenant_id = %s OR posted_by = %s) "
+                "AND source = 'manual' ORDER BY created_at DESC"
+                if USE_POSTGRES else
+                "SELECT * FROM jobs WHERE (tenant_id = ? OR posted_by = ?) "
+                "AND source = 'manual' ORDER BY created_at DESC",
+                (tenant_id, user_id)
+            )
+        else:
+            # Fallback: get all manual jobs (admin)
+            cur.execute(
+                "SELECT * FROM jobs WHERE source = 'manual' ORDER BY created_at DESC"
+            )
+        jobs = [dict(r) for r in cur.fetchall()]
+    return {"jobs": jobs, "total": len(jobs)}
+
+
 @router.post("/jobs/backfill-industry")
 async def backfill_job_industries(
     current_user: dict = Depends(get_current_user),

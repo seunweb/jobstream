@@ -16,7 +16,7 @@ from core.database import (
     create_application, get_applications, update_application_status,
     start_scrape_run, finish_scrape_run, get_scrape_history,
 )
-from services.identity.dependencies import get_current_user
+from services.identity.dependencies import get_current_user, get_optional_user
 import logging
 log = logging.getLogger(__name__)
 
@@ -148,12 +148,21 @@ def list_jobs(
     company: str = Query(""),
     industry: str = Query(""),
     location: str = Query(""),
+    source: str = Query(""),
+    include_inactive: int = Query(0),
     limit: int = Query(100, le=500),
     offset: int = Query(0),
+    current_user: dict = Depends(get_optional_user),
 ):
+    # Employers can see their own inactive jobs
+    show_inactive = bool(include_inactive) and current_user and current_user.get("role") in (
+        "org_owner", "hr_admin", "super_admin", "platform_admin"
+    )
     jobs, total = get_jobs(
         search=search, job_type=job_type, department=department,
         company=company, industry=industry, location=location,
+        source=source,
+        include_inactive=show_inactive,
         limit=limit, offset=offset,
     )
     return {"total": total, "limit": limit, "offset": offset, "jobs": jobs}
@@ -575,7 +584,7 @@ async def create_manual_job(
                      description, salary, apply_url, source_url,
                      source, is_active, fingerprint, organization_id,
                      tenant_id, scraped_at, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',TRUE,%s,%s,%s,NOW(),NOW())
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',1,%s,%s,%s,NOW(),NOW())
                 RETURNING id
             """, (
                 body.title, body.company, body.location, body.job_type,
@@ -703,6 +712,35 @@ async def admin_update_job(
 
     log_job(AuditAction.JOB_UPDATED, str(current_user["id"]), job_id, f"admin_edit:{list(updates.keys())}")
     return {"message": "Job updated", "updated": list(updates.keys())}
+
+
+@router.patch("/jobs/{job_id}/feature")
+async def toggle_feature_job(
+    job_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """Toggle featured status on a manually posted job."""
+    if current_user.get("role") not in ("org_owner", "hr_admin", "super_admin", "platform_admin"):
+        raise HTTPException(403, "Not allowed")
+    with get_conn() as conn:
+        cur = conn.cursor()
+        # Get current featured status
+        cur.execute(
+            "SELECT is_featured FROM jobs WHERE id = %s" if USE_POSTGRES
+            else "SELECT is_featured FROM jobs WHERE id = ?",
+            (job_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Job not found")
+        current = dict(row).get("is_featured") or False
+        new_val = not current
+        cur.execute(
+            "UPDATE jobs SET is_featured = %s WHERE id = %s" if USE_POSTGRES
+            else "UPDATE jobs SET is_featured = ? WHERE id = ?",
+            (new_val, job_id)
+        )
+    return {"is_featured": new_val}
 
 
 @router.post("/admin/jobs/{job_id}/publish")

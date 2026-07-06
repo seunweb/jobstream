@@ -189,12 +189,14 @@ function UserMenu({ user, onLogout, isDark, setPage }) {
           </div>
           <div style={{ padding: "6px 0" }}>
             {[
-              { icon: "👤", label: "My Profile",      page: "profile" },
-              { icon: "📨", label: "My Applications", page: "myapps"  },
-              { icon: "🔖", label: "Saved Jobs",       page: "saved"   },
-              { icon: "🔔", label: "My Alerts",        page: "myalerts" },
-              { icon: "➕", label: "Post a Job",       page: "postjob"  },
-            ].map(({ icon, label, page }) => (
+              { icon: "👤", label: "My Profile",      page: "profile",  roles: null },
+              { icon: "📨", label: "My Applications", page: "myapps",   roles: null },
+              { icon: "🔖", label: "Saved Jobs",       page: "saved",    roles: null },
+              { icon: "🔔", label: "My Alerts",        page: "myalerts", roles: null },
+              { icon: "💼", label: "My Jobs",          page: "employer", roles: ["org_owner","hr_admin","super_admin","platform_admin"] },
+              { icon: "➕", label: "Post a Job",       page: "postjob",  roles: ["org_owner","hr_admin","super_admin","platform_admin"] },
+            ].filter(({ roles }) => !roles || roles.includes(user.role))
+             .map(({ icon, label, page }) => (
               <button key={label} onClick={() => { setOpen(false); setPage && setPage(page); }} style={{
                 display: "flex", alignItems: "center", gap: 10,
                 width: "100%", padding: "9px 16px",
@@ -1364,17 +1366,19 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
   const [showOnboard, setShowOnboard] = useState(false);
   const [tenant, setTenant] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [editingJob, setEditingJob] = useState(null);
   const [applications, setApplications] = useState([]);
   const [appsLoading, setAppsLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     Promise.all([
-      api("/jobs?source=manual&limit=100"),
+      api("/jobs?source=manual&limit=100&include_inactive=1"),
       api("/organizations"),
       api("/workspace/overview").catch(() => null),
     ]).then(([jobsData, orgs, _workspace]) => {
-      setJobs((jobsData.jobs || []).filter(j => j.source === "manual"));
+      // Show all manual jobs (active + unpublished) for the employer
+      setJobs((jobsData.jobs || []));
       setOrganizations(orgs);
       // tenant is populated separately via onboarding, not needed here
     }).catch(() => {})
@@ -1469,21 +1473,53 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {jobs.map(job => (
-              <div
-                key={job.id}
-                onClick={() => loadApplications(job)}
-                style={{ background: isDark ? "#141416" : "#ffffff", border: `1px solid ${selectedJob?.id === job.id ? "#0071E3" : (isDark ? "#2a2a32" : "#e0e0e8")}`, borderRadius: 12, padding: "14px 16px", cursor: "pointer", transition: "border-color 0.15s" }}
+              <div key={job.id}
+                style={{ background: isDark ? "#141416" : "#ffffff", border: `1px solid ${selectedJob?.id === job.id ? "#0071E3" : (isDark ? "#2a2a32" : "#e0e0e8")}`, borderRadius: 12, padding: "14px 16px", transition: "border-color 0.15s" }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 2 }}>{job.title}</div>
-                    <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{job.company} · {job.location}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <div onClick={() => loadApplications(job)} style={{ cursor: "pointer", flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{job.title}</div>
+                      {job.is_featured && <span style={{ fontSize: 10, fontWeight: 700, background: "#f59e0b", color: "#fff", padding: "2px 7px", borderRadius: 10 }}>⭐ Featured</span>}
+                      <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 10, fontWeight: 600,
+                        background: job.is_active ? "rgba(61,214,140,0.15)" : "rgba(248,113,113,0.15)",
+                        color: job.is_active ? "#3DD68C" : "#f87171" }}>
+                        {job.is_active ? "Published" : "Unpublished"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{job.company} · {job.location} · {job.job_type}</div>
                   </div>
-                  <button
-                    onClick={e => { e.stopPropagation(); deleteJob(job); }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#f87171", fontSize: 16, padding: 2 }}
-                    title="Remove job"
-                  >✕</button>
+                </div>
+                {/* Action buttons */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button onClick={() => loadApplications(job)}
+                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: "none", color: isDark ? "#888" : "#555", cursor: "pointer" }}>
+                    📋 Applications
+                  </button>
+                  <button onClick={() => setEditingJob(job)}
+                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: "none", color: isDark ? "#888" : "#555", cursor: "pointer" }}>
+                    ✏️ Edit
+                  </button>
+                  <button onClick={async () => {
+                    await api(`/jobs/${job.id}/feature`, { method: "PATCH" });
+                    const d = await api("/jobs?source=manual&limit=100&include_inactive=1");
+                    setJobs(d.jobs || []);
+                    toast(job.is_featured ? "Removed from featured" : "Job featured!");
+                  }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #f59e0b", background: "none", color: "#f59e0b", cursor: "pointer" }}>
+                    {job.is_featured ? "★ Unfeature" : "☆ Feature"}
+                  </button>
+                  <button onClick={async () => {
+                    await api(`/admin/jobs/${job.id}`, { method: "PATCH", body: JSON.stringify({ is_active: !job.is_active }) });
+                    const d = await api("/jobs?source=manual&limit=100&include_inactive=1");
+                    setJobs(d.jobs || []);
+                    toast(job.is_active ? "Job unpublished" : "Job published!");
+                  }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${job.is_active ? "#f87171" : "#3DD68C"}`, background: "none", color: job.is_active ? "#f87171" : "#3DD68C", cursor: "pointer" }}>
+                    {job.is_active ? "Unpublish" : "Publish"}
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); deleteJob(job); }}
+                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "none", background: "none", color: "#f87171", cursor: "pointer" }}>
+                    🗑 Delete
+                  </button>
                 </div>
               </div>
             ))}
@@ -1537,6 +1573,42 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
         )}
       </div>
 
+      {editingJob && (
+        <div onClick={() => setEditingJob(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#fff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto", padding: "24px 28px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", margin: 0 }}>Edit Job</h3>
+              <button onClick={() => setEditingJob(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888" }}>✕</button>
+            </div>
+            {["title","location","salary","department"].map(field => (
+              <div key={field} style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 5 }}>{field}</label>
+                <input value={editingJob[field] || ""} onChange={e => setEditingJob(j => ({...j, [field]: e.target.value}))}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
+              </div>
+            ))}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 5 }}>Description</label>
+              <RichTextarea value={editingJob.description || ""} onChange={val => setEditingJob(j => ({...j, description: val}))} isDark={isDark}
+                inp={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
+            </div>
+            <button onClick={async () => {
+              await api(`/admin/jobs/${editingJob.id}`, { method: "PATCH", body: JSON.stringify({
+                title: editingJob.title, location: editingJob.location,
+                salary: editingJob.salary, department: editingJob.department,
+                description: editingJob.description,
+              })});
+              const d = await api("/jobs?source=manual&limit=100&include_inactive=1");
+              setJobs(d.jobs || []);
+              setEditingJob(null);
+              toast("Job updated!");
+            }} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              Save changes
+            </button>
+          </div>
+        </div>
+      )}
+
       {showOnboard && (
         <TenantOnboardModal
           isDark={isDark}
@@ -1550,7 +1622,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
           isDark={isDark}
           organizations={organizations}
           onClose={() => setShowPostJob(false)}
-          onSuccess={msg => { toast(msg); setShowPostJob(false); api("/jobs?source=manual&limit=100").then(d => setJobs((d.jobs||[]).filter(j=>j.source==="manual"))); }}
+          onSuccess={msg => { toast(msg); setShowPostJob(false); api("/jobs?source=manual&limit=100&include_inactive=1").then(d => setJobs(d.jobs||[])); }}
         />
       )}
     </div>

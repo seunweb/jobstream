@@ -467,23 +467,18 @@ async def admin_patch_job(
     body = await request.json()
     with get_conn() as conn:
         cur = conn.cursor()
+        updatable = ["title", "description", "location", "salary", "department", "job_type"]
+        for field in updatable:
+            if field in body:
+                ph = "%s" if USE_POSTGRES else "?"
+                cur.execute(f"UPDATE jobs SET {field} = {ph} WHERE id = {ph}", (body[field], job_id))
         if "is_active" in body:
+            # Use integer 1/0 since column is SMALLINT
             val = 1 if body["is_active"] else 0
-            pg_val = True if body["is_active"] else False
             if USE_POSTGRES:
-                cur.execute("UPDATE jobs SET is_active = %s WHERE id = %s", (pg_val, job_id))
+                cur.execute("UPDATE jobs SET is_active = %s WHERE id = %s", (val, job_id))
             else:
                 cur.execute("UPDATE jobs SET is_active = ? WHERE id = ?", (val, job_id))
-        if "title" in body:
-            if USE_POSTGRES:
-                cur.execute("UPDATE jobs SET title = %s WHERE id = %s", (body["title"], job_id))
-            else:
-                cur.execute("UPDATE jobs SET title = ? WHERE id = ?", (body["title"], job_id))
-        if "description" in body:
-            if USE_POSTGRES:
-                cur.execute("UPDATE jobs SET description = %s WHERE id = %s", (body["description"], job_id))
-            else:
-                cur.execute("UPDATE jobs SET description = ? WHERE id = ?", (body["description"], job_id))
     return {"message": "Job updated"}
 
 

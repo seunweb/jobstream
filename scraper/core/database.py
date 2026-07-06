@@ -187,9 +187,24 @@ def init_db():
                 cur.execute(stmt)
     _migrate_industry_columns()
     _migrate_user_tracking_columns()
+    _migrate_featured_column()
     _migrate_alert_timezone_column()
     _seed_companies()
     logger.info("Database ready")
+
+
+def _migrate_featured_column():
+    """Add is_featured column to jobs if missing."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            try:
+                cur.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE")
+            except Exception: pass
+        else:
+            try:
+                cur.execute("ALTER TABLE jobs ADD COLUMN is_featured INTEGER DEFAULT 0")
+            except Exception: pass
 
 
 def _migrate_alert_timezone_column():
@@ -446,10 +461,15 @@ def get_jobs(
     company: str = "",
     industry: str = "",
     location: str = "",
+    source: str = "",
+    include_inactive: bool = False,
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[list[dict], int]:
-    conditions = ["is_active = 1"]
+    if include_inactive:
+        conditions = []  # show all including unpublished
+    else:
+        conditions = ["is_active = TRUE" if USE_POSTGRES else "is_active = 1"]
     params = []
 
     if search:
@@ -483,6 +503,9 @@ def get_jobs(
         else:
             conditions.append("location LIKE ?")
         params.append(f"%{location}%")
+    if source:
+        conditions.append("source = %s" if USE_POSTGRES else "source = ?")
+        params.append(source)
 
     where = " AND ".join(conditions)
 

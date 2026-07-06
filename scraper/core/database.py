@@ -469,7 +469,7 @@ def get_jobs(
     if include_inactive:
         conditions = []  # show all including unpublished
     else:
-        conditions = ["is_active = TRUE" if USE_POSTGRES else "is_active = 1"]
+        conditions = ["is_active = 1"]
     params = []
 
     if search:

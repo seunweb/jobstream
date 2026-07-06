@@ -58,7 +58,7 @@ def get_job_by_slug(slug: str):
             slug, re.IGNORECASE
         )
         # PostgreSQL uses boolean TRUE, SQLite uses integer 1
-        active_check = "is_active = TRUE" if USE_POSTGRES else "is_active = 1"
+        active_check = "is_active = 1"  # jobs.is_active is SMALLINT in both PG and SQLite
 
         if uuid_match:
             job_id = uuid_match.group(1)

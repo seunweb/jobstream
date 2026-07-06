@@ -473,12 +473,9 @@ async def admin_patch_job(
                 ph = "%s" if USE_POSTGRES else "?"
                 cur.execute(f"UPDATE jobs SET {field} = {ph} WHERE id = {ph}", (body[field], job_id))
         if "is_active" in body:
-            # Use integer 1/0 since column is SMALLINT
-            val = 1 if body["is_active"] else 0
-            if USE_POSTGRES:
-                cur.execute("UPDATE jobs SET is_active = %s WHERE id = %s", (val, job_id))
-            else:
-                cur.execute("UPDATE jobs SET is_active = ? WHERE id = ?", (val, job_id))
+            val = 1 if body["is_active"] else 0  # SMALLINT column — use 1/0
+            ph = "%s" if USE_POSTGRES else "?"
+            cur.execute(f"UPDATE jobs SET is_active = {ph} WHERE id = {ph}", (val, job_id))
     return {"message": "Job updated"}
 
 

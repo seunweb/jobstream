@@ -1502,7 +1502,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                   </button>
                   <button onClick={async () => {
                     await api(`/jobs/${job.id}/feature`, { method: "PATCH" });
-                    const d = const d = await api("/jobs/mine"); setJobs(d.jobs||[]);
+                    const d = await api("/jobs/mine"); setJobs(d.jobs||[]);
                     setJobs(d.jobs || []);
                     toast(job.is_featured ? "Removed from featured" : "Job featured!");
                   }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #f59e0b", background: "none", color: "#f59e0b", cursor: "pointer" }}>
@@ -1510,7 +1510,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                   </button>
                   <button onClick={async () => {
                     await api(`/admin/jobs/${job.id}`, { method: "PATCH", body: JSON.stringify({ is_active: !job.is_active }) });
-                    const d = const d = await api("/jobs/mine"); setJobs(d.jobs||[]);
+                    const d = await api("/jobs/mine"); setJobs(d.jobs||[]);
                     setJobs(d.jobs || []);
                     toast(job.is_active ? "Job unpublished" : "Job published!");
                   }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${job.is_active ? "#f87171" : "#3DD68C"}`, background: "none", color: job.is_active ? "#f87171" : "#3DD68C", cursor: "pointer" }}>
@@ -1598,7 +1598,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                 salary: editingJob.salary, department: editingJob.department,
                 description: editingJob.description,
               })});
-              const d = const d = await api("/jobs/mine"); setJobs(d.jobs||[]);
+              const d = await api("/jobs/mine"); setJobs(d.jobs||[]);
               setJobs(d.jobs || []);
               setEditingJob(null);
               toast("Job updated!");

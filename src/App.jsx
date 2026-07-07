@@ -426,7 +426,9 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
                 style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4, letterSpacing: -0.4, lineHeight: 1.3, cursor: "pointer" }}
                 onClick={(e) => { e.stopPropagation(); const slug = makeJobSlug(job.title, job.company, job.id); window.history.pushState({}, "", `/jobs/${slug}`); onView(job); }}
               >{job.title}</div>
-
+              {job.is_featured && (
+                <span style={{ fontSize: 10, fontWeight: 700, background: "#f59e0b", color: "#fff", padding: "2px 8px", borderRadius: 10, whiteSpace: "nowrap" }}>Featured</span>
+              )}
           </div>
             <div style={{ fontSize: 12, color: isDark ? "#666" : "#555" }}>{job.company}</div>
           </div>

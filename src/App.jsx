@@ -5,7 +5,7 @@ function getAccessToken() { return localStorage.getItem("js_access_token"); }
 function clearAuth() { ["js_access_token","js_refresh_token","js_user"].forEach(k => localStorage.removeItem(k)); }
 async function apiLogout(rt) { try { await fetch(`${API}/auth/logout`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({refresh_token: rt}) }); } catch {} }
 
-// ── Config ──────────────────────────────────────────────────────────────────
+// -- Config ------------------------------------------------------------------
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function slugify(text) {
@@ -50,7 +50,7 @@ async function api(path, opts = {}) {
         }
       } catch {}
     }
-    // Refresh failed — clear auth and reload
+    // Refresh failed - clear auth and reload
     clearAuth();
     window.location.reload();
     return;
@@ -61,7 +61,7 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-// ── Colour palette per company initial ─────────────────────────────────────
+// -- Colour palette per company initial -------------------------------------
 const LOGO_COLORS = [
   { bg: "#1a1a2e", fg: "#0071E3" },
   { bg: "#0f2318", fg: "#3DD68C" },
@@ -71,7 +71,7 @@ const LOGO_COLORS = [
   { bg: "#1a2010", fg: "#86efac" },
 ];
 
-// ── Utility Components ─────────────────────────────────────────────────────
+// -- Utility Components -----------------------------------------------------
 function Spinner() {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 48 }}>
@@ -99,7 +99,7 @@ function Toast({ msg, onClose }) {
   useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
   return (
     <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, background: "#1d1d1f", border: "1px solid #3DD68C", color: "#3DD68C", padding: "12px 20px", borderRadius: 10, fontSize: 13, fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 24px rgba(0,0,0,0.3)", animation: "slideUp 0.25s ease" }}>
-      ✓ {msg}
+      OK {msg}
     </div>
   );
 }
@@ -108,7 +108,7 @@ function StatCard({ label, value, sub, color = "#0071E3", isDark }) {
   return (
     <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px", flex: 1, minWidth: 140 }}>
       <div style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#666" : "#999", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: color, letterSpacing: -1, marginBottom: 4 }}>{value ?? "—"}</div>
+      <div style={{ fontSize: 28, fontWeight: 700, color: color, letterSpacing: -1, marginBottom: 4 }}>{value ?? "-"}</div>
       {sub && <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>{sub}</div>}
     </div>
   );
@@ -170,7 +170,7 @@ function UserMenu({ user, onLogout, isDark, setPage }) {
         <span style={{ fontSize: 13, fontWeight: 500, color: isDark ? "#e0e0e0" : "#1d1d1f" }}>
           {user.full_name?.split(" ")[0] || "Account"}
         </span>
-        <span style={{ fontSize: 10, color: isDark ? "#666" : "#999" }}>{open ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 10, color: isDark ? "#666" : "#999" }}>{open ? "^" : "v"}</span>
       </button>
 
       {open && (
@@ -194,7 +194,7 @@ function UserMenu({ user, onLogout, isDark, setPage }) {
               { icon: "🔖", label: "Saved Jobs",       page: "saved",    roles: null },
               { icon: "🔔", label: "My Alerts",        page: "myalerts", roles: null },
               { icon: "💼", label: "My Jobs",          page: "employer", roles: ["org_owner","hr_admin","super_admin","platform_admin"] },
-              { icon: "➕", label: "Post a Job",       page: "postjob",  roles: ["org_owner","hr_admin","super_admin","platform_admin"] },
+              { icon: "+", label: "Post a Job",       page: "postjob",  roles: ["org_owner","hr_admin","super_admin","platform_admin"] },
             ].filter(({ roles }) => !roles || roles.includes(user.role))
              .map(({ icon, label, page }) => (
               <button key={label} onClick={() => { setOpen(false); setPage && setPage(page); }} style={{
@@ -222,7 +222,7 @@ function UserMenu({ user, onLogout, isDark, setPage }) {
               onMouseEnter={(e) => e.currentTarget.style.background = isDark ? "#2a2a32" : "#fff0f0"}
               onMouseLeave={(e) => e.currentTarget.style.background = "none"}
             >
-              <span>↪</span> Sign out
+              <span>&larr;</span> Sign out
             </button>
           </div>
         </div>
@@ -256,7 +256,7 @@ function StatsBar({ isDark = true }) {
         { label: "Active jobs",   val: stats.jobs      },
         { label: "Companies",     val: stats.companies },
         { label: "Applications",  val: stats.apps      },
-        { label: "Last streamed",  val: stats.lastRun || "—" },
+        { label: "Last streamed",  val: stats.lastRun || "-" },
       ].map(({ label, val }) => (
         <div key={label} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 12, padding: "14px 16px" }}>
           <div style={{ fontSize: typeof val === "number" ? 24 : 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.5 }}>{val}</div>
@@ -287,7 +287,7 @@ function initials(name = "") {
   return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 }
 
-// Custom logo overrides — add company name key (lowercase no spaces) → URL
+// Custom logo overrides - add company name key (lowercase no spaces) -> URL
 const CUSTOM_LOGOS = {
   "t2mobile":    "https://www.t2mobile.com.ng/_next/static/media/logos.1d851e63.png",
   "mtn":         "https://www.mtn.com/wp-content/themes/mtn-refresh/public/img/mtn-logo.svg",
@@ -306,7 +306,7 @@ function getCustomLogo(name) {
   return null;
 }
 
-// Company logo — tries multiple logo sources with fallback chain
+// Company logo - tries multiple logo sources with fallback chain
 function CompanyLogo({ name, sourceUrl, size = 42 }) {
   const lc = logoColor(name);
   const ini = initials(name);
@@ -361,21 +361,21 @@ function CompanyLogo({ name, sourceUrl, size = 42 }) {
 }
 
 
-// ── Job Card ─────────────────────────────────────────────────────────────────
+// -- Job Card -----------------------------------------------------------------
 // Determine if a job accepts direct applications on JobStream
 // Rules:
-// - Scraped jobs (source === "scraped" or has source_url) → always redirect to company website
-// - Manually posted jobs with no source_url → accept direct JobStream applications
-// - If apply_url === source_url → no individual job URL found, redirect to company website
+// - Scraped jobs (source === "scraped" or has source_url) -> always redirect to company website
+// - Manually posted jobs with no source_url -> accept direct JobStream applications
+// - If apply_url === source_url -> no individual job URL found, redirect to company website
 function hasDirectApply(job) {
   // Manually posted jobs on JobStream (no source_url = posted directly)
   if (!job.source_url && !job.apply_url) return true;
   if (!job.source_url && job.apply_url) return true;
 
-  // Scraped jobs — always redirect to company website
+  // Scraped jobs - always redirect to company website
   if (job.source === "scraped") return false;
 
-  // If apply_url is missing or same as source listing page → redirect
+  // If apply_url is missing or same as source listing page -> redirect
   if (!job.apply_url) return false;
   try {
     const normalize = (u) => u.trim().replace(/\/+$/, "").toLowerCase();
@@ -391,7 +391,7 @@ function hasDirectApply(job) {
     }
   } catch { return false; }
 
-  // Has a unique job-level URL but was scraped → still redirect to company
+  // Has a unique job-level URL but was scraped -> still redirect to company
   if (job.source_url) return false;
 
   return true;
@@ -404,7 +404,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
 
   const postedDate = job.scraped_at
     ? new Date(job.scraped_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
-    : "—";
+    : "-";
 
   return (
     <div style={{
@@ -432,7 +432,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
             {isNew && <Chip variant="green" isDark={isDark}>New</Chip>}
-            <span style={{ fontSize: 14, color: "#555", transition: "transform 0.2s", display: "inline-block", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>⌄</span>
+            <span style={{ fontSize: 14, color: "#555", transition: "transform 0.2s", display: "inline-block", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>v</span>
           </div>
         </div>
 
@@ -456,7 +456,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
               onApply(job);
             }}
             disabled={!hasDirectApply(job)}
-            title={!hasDirectApply(job) ? "Apply on company website →" : !user ? "Sign in to apply" : "Apply now"}
+            title={!hasDirectApply(job) ? "Apply on company website &rarr;" : !user ? "Sign in to apply" : "Apply now"}
             style={{
               background: !hasDirectApply(job) ? (isDark ? "#2a2a32" : "#e0e0e0") : "#0071E3",
               border: "none", borderRadius: 8,
@@ -469,7 +469,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
             onMouseEnter={(e) => { e.currentTarget.style.background = "#0077ED"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = getComputedStyle(document.documentElement).getPropertyValue("--btn-primary") || "#0071E3"; }}
           >
-            {!user ? "Sign in to apply" : "Apply now →"}
+            {!user ? "Sign in to apply" : "Apply now ->"}
           </button>
         </div>
       </div>
@@ -493,7 +493,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
                         <ul key={`ul-${elements.length}`} style={{ paddingLeft: 0, margin: "6px 0 10px 0", listStyle: "none" }}>
                           {bulletGroup.map((b, bi) => (
                             <li key={bi} style={{ display: "flex", gap: 10, marginBottom: 5, alignItems: "flex-start" }}>
-                              <span style={{ color: isDark ? "#4DA3FF" : "#0071E3", flexShrink: 0, fontSize: 16, lineHeight: 1.4 }}>•</span>
+                              <span style={{ color: isDark ? "#4DA3FF" : "#0071E3", flexShrink: 0, fontSize: 16, lineHeight: 1.4 }}>-</span>
                               <span style={{ flex: 1, fontSize: 18, lineHeight: 1.9 }}>{b}</span>
                             </li>
                           ))}
@@ -524,7 +524,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
                           {headingText}
                         </div>
                       );
-                    } else if (line.startsWith("• ") || line.startsWith("• ")) {
+                    } else if (line.startsWith("- ") || line.startsWith("- ")) {
                       bulletGroup.push(line.slice(2));
                     } else if (line.trim() === "") {
                       flushBullets();
@@ -543,16 +543,16 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
               </div>
             ) : (
               <div style={{ fontSize: 13, color: "#555", lineHeight: 1.8 }}>
-                Full description available on the company website — click <strong style={{ color: "#4DA3FF" }}>Apply on company website</strong> below to view it.
+                Full description available on the company website - click <strong style={{ color: "#4DA3FF" }}>Apply on company website</strong> below to view it.
               </div>
             )}
           </div>
 
-          {/* Action buttons — wraps on mobile */}
+          {/* Action buttons - wraps on mobile */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", paddingTop: 16, borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed" }}>
             {/* Share */}
             <a
-              href={`https://wa.me/?text=${encodeURIComponent(`${job.title} at ${job.company} — Apply on JobStream: ${window.location.origin}`)}`}
+              href={`https://wa.me/?text=${encodeURIComponent(`${job.title} at ${job.company} - Apply on JobStream: ${window.location.origin}`)}`}
               target="_blank" rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
               style={{ display: "flex", alignItems: "center", gap: 4, background: "#25D366", border: "none", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#fff", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", fontWeight: 500, whiteSpace: "nowrap" }}
@@ -563,7 +563,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                navigator.clipboard.writeText(`${job.title} at ${job.company} — ${window.location.origin}`);
+                navigator.clipboard.writeText(`${job.title} at ${job.company} - ${window.location.origin}`);
                 toast && toast("Link copied!");
               }}
               style={{ background: isDark ? "#1e1e24" : "#f0f0f4", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
@@ -583,13 +583,13 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
               onClick={() => onView(job)}
               style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
             >
-              ✕ <span className="hide-on-xs">Close</span>
+              x <span className="hide-on-xs">Close</span>
             </button>
             {/* Apply on company website */}
             {job.apply_url && (
               <a href={job.apply_url} target="_blank" rel="noreferrer"
                 style={{ background: isDark ? "#1e1e2e" : "#e8e8ed", border: isDark ? "1px solid rgba(0,113,227,0.35)" : "1px solid #c7c7cc", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: isDark ? "#4DA3FF" : "#1d1d1f", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "none", fontWeight: 500, whiteSpace: "nowrap" }}>
-                🌐 <span className="hide-on-xs">Apply on company website →</span><span className="show-on-xs" style={{ display: "none" }}>Apply →</span>
+                🌐 <span className="hide-on-xs">Apply on company website &rarr;</span><span className="show-on-xs" style={{ display: "none" }}>Apply &rarr;</span>
               </a>
             )}
             {/* Apply now (direct) */}
@@ -601,7 +601,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
                 }}
                 style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
               >
-                {!user ? "Sign in to apply" : "Apply now →"}
+                {!user ? "Sign in to apply" : "Apply now ->"}
               </button>
             )}
           </div>
@@ -611,9 +611,9 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
   );
 }
 
-// ── Pages ─────────────────────────────────────────────────────────────────────
-// ── Apply Modal ──────────────────────────────────────────────────────────────
-// ── Reset Password Modal ─────────────────────────────────────────────────────
+// -- Pages ---------------------------------------------------------------------
+// -- Apply Modal --------------------------------------------------------------
+// -- Reset Password Modal -----------------------------------------------------
 function ResetPasswordModal({ token, onClose, onSuccess }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -652,7 +652,7 @@ function ResetPasswordModal({ token, onClose, onSuccess }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, padding: "36px 32px", width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
-          <div style={{ width: 30, height: 30, background: "var(--btn-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚡</div>
+          <div style={{ width: 30, height: 30, background: "var(--btn-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>*</div>
           <span style={{ fontSize: 17, fontWeight: 700, color: "#1d1d1f" }}>JobStream</span>
         </div>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1d1d1f", marginBottom: 4, letterSpacing: -0.5 }}>Choose new password</h2>
@@ -668,7 +668,7 @@ function ResetPasswordModal({ token, onClose, onSuccess }) {
             <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat password" required style={inp} />
           </div>
           <button type="submit" disabled={loading} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 600, background: loading ? "#ccc" : "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            {loading ? "Resetting…" : "Reset password"}
+            {loading ? "Resetting..." : "Reset password"}
           </button>
         </form>
       </div>
@@ -676,7 +676,7 @@ function ResetPasswordModal({ token, onClose, onSuccess }) {
   );
 }
 
-// ── Inline Auth Modal ────────────────────────────────────────────────────────
+// -- Inline Auth Modal --------------------------------------------------------
 function InlineAuthModal({ onClose, onSuccess }) {
   const [mode, setMode] = useState("login"); // login | register | forgot | reset_sent
   const [name, setName] = useState("");
@@ -736,7 +736,7 @@ function InlineAuthModal({ onClose, onSuccess }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, padding: "36px 32px", width: "100%", maxWidth: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
-          <div style={{ width: 30, height: 30, background: "var(--btn-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>⚡</div>
+          <div style={{ width: 30, height: 30, background: "var(--btn-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>*</div>
           <span style={{ fontSize: 17, fontWeight: 700, color: "#1d1d1f" }}>JobStream</span>
         </div>
         {mode !== "reset_sent" && (
@@ -773,7 +773,7 @@ function InlineAuthModal({ onClose, onSuccess }) {
             </div>
           )}
           <button type="submit" disabled={loading} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 600, background: loading ? "#ccc" : "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            {loading ? "Please wait…" : mode === "login" ? "Sign in" : mode === "forgot" ? "Send reset link" : "Create account"}
+            {loading ? "Please wait..." : mode === "login" ? "Sign in" : mode === "forgot" ? "Send reset link" : "Create account"}
           </button>
         </form>
         {mode === "reset_sent" ? (
@@ -788,7 +788,7 @@ function InlineAuthModal({ onClose, onSuccess }) {
     
             <p style={{ textAlign: "center", marginTop: 18, fontSize: 13, color: "#888" }}>
               {mode === "forgot" ? (
-                <span onClick={() => { setMode("login"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontWeight: 500 }}>← Back to sign in</span>
+                <span onClick={() => { setMode("login"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontWeight: 500 }}>&larr; Back to sign in</span>
               ) : mode === "login" ? (
                 <>No account? <span onClick={() => { setMode("register"); setError(""); }} style={{ color: "#0071E3", cursor: "pointer", fontWeight: 500 }}>Create one</span></>
               ) : (
@@ -836,9 +836,9 @@ function ApplyModal({ job, onClose, onSuccess, user }) {
         <div style={{ padding: "22px 24px 16px", borderBottom: "1px solid #e8e8f0", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 600, color: "#1d1d1f" }}>{job.title}</div>
-            <div style={{ fontSize: 12, color: "#888", marginTop: 3 }}>{job.company} · {job.location}</div>
+            <div style={{ fontSize: 12, color: "#888", marginTop: 3 }}>{job.company} &middot; {job.location}</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#888", fontSize: 20, cursor: "pointer" }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#888", fontSize: 20, cursor: "pointer" }}>x</button>
         </div>
         <div style={{ padding: "20px 24px" }}>
           {error && <div style={{ background: "#fff0f0", border: "1px solid #f5c6c6", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#c0392b", marginBottom: 16 }}>{error}</div>}
@@ -846,7 +846,7 @@ function ApplyModal({ job, onClose, onSuccess, user }) {
             { key: "name", label: "Full name *", placeholder: "Ada Okonkwo", type: "text" },
             { key: "email", label: "Email *", placeholder: "ada@email.com", type: "email" },
             { key: "phone", label: "Phone", placeholder: "+234 800 000 0000", type: "tel" },
-            { key: "resume_url", label: "Resume / CV link", placeholder: "https://linkedin.com/in/…", type: "text" },
+            { key: "resume_url", label: "Resume / CV link", placeholder: "https://linkedin.com/in/...", type: "text" },
           ].map(({ key, label, placeholder, type }) => (
             <div key={key} style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 11, color: "#666", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</label>
@@ -861,7 +861,7 @@ function ApplyModal({ job, onClose, onSuccess, user }) {
         <div style={{ padding: "16px 24px", borderTop: "1px solid #e8e8f0", display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ background: "none", border: "1px solid #d0d0d8", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: "#666", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
           <button onClick={submit} disabled={loading} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
-            {loading ? "Submitting…" : "Submit →"}
+            {loading ? "Submitting..." : "Submit ->"}
           </button>
         </div>
       </div>
@@ -897,7 +897,9 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
       const params = new URLSearchParams({ search: q, job_type: t, department: d, industry: ind, limit: 100 });
       if (ctr) params.set("location", ctr);
       const data = await api(`/jobs?${params}`);
-      setJobs(data.jobs); setTotal(data.total);
+      // Sort featured jobs first
+      const sorted = [...(data.jobs||[])].sort((a,b) => (b.is_featured ? 1 : 0) - (a.is_featured ? 1 : 0));
+      setJobs(sorted); setTotal(data.total);
     } catch (e) {
       setError("Cannot reach API at " + API + ". Is the backend running?");
     } finally { setLoading(false); }
@@ -940,7 +942,7 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
     setBackfilling(true);
     try {
       await api("/scrape/backfill-descriptions", { method: "POST" });
-      toast("Fetching descriptions in background — refresh in a few minutes.");
+      toast("Fetching descriptions in background - refresh in a few minutes.");
     } catch { toast("Failed to start backfill."); }
     finally { setBackfilling(false); }
   }
@@ -960,14 +962,14 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
               borderRadius: 9, padding: "8px 16px", fontSize: 12, color: backfilling ? "#666" : "#888",
               cursor: backfilling ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif",
             }}>
-              {backfilling ? "Fetching descriptions…" : "📄 Fetch all descriptions"}
+              {backfilling ? "Fetching descriptions..." : "📄 Fetch all descriptions"}
             </button>
             <button onClick={triggerScrape} disabled={scraping} style={{
               background: scraping ? "#1e1e24" : "#0071E3", border: "1px solid #3a3a42",
               borderRadius: 9, padding: "8px 16px", fontSize: 12, color: scraping ? "#666" : "#fff",
               cursor: scraping ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6,
             }}>
-              {scraping ? "Streaming…" : "⟳ Stream now"}
+              {scraping ? "Streaming..." : "< Stream now"}
             </button>
           </div>
         )}
@@ -977,7 +979,7 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
       <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 200, position: "relative" }}>
           <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "#555", fontSize: 14 }}>🔍</span>
-          <input value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search roles, companies…"
+          <input value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search roles, companies..."
             style={{ width: "100%", boxSizing: "border-box", background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 9, padding: "9px 12px 9px 34px", fontSize: 13, color: isDark ? "#f0f0f2" : "#1a1a1a", fontFamily: "'DM Sans', sans-serif", outline: "none" }}
           />
         </div>
@@ -1043,7 +1045,7 @@ function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
   );
 }
 
-// ── Post Job Modal ────────────────────────────────────────────────────────────
+// -- Post Job Modal ------------------------------------------------------------
 function RichTextarea({ value, onChange, isDark, inp }) {
   const taRef = useRef(null);
 
@@ -1083,9 +1085,9 @@ function RichTextarea({ value, onChange, isDark, inp }) {
     { label: "I",      title: "Italic",         style: { fontStyle: "italic" }, action: () => wrap("_", "_", "italic text") },
     { label: "H1",     title: "Heading 1",      style: { fontWeight: 700 }, action: () => insertLine("# ") },
     { label: "H2",     title: "Heading 2",      style: { fontWeight: 700 }, action: () => insertLine("## ") },
-    { label: "•",      title: "Bullet list",    style: {}, action: () => insertLine("• ") },
+    { label: "-",      title: "Bullet list",    style: {}, action: () => insertLine("- ") },
     { label: "1.",     title: "Numbered list",  style: {}, action: () => insertLine("1. ") },
-    { label: "———",    title: "Divider",        style: { letterSpacing: -1 }, action: () => {
+    { label: "---",    title: "Divider",        style: { letterSpacing: -1 }, action: () => {
       const ta = taRef.current;
       if (!ta) return;
       const pos = ta.selectionStart;
@@ -1110,7 +1112,7 @@ function RichTextarea({ value, onChange, isDark, inp }) {
           const ta = taRef.current;
           if (!ta) return;
           const s = ta.selectionStart, e = ta.selectionEnd;
-          const sel = value.slice(s, e).replace(/[*_#•]/g, "").trim();
+          const sel = value.slice(s, e).replace(/[*_#-]/g, "").trim();
           onChange(value.slice(0, s) + sel + value.slice(e));
         }} style={btnStyle}>Tx</button>
       </div>
@@ -1119,7 +1121,7 @@ function RichTextarea({ value, onChange, isDark, inp }) {
         ref={taRef}
         value={value}
         onChange={e => onChange(e.target.value)}
-        placeholder="Describe the role, responsibilities, and requirements…"
+        placeholder="Describe the role, responsibilities, and requirements..."
         style={{ ...inp, border: "none", borderRadius: 0, height: 200, resize: "vertical", outline: "none", width: "100%", boxSizing: "border-box" }}
       />
     </div>
@@ -1127,19 +1129,19 @@ function RichTextarea({ value, onChange, isDark, inp }) {
 }
 
 
-function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsProp = [] }) {
+function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsProp = [], onCreateWorkspace }) {
   const [form, setForm] = useState({
     title: "", company: "", organization_id: "",
     location: "Lagos, Nigeria", job_type: "Full-time",
     department: "General", description: "",
-    salary: "", apply_url: "", apply_email: "",
+    salary: "", apply_url: "", apply_email: "", apply_mode: "insite",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [organizations, setOrganizations] = useState(orgsProp);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  // Always load fresh organizations — include all so newly created ones appear
+  // Always load fresh organizations - include all so newly created ones appear
   useEffect(() => {
     // Try fetching with higher limit to get all orgs
     api("/organizations/all").then(data => {
@@ -1153,11 +1155,13 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
 
   async function handleSubmit(e) {
     e.preventDefault();
-    // Validate — company name is set from org selection
+    // Validate - company name is set from org selection
     const companyName = form.company || (organizations.find(o => o.id === form.organization_id)?.name || "");
     if (!form.title) { setError("Job title is required"); return; }
     if (!companyName && !form.organization_id) { setError("Please select a company"); return; }
-    if (!form.apply_url && !form.apply_email) { setError("Provide an apply URL or apply email"); return; }
+    if (form.apply_mode !== "insite" && !form.apply_url && !form.apply_email) {
+      setError("Provide an apply URL or email"); return;
+    }
 
     const payload = {
       ...form,
@@ -1171,7 +1175,7 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
       onSuccess("Job posted successfully!");
       onClose();
     } catch (err) {
-      setError(err.message || "Failed to post job — check all required fields");
+      setError(err.message || "Failed to post job - check all required fields");
     } finally {
       setLoading(false);
     }
@@ -1186,7 +1190,7 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
       <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ padding: "24px 28px 16px", borderBottom: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", margin: 0 }}>Post a job</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: isDark ? "#666" : "#888" }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: isDark ? "#666" : "#888" }}>x</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: "20px 28px" }}>
           {error && <div style={{ background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.3)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#f87171" }}>{error}</div>}
@@ -1199,15 +1203,20 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
             <div>
               <Label>Company *</Label>
               {organizations.length === 0 ? (
-                <div style={{ padding: "10px 14px", fontSize: 13, color: "#f87171", background: "rgba(248,113,113,0.08)", borderRadius: 8, border: "1px solid rgba(248,113,113,0.3)" }}>
-                  No registered companies found. Go to Streamer → click 🏢 on your company to register it first.
+                <div style={{ padding: "12px 14px", fontSize: 13, color: isDark ? "#f0f0f2" : "#1d1d1f", background: isDark ? "#1a1a1e" : "#f8f8fb", borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8" }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>No company linked to your account</div>
+                  <div style={{ fontSize: 12, color: isDark ? "#888" : "#666", marginBottom: 10 }}>Create a workspace first. Your company will appear here automatically once your workspace is set up.</div>
+                  <button type="button" onClick={() => { onClose(); onCreateWorkspace && onCreateWorkspace(); }}
+                    style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 7, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                    + Create workspace
+                  </button>
                 </div>
               ) : (
                 <select value={form.organization_id} onChange={e => {
                   const org = organizations.find(o => o.id === e.target.value);
                   setForm(f => ({ ...f, organization_id: e.target.value, company: org?.name || "" }));
                 }} required style={sel}>
-                  <option value="">— Select company —</option>
+                  <option value="">- Select company -</option>
                   {organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
               )}
@@ -1234,7 +1243,7 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
             </div>
             <div>
               <Label>Salary (optional)</Label>
-              <input value={form.salary} onChange={set("salary")} placeholder="e.g. ₦300,000/month" style={inp} />
+              <input value={form.salary} onChange={set("salary")} placeholder="e.g. N300,000/month" style={inp} />
             </div>
           </div>
 
@@ -1250,21 +1259,45 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
 
           <div style={{ background: isDark ? "#1a1a1e" : "#f8f8fb", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
             <Label>How should candidates apply?</Label>
-            <div style={{ marginBottom: 10 }}>
-              <label style={{ fontSize: 12, color: isDark ? "#888" : "#666", display: "block", marginBottom: 4 }}>Apply URL (external link)</label>
-              <input value={form.apply_url} onChange={set("apply_url")} placeholder="https://company.com/careers/apply" style={inp} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+              {[
+                { val: "insite",  label: "Accept applications on JobStream", desc: "Candidates apply directly on this platform. Applications appear in your dashboard." },
+                { val: "url",     label: "External URL", desc: "Redirect candidates to your own careers page." },
+                { val: "email",   label: "By email", desc: "Candidates send their CV to your email address." },
+              ].map(opt => (
+                <label key={opt.val} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", padding: "10px 12px", borderRadius: 8, border: form.apply_mode === opt.val ? "1px solid #0071E3" : (isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8"), background: form.apply_mode === opt.val ? "rgba(0,113,227,0.08)" : "transparent" }}>
+                  <input type="radio" name="apply_mode" value={opt.val}
+                    checked={form.apply_mode === opt.val}
+                    onChange={() => setForm(f => ({ ...f, apply_mode: opt.val }))}
+                    style={{ marginTop: 3, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{opt.label}</div>
+                    <div style={{ fontSize: 11, color: isDark ? "#666" : "#888", marginTop: 2 }}>{opt.desc}</div>
+                  </div>
+                </label>
+              ))}
             </div>
-            <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", textAlign: "center", margin: "8px 0" }}>— or —</div>
-            <div>
-              <label style={{ fontSize: 12, color: isDark ? "#888" : "#666", display: "block", marginBottom: 4 }}>Apply by email</label>
-              <input value={form.apply_email} onChange={set("apply_email")} placeholder="hr@company.com" type="email" style={inp} />
-            </div>
+            {form.apply_mode === "url" && (
+              <input value={form.apply_url} onChange={set("apply_url")}
+                placeholder="https://company.com/careers/apply"
+                style={{ ...inp, marginTop: 4 }} />
+            )}
+            {form.apply_mode === "email" && (
+              <input value={form.apply_email} onChange={set("apply_email")}
+                placeholder="hr@company.com" type="email"
+                style={{ ...inp, marginTop: 4 }} />
+            )}
+            {form.apply_mode === "insite" && (
+              <div style={{ fontSize: 12, color: "#3DD68C", padding: "8px 12px", background: "rgba(61,214,140,0.1)", borderRadius: 8, marginTop: 4 }}>
+                Candidates will apply directly on JobStream. You will receive applications in your employer dashboard.
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button type="button" onClick={onClose} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "10px 20px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
             <button type="submit" disabled={loading} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
-              {loading ? "Posting…" : "Post job"}
+              {loading ? "Posting..." : "Post job"}
             </button>
           </div>
         </form>
@@ -1274,11 +1307,12 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
 }
 
 
-// ── Employer Dashboard Page ───────────────────────────────────────────────────
-// ── Tenant Onboard Modal ─────────────────────────────────────────────────────
+// -- Employer Dashboard Page ---------------------------------------------------
+// -- Tenant Onboard Modal -----------------------------------------------------
 function TenantOnboardModal({ isDark = true, onClose, onSuccess }) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [industry, setIndustry] = useState("");
   const [slugAvailable, setSlugAvailable] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1307,7 +1341,7 @@ function TenantOnboardModal({ isDark = true, onClose, onSuccess }) {
     if (!slugAvailable) { setError("Choose an available workspace URL"); return; }
     setLoading(true); setError("");
     try {
-      const res = await api("/tenants/onboard", { method: "POST", body: JSON.stringify({ name, slug }) });
+      const res = await api("/tenants/onboard", { method: "POST", body: JSON.stringify({ name, slug, industry }) });
       onSuccess(res.tenant);
     } catch (e) {
       setError(e.message || "Failed to create workspace");
@@ -1330,6 +1364,14 @@ function TenantOnboardModal({ isDark = true, onClose, onSuccess }) {
             <input value={name} onChange={handleNameChange} placeholder="Acme Corp" required style={inp} />
           </div>
 
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 6 }}>Industry</label>
+            <select value={industry} onChange={e => setIndustry(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+              <option value="">Select industry...</option>
+              {["Agriculture","Banking & Finance","Consulting","Education","Energy & Utilities","FMCG","Government & NGO","Healthcare","Hospitality & Tourism","Information Technology","Insurance","Legal","Logistics & Supply Chain","Manufacturing","Media & Entertainment","Oil & Gas","Real Estate & Construction","Retail & E-commerce","Telecommunications"].map(i => <option key={i} value={i}>{i}</option>)}
+            </select>
+          </div>
+
           <div style={{ marginBottom: 24 }}>
             <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 6 }}>Workspace URL</label>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1337,7 +1379,7 @@ function TenantOnboardModal({ isDark = true, onClose, onSuccess }) {
               <input value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder="acme-corp" required style={{ ...inp, flex: 1 }} />
               {slug.length >= 3 && (
                 <span style={{ fontSize: 18, flexShrink: 0 }}>
-                  {slugAvailable === true ? "✅" : slugAvailable === false ? "❌" : "⏳"}
+                  {slugAvailable === true ? "OK" : slugAvailable === false ? "x" : "..."}
                 </span>
               )}
             </div>
@@ -1348,7 +1390,7 @@ function TenantOnboardModal({ isDark = true, onClose, onSuccess }) {
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button type="button" onClick={onClose} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "10px 20px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
             <button type="submit" disabled={loading || !slugAvailable} style={{ background: slugAvailable ? "#0071E3" : "#888", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: slugAvailable ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
-              {loading ? "Creating…" : "Create workspace"}
+              {loading ? "Creating..." : "Create workspace"}
             </button>
           </div>
         </form>
@@ -1369,17 +1411,22 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
   const [editingJob, setEditingJob] = useState(null);
   const [applications, setApplications] = useState([]);
   const [appsLoading, setAppsLoading] = useState(false);
+  const [empTab, setEmpTab] = useState("jobs"); // jobs | applications | team
+  const [team, setTeam] = useState([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("recruiter");
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     Promise.all([
       api("/jobs/mine"),
-      api("/organizations"),
+      api("/organizations/all").catch(() => []),
       api("/workspace/overview").catch(() => null),
     ]).then(([jobsData, orgs, _workspace]) => {
       // Show all manual jobs (active + unpublished) for the employer
       setJobs((jobsData.jobs || []));
-      setOrganizations(orgs);
+      setOrganizations(Array.isArray(orgs) ? orgs : []);
       // tenant is populated separately via onboarding, not needed here
     }).catch(() => {})
     .finally(() => setLoading(false));
@@ -1444,7 +1491,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
             <p style={{ fontSize: 13, color: isDark ? "#666" : "#888", margin: 0 }}>{jobs.length} active job{jobs.length !== 1 ? "s" : ""} posted</p>
             {tenant ? (
               <span style={{ fontSize: 11, background: "rgba(0,113,227,0.1)", color: "#0071E3", padding: "2px 10px", borderRadius: 20, fontWeight: 500 }}>
-                {tenant.name} · {tenant.plan}
+                {tenant.name} &middot; {tenant.plan}
               </span>
             ) : (
               <button onClick={() => setShowOnboard(true)} style={{ fontSize: 11, background: "rgba(61,214,140,0.1)", color: "#3DD68C", border: "1px solid rgba(61,214,140,0.3)", padding: "2px 10px", borderRadius: 20, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
@@ -1480,14 +1527,14 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                   <div onClick={() => loadApplications(job)} style={{ cursor: "pointer", flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{job.title}</div>
-                      {job.is_featured && <span style={{ fontSize: 10, fontWeight: 700, background: "#f59e0b", color: "#fff", padding: "2px 7px", borderRadius: 10 }}>⭐ Featured</span>}
+                      {job.is_featured && <span style={{ fontSize: 10, fontWeight: 700, background: "#f59e0b", color: "#fff", padding: "2px 7px", borderRadius: 10 }}>* Featured</span>}
                       <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 10, fontWeight: 600,
                         background: job.is_active ? "rgba(61,214,140,0.15)" : "rgba(248,113,113,0.15)",
                         color: job.is_active ? "#3DD68C" : "#f87171" }}>
                         {job.is_active ? "Published" : "Unpublished"}
                       </span>
                     </div>
-                    <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{job.company} · {job.location} · {job.job_type}</div>
+                    <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{job.company} &middot; {job.location} &middot; {job.job_type}</div>
                   </div>
                 </div>
                 {/* Action buttons */}
@@ -1498,7 +1545,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                   </button>
                   <button onClick={() => setEditingJob(job)}
                     style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: "none", color: isDark ? "#888" : "#555", cursor: "pointer" }}>
-                    ✏️ Edit
+                    * Edit
                   </button>
                   <button onClick={async () => {
                     await api(`/jobs/${job.id}/feature`, { method: "PATCH" });
@@ -1506,7 +1553,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                     setJobs(d.jobs || []);
                     toast(job.is_featured ? "Removed from featured" : "Job featured!");
                   }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #f59e0b", background: "none", color: "#f59e0b", cursor: "pointer" }}>
-                    {job.is_featured ? "★ Unfeature" : "☆ Feature"}
+                    {job.is_featured ? "* Unfeature" : "o Feature"}
                   </button>
                   <button onClick={async () => {
                     await api(`/admin/jobs/${job.id}`, { method: "PATCH", body: JSON.stringify({ is_active: !job.is_active }) });
@@ -1530,7 +1577,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
         {selectedJob && (
           <div>
             <h2 style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#888" : "#666", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              Applications — {selectedJob.title}
+              Applications - {selectedJob.title}
             </h2>
             {appsLoading && <Spinner />}
             {!appsLoading && applications.length === 0 && (
@@ -1571,6 +1618,58 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
             </div>
           </div>
         )}
+
+        </div>
+
+      {/* Team Section */}
+      <div style={{ marginTop: 24 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#888" : "#666", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>Team</h2>
+        <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "16px 18px", marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Invite a team member</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
+              placeholder="colleague@company.com"
+              style={{ flex: 1, minWidth: 180, padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#1a1a1e" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
+            <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}
+              style={{ padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#1a1a1e" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none", cursor: "pointer" }}>
+              <option value="hr_admin">HR Admin</option>
+              <option value="recruiter">Recruiter</option>
+              <option value="hiring_manager">Hiring Manager</option>
+              <option value="interviewer">Interviewer</option>
+            </select>
+            <button onClick={async () => {
+              if (!inviteEmail) return;
+              setInviteLoading(true);
+              try {
+                const res = await api("/workspace/team/invite", { method: "POST", body: JSON.stringify({ email: inviteEmail, role: inviteRole }) });
+                toast(res.email_sent ? `Invitation sent to ${inviteEmail}` : `Invite link: ${res.accept_url}`);
+                setInviteEmail("");
+              } catch (e) { toast(e.message || "Failed"); }
+              finally { setInviteLoading(false); }
+            }} disabled={inviteLoading}
+              style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
+              {inviteLoading ? "Sending..." : "Send invite"}
+            </button>
+          </div>
+        </div>
+        {team.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {team.map(m => (
+              <div key={m.id} style={{ background: isDark ? "#141416" : "#fff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#0071E3", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13 }}>
+                    {(m.full_name || m.email || "?")[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{m.full_name || m.email}</div>
+                    <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>{m.email}</div>
+                  </div>
+                </div>
+                <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: isDark ? "#1a1a1e" : "#f0f0f4", color: isDark ? "#888" : "#555" }}>{m.role}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {editingJob && (
@@ -1578,7 +1677,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
           <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#fff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto", padding: "24px 28px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", margin: 0 }}>Edit Job</h3>
-              <button onClick={() => setEditingJob(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888" }}>✕</button>
+              <button onClick={() => setEditingJob(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888" }}>&times;</button>
             </div>
             {["title","location","salary","department"].map(field => (
               <div key={field} style={{ marginBottom: 14 }}>
@@ -1622,6 +1721,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
           isDark={isDark}
           organizations={organizations}
           onClose={() => setShowPostJob(false)}
+          onCreateWorkspace={() => { setShowPostJob(false); setShowOnboard(true); }}
           onSuccess={msg => { toast(msg); setShowPostJob(false); api("/jobs/mine").then(d => setJobs(d.jobs||[])); }}
         />
       )}
@@ -1631,8 +1731,8 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
 
 
 
-// ── Platform Admin Dashboard ──────────────────────────────────────────────────
-// ── Email Template Editor ────────────────────────────────────────────────────
+// -- Platform Admin Dashboard --------------------------------------------------
+// -- Email Template Editor ----------------------------------------------------
 function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
   setTemplateDirty, saveTemplate, resetTemplate, toast, user }) {
 
@@ -1640,9 +1740,9 @@ function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
   const [sending, setSending] = useState(false);
   const [testEmail, setTestEmail] = useState(user?.email || "");
 
-  // GUI design state — maps to template placeholders
+  // GUI design state - maps to template placeholders
   const [guiSettings, setGuiSettings] = useState(() => ({
-    headerTitle: "⚡ JobStream",
+    headerTitle: "* JobStream",
     headerSubtitle: "New jobs for you",
     accentColor: "#0071E3",
     bgColor: "#f4f4f6",
@@ -1667,7 +1767,7 @@ function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
       <div style="padding:12px 0;border-bottom:1px solid #f0f0f4">
         <a href="#" style="font-size:14px;font-weight:600;color:${settings.accentColor};text-decoration:none">${j.title}</a>
         <div style="font-size:12px;color:#888;margin-top:3px">
-          ${j.company}${settings.showLocation ? ` · ${j.location}` : ""}${settings.showIndustry && j.industry ? ` · ${j.industry}` : ""}
+          ${j.company}${settings.showLocation ? ` - ${j.location}` : ""}${settings.showIndustry && j.industry ? ` &middot; ${j.industry}` : ""}
         </div>
       </div>`).join("");
 
@@ -1678,7 +1778,7 @@ function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
   <h1 style="font-size:18px;color:#1d1d1f;margin:0 0 4px">${settings.headerTitle}</h1>
   <h2 style="font-size:20px;color:#1d1d1f;margin:0 0 6px">${settings.headerSubtitle}</h2>
   <p style="font-size:13px;color:#888;margin:0 0 20px">
-    Matching: <strong>Network Engineer, Software Developer</strong> · Lagos, Nigeria · Telecommunications
+    Matching: <strong>Network Engineer, Software Developer</strong> &middot; Lagos, Nigeria &middot; Telecommunications
   </p>
   ${jobsHtml}
   <div style="text-align:center;margin-top:24px">
@@ -1704,7 +1804,7 @@ function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
   <h1 style="font-size:18px;color:#1d1d1f;margin:0 0 4px">${settings.headerTitle}</h1>
   <h2 style="font-size:20px;color:#1d1d1f;margin:0 0 6px">${settings.headerSubtitle}</h2>
   <p style="font-size:13px;color:#888;margin:0 0 20px">
-    Matching: <strong>{{keywords}}</strong>{{#if location}} · {{location}}{{/if}}{{#if industry}} · {{industry}}{{/if}}
+    Matching: <strong>{{keywords}}</strong>{{#if location}} &middot; {{location}}{{/if}}{{#if industry}} &middot; {{industry}}{{/if}}
   </p>
   {{jobs_html}}
   <div style="text-align:center;margin-top:24px">
@@ -1851,13 +1951,13 @@ function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
           style={{ ...inp, width: 200 }} />
         <button onClick={sendTestEmail} disabled={sending}
           style={{ background: "#9B59B6", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: sending ? 0.7 : 1 }}>
-          {sending ? "Sending…" : "📧 Send test"}
+          {sending ? "Sending..." : "📧 Send test"}
         </button>
         <div style={{ flex: 1 }} />
         <button onClick={resetTemplate} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "7px 14px", fontSize: 12, color: isDark ? "#666" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Reset</button>
         <button onClick={saveTemplate} disabled={!templateDirty}
           style={{ background: templateDirty ? "#0071E3" : (isDark ? "#222" : "#ddd"), border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: templateDirty ? "#fff" : (isDark ? "#444" : "#aaa"), cursor: templateDirty ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
-          {templateDirty ? "Save template" : "✓ Saved"}
+          {templateDirty ? "Save template" : "OK Saved"}
         </button>
       </div>
     </div>
@@ -1865,21 +1965,21 @@ function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
 }
 
 
-// ── Nav Settings Editor ──────────────────────────────────────────────────────
+// -- Nav Settings Editor ------------------------------------------------------
 function NavSettingsEditor({ isDark, toast }) {
   const ALL_ITEMS = [
     { id: "jobs",         label: "💼 Jobs" },
     { id: "companies",    label: "🏢 Companies" },
-    { id: "postjob",      label: "➕ Post a Job" },
+    { id: "postjob",      label: "+ Post a Job" },
     { id: "myapps",       label: "📨 My Applications" },
     { id: "saved",        label: "🔖 Saved Jobs" },
     { id: "employer",     label: "🏢 Employer Dashboard" },
     { id: "applications", label: "📋 Applications Pipeline" },
-    { id: "ai",           label: "✨ AI Tools" },
+    { id: "ai",           label: "* AI Tools" },
     { id: "billing",      label: "💳 Billing" },
     { id: "analytics",    label: "📊 Analytics" },
     { id: "workspace",    label: "📊 Workspace" },
-    { id: "admin",        label: "⚙️ Admin" },
+    { id: "admin",        label: "* Admin" },
     { id: "scraper",      label: "🤖 Streamer" },
   ];
 
@@ -1887,7 +1987,7 @@ function NavSettingsEditor({ isDark, toast }) {
     { key: "guest",     label: "👤 Guests (not logged in)" },
     { key: "candidate", label: "🎓 Candidates" },
     { key: "employer",  label: "🏢 Employers / HR" },
-    { key: "admin",     label: "⚙️ Admins" },
+    { key: "admin",     label: "* Admins" },
   ];
 
   const DEFAULT = {
@@ -1923,7 +2023,7 @@ function NavSettingsEditor({ isDark, toast }) {
     try {
       await api("/admin/settings/nav", { method: "POST", body: JSON.stringify(settings) });
       setDirty(false);
-      toast("Nav settings saved — users will see changes on next page load");
+      toast("Nav settings saved - users will see changes on next page load");
     } catch(e) { toast(e.message || "Failed to save"); }
   }
 
@@ -1962,7 +2062,7 @@ function NavSettingsEditor({ isDark, toast }) {
         <button onClick={resetToDefault} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "7px 14px", fontSize: 12, color: isDark ? "#666" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Reset defaults</button>
         <button onClick={save} disabled={!dirty}
           style={{ background: dirty ? "#0071E3" : (isDark ? "#222" : "#ddd"), border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: dirty ? "#fff" : (isDark ? "#444" : "#aaa"), cursor: dirty ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
-          {dirty ? "Save nav settings" : "✓ Saved"}
+          {dirty ? "Save nav settings" : "OK Saved"}
         </button>
       </div>
     </div>
@@ -2139,7 +2239,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
     { id: "tenants",   label: "🏢 Tenants"   },
     { id: "users",     label: "👥 Users"     },
     { id: "alerts",    label: "🔔 Alerts"    },
-    { id: "settings",  label: "⚙️ Settings"  },
+    { id: "settings",  label: "* Settings"  },
   ];
 
   const tabStyle = (t) => ({
@@ -2213,7 +2313,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
               <div key={t.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{t.name}</div>
-                  <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>/{t.slug} · {t.country}</div>
+                  <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>/{t.slug} &middot; {t.country}</div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <span style={{ fontSize: 11, background: "rgba(0,113,227,0.1)", color: "#0071E3", padding: "2px 10px", borderRadius: 20 }}>{t.plan}</span>
@@ -2241,7 +2341,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
           {/* Search + filter bar */}
           <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
             <input value={userSearch} onChange={e => setUserSearch(e.target.value)}
-              placeholder="Search name or email…"
+              placeholder="Search name or email..."
               style={{ flex: 1, minWidth: 160, padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#1a1a1e" : "#f8f8fb", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
             <select value={userRoleFilter} onChange={e => setUserRoleFilter(e.target.value)}
               style={{ padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#1a1a1e" : "#f8f8fb", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none", cursor: "pointer" }}>
@@ -2315,8 +2415,8 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                     <div style={{ fontSize: 11, color: isDark ? "#555" : "#888", marginTop: 2 }}>{u.email}</div>
                     <div style={{ fontSize: 11, color: isDark ? "#444" : "#aaa", marginTop: 2 }}>
                       Last login: {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Never"}
-                      {u.last_ip ? ` · IP: ${u.last_ip}` : ""}
-                      {u.mfa_enabled ? " · 🔐 2FA on" : " · 2FA off"}
+                      {u.last_ip ? ` - IP: ${u.last_ip}` : ""}
+                      {u.mfa_enabled ? " - 🔐 2FA on" : " - 2FA off"}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", flexShrink: 0 }}>
@@ -2363,7 +2463,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
               value={jobSearch}
               onChange={e => setJobSearch(e.target.value)}
               onKeyDown={e => e.key === "Enter" && loadTab("jobs")}
-              placeholder="Search title or company…"
+              placeholder="Search title or company..."
               style={{ flex: 1, minWidth: 180, padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#1a1a1e" : "#f8f8fb", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }}
             />
             <select value={jobStatusFilter} onChange={e => { setJobStatusFilter(e.target.value); loadTab("jobs"); }}
@@ -2445,8 +2545,8 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{j.title}</div>
                   <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 2 }}>
-                    {j.company} · {j.job_type} · {j.department}
-                    {j.industry ? ` · 🏷 ${j.industry}` : ""}
+                    {j.company} &middot; {j.job_type} &middot; {j.department}
+                    {j.industry ? ` - 🏷 ${j.industry}` : ""}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0, flexWrap: "wrap" }}>
@@ -2455,11 +2555,11 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                   </span>
                   <button onClick={() => setEditingJob(j)}
                     style={{ fontSize: 11, background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: isDark ? "#888" : "#555", fontFamily: "'DM Sans', sans-serif" }}>
-                    ✏️ Edit
+                    * Edit
                   </button>
                   <button onClick={() => adminJobAction(j.is_active ? "unpublish" : "publish", j)}
                     style={{ fontSize: 11, background: j.is_active ? "rgba(245,166,35,0.1)" : "rgba(61,214,140,0.1)", border: j.is_active ? "1px solid rgba(245,166,35,0.3)" : "1px solid rgba(61,214,140,0.3)", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: j.is_active ? "#F5A623" : "#3DD68C", fontFamily: "'DM Sans', sans-serif" }}>
-                    {j.is_active ? "⏸ Unpublish" : "▶ Publish"}
+                    {j.is_active ? "|| Unpublish" : "> Publish"}
                   </button>
                   <button onClick={() => { if (window.confirm("Permanently delete this job and all its applications?")) adminJobAction("delete", j); }}
                     style={{ fontSize: 11, background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.3)", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: "#f87171", fontFamily: "'DM Sans', sans-serif" }}>
@@ -2475,14 +2575,14 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16, justifyContent: "center" }}>
               <button onClick={() => setJobPage(p => Math.max(0, p-1))} disabled={jobPage === 0}
                 style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "6px 14px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: jobPage === 0 ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: jobPage === 0 ? 0.4 : 1 }}>
-                ← Prev
+                &larr; Prev
               </button>
               <span style={{ fontSize: 12, color: isDark ? "#555" : "#aaa" }}>
                 Page {jobPage + 1} of {Math.ceil(jobs.length / JOB_PAGE_SIZE)} ({jobs.length} jobs)
               </span>
               <button onClick={() => setJobPage(p => p + 1)} disabled={(jobPage + 1) * JOB_PAGE_SIZE >= jobs.length}
                 style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "6px 14px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: (jobPage + 1) * JOB_PAGE_SIZE >= jobs.length ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: (jobPage + 1) * JOB_PAGE_SIZE >= jobs.length ? 0.4 : 1 }}>
-                Next →
+                Next &rarr;
               </button>
             </div>
           )}
@@ -2494,11 +2594,11 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa" }}>
-              {alerts.length} alerts — open count updates when recipient clicks a job link
+              {alerts.length} alerts - open count updates when recipient clicks a job link
             </div>
             <button onClick={() => loadTab("alerts")}
               style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "5px 12px", fontSize: 11, color: isDark ? "#666" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-              ↺ Refresh
+              &#8635; Refresh
             </button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2507,9 +2607,9 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                 <div style={{ flex: 1, minWidth: 180 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{a.keywords}</div>
                   <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 2 }}>
-                    {a.email} · {a.frequency} at {a.send_time}
-                    {a.location ? ` · 📍 ${a.location}` : ""}
-                    {a.industry ? ` · 🏷 ${a.industry}` : ""}
+                    {a.email} &middot; {a.frequency} at {a.send_time}
+                    {a.location ? ` - 📍 ${a.location}` : ""}
+                    {a.industry ? ` - 🏷 ${a.industry}` : ""}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 16, fontSize: 12, flexShrink: 0 }}>
@@ -2522,8 +2622,8 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                     <div style={{ color: isDark ? "#555" : "#aaa", fontSize: 10 }}>Opened</div>
                   </div>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontWeight: 600, color: a.emails_sent ? Math.round((a.emails_opened||0)/(a.emails_sent)*100) + "%" : "—", fontSize: 11 }}>
-                      {a.emails_sent ? Math.round((a.emails_opened||0)/a.emails_sent*100) + "%" : "—"}
+                    <div style={{ fontWeight: 600, color: a.emails_sent ? Math.round((a.emails_opened||0)/(a.emails_sent)*100) + "%" : "-", fontSize: 11 }}>
+                      {a.emails_sent ? Math.round((a.emails_opened||0)/a.emails_sent*100) + "%" : "-"}
                     </div>
                     <div style={{ color: isDark ? "#555" : "#aaa", fontSize: 10 }}>Open rate</div>
                   </div>
@@ -2563,14 +2663,14 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
       {/* Settings */}
       {tab === "settings" && !loading && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "start" }}>
-          {/* Sidebar Nav Control — per user group */}
+          {/* Sidebar Nav Control - per user group */}
           <div style={{ gridColumn: "1 / -1", background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px", marginBottom: 4 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>Sidebar Menu Control</div>
             <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa", marginBottom: 16 }}>Choose which menu items each user type sees in the sidebar</div>
             <NavSettingsEditor isDark={isDark} toast={toast} />
           </div>
 
-          {/* Email template editor — FIRST */}
+          {/* Email template editor - FIRST */}
           <EmailTemplateEditor isDark={isDark} template={template} setTemplate={setTemplate}
             templateDirty={templateDirty} setTemplateDirty={setTemplateDirty}
             saveTemplate={saveTemplate} resetTemplate={resetTemplate} toast={toast} user={user} />
@@ -2603,11 +2703,11 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
               try {
                 await api("/admin/settings/brand", { method: "POST", body: JSON.stringify(brandSettings) });
                 setBrandDirty(false);
-                toast("Brand settings saved — reload to see changes");
+                toast("Brand settings saved - reload to see changes");
               } catch(e) { toast(e.message || "Failed"); }
             }} disabled={!brandDirty}
               style={{ background: brandDirty ? "#0071E3" : (isDark ? "#222" : "#ddd"), border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: brandDirty ? "#fff" : (isDark ? "#444" : "#aaa"), cursor: brandDirty ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
-              {brandDirty ? "Save brand" : "✓ Saved"}
+              {brandDirty ? "Save brand" : "OK Saved"}
             </button>
           </div>
 
@@ -2622,7 +2722,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                 onChange={e => { setStreamerHours(Number(e.target.value)); setStreamerDirty(true); }}
                 style={{ width: 80, padding: "7px 10px", fontSize: 13, borderRadius: 7, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
               <span style={{ fontSize: 12, color: isDark ? "#555" : "#aaa" }}>
-                {streamerHours === 1 ? "hour" : "hours"} (1–168). Currently: every {streamerHours}h. Restart backend to apply.
+                {streamerHours === 1 ? "hour" : "hours"} (1-168). Currently: every {streamerHours}h. Restart backend to apply.
               </span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -2634,7 +2734,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                 } catch(e) { toast(e.message || "Failed"); }
               }} disabled={!streamerDirty}
                 style={{ background: streamerDirty ? "#0071E3" : (isDark ? "#222" : "#ddd"), border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: streamerDirty ? "#fff" : (isDark ? "#444" : "#aaa"), cursor: streamerDirty ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
-                {streamerDirty ? "Save interval" : "✓ Saved"}
+                {streamerDirty ? "Save interval" : "OK Saved"}
               </button>
             </div>
 
@@ -2652,12 +2752,12 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                 finally { setBackfillingInd(false); }
               }} disabled={backfilling}
                 style={{ background: backfilling ? (isDark ? "#222" : "#ddd") : "#3DD68C", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: backfilling ? (isDark ? "#555" : "#aaa") : "#000", cursor: backfilling ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-                {backfilling ? "Running…" : "🏷 Backfill industry to jobs"}
+                {backfilling ? "Running..." : "🏷 Backfill industry to jobs"}
               </button>
             </div>
           </div>
 
-          {/* Theme Colors — appears above industry list */}
+          {/* Theme Colors - appears above industry list */}
           <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>Frontend Theme</div>
             <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa", marginBottom: 16 }}>Customise the app accent and background colours for all users</div>
@@ -2684,15 +2784,15 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
               try {
                 await api("/admin/settings/theme", { method: "POST", body: JSON.stringify(themeSettings) });
                 setThemeDirty(false);
-                toast("Theme saved — reload to see changes");
+                toast("Theme saved - reload to see changes");
               } catch(e) { toast(e.message || "Failed"); }
             }} disabled={!themeDirty}
               style={{ marginTop: 4, background: themeDirty ? "#0071E3" : (isDark ? "#222" : "#ddd"), border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: themeDirty ? "#fff" : (isDark ? "#444" : "#aaa"), cursor: themeDirty ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
-              {themeDirty ? "Save theme" : "✓ Saved"}
+              {themeDirty ? "Save theme" : "OK Saved"}
             </button>
           </div>
 
-          {/* Industry list manager — SECOND */}
+          {/* Industry list manager - SECOND */}
           <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>Industry List</div>
             <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa", marginBottom: 16 }}>Add or remove industries available in job alerts and streamer config</div>
@@ -2708,7 +2808,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                 <div key={ind} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", background: isDark ? "#1a1a1e" : "#f8f8fb", borderRadius: 8 }}>
                   <span style={{ fontSize: 13, color: isDark ? "#ccc" : "#333" }}>{ind}</span>
                   <button onClick={() => removeIndustry(ind)}
-                    style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: 14, padding: "0 4px" }}>✕</button>
+                    style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: 14, padding: "0 4px" }}>x</button>
                 </div>
               ))}
             </div>
@@ -2723,14 +2823,14 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
 }
 
 
-// ── Admin Job Edit Modal ──────────────────────────────────────────────────────
+// -- Admin Job Edit Modal ------------------------------------------------------
 function AdminJobEditModal({ job, isDark, onSave, onClose, jobTypes, departments, industries }) {
   const [title, setTitle] = useState(job.title || "");
   const [jobType, setJobType] = useState(job.job_type || "Full-time");
   const [department, setDepartment] = useState(job.department || "General");
   const [industry, setIndustry] = useState(job.industry || "");
   const [location, setLocation] = useState(job.location || "");
-  // Load existing description — admin can see and edit the full scraped text
+  // Load existing description - admin can see and edit the full scraped text
   const [description, setDescription] = useState(job.description || "");
   const [saving, setSaving] = useState(false);
   const [descChars, setDescChars] = useState((job.description || "").length);
@@ -2751,18 +2851,18 @@ function AdminJobEditModal({ job, isDark, onSave, onClose, jobTypes, departments
         {/* Header */}
         <div style={{ padding: "20px 28px 16px", borderBottom: isDark ? "1px solid #1e1e24" : "1px solid #f0f0f4", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>✏️ Edit Job</div>
-            <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 2 }}>{job.company} · ID {job.id}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>* Edit Job</div>
+            <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 2 }}>{job.company} &middot; ID {job.id}</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={onClose} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: saving ? 0.7 : 1 }}>
-              {saving ? "Saving…" : "Save changes"}
+              {saving ? "Saving..." : "Save changes"}
             </button>
           </div>
         </div>
 
-        {/* Body — split: metadata left, description right */}
+        {/* Body - split: metadata left, description right */}
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", flex: 1, overflow: "hidden" }}>
 
           {/* Left: metadata fields */}
@@ -2796,8 +2896,8 @@ function AdminJobEditModal({ job, isDark, onSave, onClose, jobTypes, departments
             </div>
             <div style={{ background: isDark ? "#1a1a1e" : "#f8f8fb", borderRadius: 8, padding: "12px 14px", fontSize: 11, color: isDark ? "#555" : "#aaa", lineHeight: 1.6 }}>
               <div style={{ fontWeight: 600, color: isDark ? "#666" : "#888", marginBottom: 4 }}>Description formatting</div>
-              <code style={{ color: "#0071E3" }}>**Heading**</code> → bold heading<br />
-              <code style={{ color: "#0071E3" }}>• Item</code> → bullet point<br />
+              <code style={{ color: "#0071E3" }}>**Heading**</code> &rarr; bold heading<br />
+              <code style={{ color: "#0071E3" }}>- Item</code> &rarr; bullet point<br />
               Edit the text directly to correct errors from the source.
             </div>
           </div>
@@ -2825,7 +2925,7 @@ function AdminJobEditModal({ job, isDark, onSave, onClose, jobTypes, departments
             />
             {!description && (
               <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>
-                ⚠ No description available for this job yet. Paste or type the description above.
+                ! No description available for this job yet. Paste or type the description above.
               </div>
             )}
           </div>
@@ -2836,7 +2936,7 @@ function AdminJobEditModal({ job, isDark, onSave, onClose, jobTypes, departments
 }
 
 
-// ── Workspace Dashboard Page ──────────────────────────────────────────────────
+// -- Workspace Dashboard Page --------------------------------------------------
 function WorkspaceDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
   const [overview, setOverview] = useState(null);
   const [pipeline, setPipeline] = useState(null);
@@ -2981,7 +3081,7 @@ function WorkspaceDashboardPage({ isDark = true, user, onAuthRequired, toast }) 
 }
 
 
-// ── Job Slug Handler ─────────────────────────────────────────────────────────
+// -- Job Slug Handler ---------------------------------------------------------
 function JobIdHandler({ jobId, isDark, user, onAuthRequired, toast, onClose }) {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -3008,7 +3108,7 @@ function JobIdHandler({ jobId, isDark, user, onAuthRequired, toast, onClose }) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 20 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 680, maxHeight: "90vh", overflowY: "auto", padding: "28px 32px" }}>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: isDark ? "#666" : "#888", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 20, padding: 0 }}>← Back to jobs</button>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: isDark ? "#666" : "#888", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 20, padding: 0 }}>&larr; Back to jobs</button>
         <JobCard job={job} onApply={() => {}} onView={() => {}} isExpanded={true} isDark={isDark} user={user} onAuthRequired={onAuthRequired} isSaved={false} onToggleSave={() => {}} />
       </div>
     </div>
@@ -3064,7 +3164,7 @@ function JobSlugHandler({ slug, isDark, user, onAuthRequired, toast, onClose }) 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 8000, padding: 20 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 680, maxHeight: "90vh", overflowY: "auto", padding: "28px 32px" }}>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: isDark ? "#666" : "#888", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 20, padding: 0 }}>← Back</button>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: isDark ? "#666" : "#888", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 20, padding: 0 }}>&larr; Back</button>
         <JobCard job={job} onApply={() => {}} onView={() => {}} isExpanded={true} isDark={isDark} user={user} onAuthRequired={onAuthRequired} isSaved={false} onToggleSave={() => {}} />
       </div>
     </div>
@@ -3072,7 +3172,7 @@ function JobSlugHandler({ slug, isDark, user, onAuthRequired, toast, onClose }) 
 }
 
 
-// ── Org Slug Handler ──────────────────────────────────────────────────────────
+// -- Org Slug Handler ----------------------------------------------------------
 function OrgSlugHandler({ slug, isDark, onBack, onApply, user, onAuthRequired, toast }) {
   const [org, setOrg] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -3101,7 +3201,7 @@ function OrgSlugHandler({ slug, isDark, onBack, onApply, user, onAuthRequired, t
 }
 
 
-// ── Job Alerts Modal ──────────────────────────────────────────────────────────
+// -- Job Alerts Modal ----------------------------------------------------------
 function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = null }) {
   const isEdit = !!existingAlert;
   const [email, setEmail] = useState(user?.email || "");
@@ -3176,12 +3276,12 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
 
         {done ? (
           <div style={{ textAlign: "center", padding: "20px 0" }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>OK</div>
             <div style={{ fontSize: 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Alert created!</div>
             <div style={{ fontSize: 13, color: isDark ? "#666" : "#888", marginBottom: 20 }}>
               You'll get {frequency} emails at {sendTime} for "{keywords}"{location ? ` in ${location}` : ""}
               {industry ? ` (${industry})` : ""}.
-              {user && " Manage it anytime from your profile menu → My Alerts."}
+              {user && " Manage it anytime from your profile menu &rarr; My Alerts."}
             </div>
             <button onClick={() => onClose(true)} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Done</button>
           </div>
@@ -3197,7 +3297,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>Job titles / keywords</label>
               <input value={keywords} onChange={e => setKeywords(e.target.value)} placeholder="Software Engineer, Network Engineer, Accountant" required style={inp} />
-              <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 4 }}>Job titles or skills relating to your profession — comma separated</div>
+              <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 4 }}>Job titles or skills relating to your profession - comma separated</div>
             </div>
 
             <div style={{ marginBottom: 14 }}>
@@ -3254,7 +3354,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
                     ["America/Chicago",    "Chicago (CT UTC-6)"],
                     ["America/Denver",     "Denver (MT UTC-7)"],
                     ["America/Los_Angeles","Los Angeles (PT UTC-8)"],
-                    ["America/Sao_Paulo",  "São Paulo (BRT UTC-3)"],
+                    ["America/Sao_Paulo",  "Sao Paulo (BRT UTC-3)"],
                     ["America/Toronto",    "Toronto (ET UTC-5)"],
                   ].map(([tz, label]) => <option key={tz} value={tz}>{label}</option>)}
                 </select>
@@ -3263,7 +3363,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
 
             {!user && (
               <div style={{ marginBottom: 14, background: isDark ? "#1a1a1e" : "#f8f8fb", borderRadius: 10, padding: "12px 14px" }}>
-                <label style={lbl}>Quick check — what is {captchaA} + {captchaB}?</label>
+                <label style={lbl}>Quick check - what is {captchaA} + {captchaB}?</label>
                 <input
                   type="number" value={captchaAnswer}
                   onChange={e => setCaptchaAnswer(e.target.value)}
@@ -3276,14 +3376,14 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
 
             {user && (
               <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginBottom: 14 }}>
-                Alerts will be sent to <strong>{user.email}</strong> and can be managed anytime from your profile menu → My Alerts.
+                Alerts will be sent to <strong>{user.email}</strong> and can be managed anytime from your profile menu &rarr; My Alerts.
               </div>
             )}
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => onClose(false)} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "10px 20px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
               <button type="submit" disabled={loading} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.7 : 1 }}>
-                {loading ? "Saving…" : isEdit ? "Save changes" : "Create alert"}
+                {loading ? "Saving..." : isEdit ? "Save changes" : "Create alert"}
               </button>
             </div>
           </form>
@@ -3293,7 +3393,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
   );
 }
 
-// ── AI Result Display ────────────────────────────────────────────────────────
+// -- AI Result Display --------------------------------------------------------
 function AIResult({ result, loading, error, isDark }) {
   if (loading) return (
     <div style={{ textAlign: "center", padding: 40 }}>
@@ -3315,8 +3415,8 @@ function AIResult({ result, loading, error, isDark }) {
     if (line.startsWith("**") && line.endsWith("**") && line.length > 4) {
       return <div key={i} style={{ fontSize: 14, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", marginTop: 16, marginBottom: 6 }}>{line.slice(2,-2)}</div>;
     }
-    if (line.startsWith("• ") || line.startsWith("- ")) {
-      return <div key={i} style={{ fontSize: 13, color: isDark ? "#ccc" : "#333", paddingLeft: 16, marginBottom: 4, lineHeight: 1.6 }}>{"• " + line.slice(2)}</div>;
+    if (line.startsWith("- ") || line.startsWith("- ")) {
+      return <div key={i} style={{ fontSize: 13, color: isDark ? "#ccc" : "#333", paddingLeft: 16, marginBottom: 4, lineHeight: 1.6 }}>{"- " + line.slice(2)}</div>;
     }
     if (line.startsWith("**Q")) {
       return <div key={i} style={{ fontSize: 13, fontWeight: 700, color: "#0071E3", marginTop: 14, marginBottom: 4 }}>{line.replace(/\*\*/g, "")}</div>;
@@ -3344,7 +3444,7 @@ function AIResult({ result, loading, error, isDark }) {
 }
 
 
-// ── AI Features Page ──────────────────────────────────────────────────────────
+// -- AI Features Page ----------------------------------------------------------
 function AIPage({ isDark = true, user, onAuthRequired, toast }) {
   const [tab, setTab] = useState("cv");
   const [result, setResult] = useState("");
@@ -3406,9 +3506,9 @@ function AIPage({ isDark = true, user, onAuthRequired, toast }) {
   );
 
   const tabs = [
-    { id: "cv",        label: "✨ CV Review",       desc: "Get AI feedback on your CV" },
+    { id: "cv",        label: "* CV Review",       desc: "Get AI feedback on your CV" },
     { id: "match",     label: "🎯 Job Match",        desc: "See how well you match a job" },
-    { id: "apply",     label: "✍️ Write Application", desc: "AI writes your cover letter" },
+    { id: "apply",     label: "* Write Application", desc: "AI writes your cover letter" },
     { id: "interview", label: "🎤 Interview Prep",    desc: "Practice questions & answers" },
     { id: "jd",        label: "📝 Write Job Post",    desc: "AI writes job descriptions" },
     { id: "hr",        label: "💬 HR Assistant",      desc: "Ask any HR question" },
@@ -3424,7 +3524,7 @@ function AIPage({ isDark = true, user, onAuthRequired, toast }) {
 
   const SubmitBtn = ({ onClick, label = "Run AI" }) => (
     <button onClick={onClick} disabled={loading} style={{ background: loading ? "#555" : "#0071E3", border: "none", borderRadius: 10, padding: "11px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", marginTop: 16 }}>
-      {loading ? "AI thinking…" : `✨ ${label}`}
+      {loading ? "AI thinking..." : `* ${label}`}
     </button>
   );
 
@@ -3432,7 +3532,7 @@ function AIPage({ isDark = true, user, onAuthRequired, toast }) {
     <div>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", letterSpacing: -0.5, marginBottom: 4 }}>AI Features</h1>
-        <p style={{ fontSize: 13, color: isDark ? "#666" : "#888" }}>Powered by Claude AI — your career and hiring assistant</p>
+        <p style={{ fontSize: 13, color: isDark ? "#666" : "#888" }}>Powered by Claude AI - your career and hiring assistant</p>
       </div>
 
       {/* Tab bar */}
@@ -3451,7 +3551,7 @@ function AIPage({ isDark = true, user, onAuthRequired, toast }) {
           {/* CV Optimiser */}
           {tab === "cv" && (
             <div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>✨ CV Optimiser</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>* CV Optimiser</div>
               <div style={{ fontSize: 12, color: isDark ? "#666" : "#888", marginBottom: 16 }}>Paste your CV text and get specific improvement suggestions</div>
               <div style={{ marginBottom: 14 }}>
                 <label style={lbl}>Paste your CV text</label>
@@ -3489,7 +3589,7 @@ function AIPage({ isDark = true, user, onAuthRequired, toast }) {
           {/* Application Writer */}
           {tab === "apply" && (
             <div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>✍️ Application Writer</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>* Application Writer</div>
               <div style={{ fontSize: 12, color: isDark ? "#666" : "#888", marginBottom: 16 }}>AI writes a tailored cover letter for you</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
                 <div>
@@ -3588,7 +3688,7 @@ function AIPage({ isDark = true, user, onAuthRequired, toast }) {
                 <textarea value={hrQuestion} onChange={e => setHrQuestion(e.target.value)} placeholder="e.g. What is the minimum notice period for resignation in Nigeria? Can an employer reduce salary without consent?" style={{ ...inp, height: 120, resize: "vertical" }} />
               </div>
               <div style={{ background: isDark ? "#1a1a1e" : "#f8f8fb", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: isDark ? "#555" : "#aaa" }}>
-                Example questions: Notice periods · Redundancy pay · Maternity leave · Employee contracts · Disciplinary procedures
+                Example questions: Notice periods &middot; Redundancy pay &middot; Maternity leave &middot; Employee contracts &middot; Disciplinary procedures
               </div>
               <SubmitBtn label="Ask AI" onClick={() => runAI("/ai/hr/assistant", { question: hrQuestion })} />
             </div>
@@ -3599,7 +3699,7 @@ function AIPage({ isDark = true, user, onAuthRequired, toast }) {
         <div>
           {!result && !loading && !error && (
             <div style={{ background: isDark ? "#141416" : "#f8f8fb", border: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0", borderRadius: 14, padding: "40px 22px", textAlign: "center" }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>✨</div>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>*</div>
               <div style={{ fontSize: 14, color: isDark ? "#555" : "#aaa" }}>
                 {tabs.find(t => t.id === tab)?.desc}
                 <br />Fill in the form and click the AI button.
@@ -3614,7 +3714,7 @@ function AIPage({ isDark = true, user, onAuthRequired, toast }) {
 }
 
 
-// ── Billing Page ─────────────────────────────────────────────────────────────
+// -- Billing Page -------------------------------------------------------------
 function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
   const [plans, setPlans] = useState([]);
   const [subscription, setSubscription] = useState(null);
@@ -3701,7 +3801,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
             <span style={{ fontSize: 13, fontWeight: 600, color: "#0071E3" }}>{subscription.plan_name || "Free"}</span>
             {!subscription.is_free && subscription.expires_at && (
               <span style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>
-                · renews {new Date(subscription.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                &middot; renews {new Date(subscription.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
               </span>
             )}
           </div>
@@ -3737,7 +3837,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
                     <span style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>Free</span>
                   ) : (
                     <div>
-                      <span style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>₦{plan.price_ngn.toLocaleString()}</span>
+                      <span style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>N{plan.price_ngn.toLocaleString()}</span>
                       <span style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>/month</span>
                     </div>
                   )}
@@ -3745,7 +3845,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
                 <div style={{ marginBottom: 20 }}>
                   {(plan.features || []).map((f, i) => (
                     <div key={i} style={{ fontSize: 12, color: isDark ? "#aaa" : "#555", padding: "3px 0", display: "flex", gap: 6 }}>
-                      <span style={{ color: "#3DD68C" }}>✓</span> {f}
+                      <span style={{ color: "#3DD68C" }}>OK</span> {f}
                     </div>
                   ))}
                 </div>
@@ -3755,11 +3855,11 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
                     disabled={paying === plan.id}
                     style={{ width: "100%", background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: paying ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: paying === plan.id ? 0.7 : 1 }}
                   >
-                    {paying === plan.id ? "Redirecting…" : plan.name === "Enterprise" ? "Contact Sales" : `Upgrade — ₦${plan.price_ngn.toLocaleString()}/mo`}
+                    {paying === plan.id ? "Redirecting..." : plan.name === "Enterprise" ? "Contact Sales" : `Upgrade - N${plan.price_ngn.toLocaleString()}/mo`}
                   </button>
                 )}
                 {isCurrentPlan && plan.price_ngn > 0 && (
-                  <div style={{ fontSize: 12, color: "#3DD68C", textAlign: "center", marginTop: 4 }}>✓ Active subscription</div>
+                  <div style={{ fontSize: 12, color: "#3DD68C", textAlign: "center", marginTop: 4 }}>OK Active subscription</div>
                 )}
               </div>
             );
@@ -3778,10 +3878,10 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
                 <div key={t.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 12, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 500, color: isDark ? "#f0f0f2" : "#1d1d1f", textTransform: "capitalize" }}>{(t.plan_id || "").replace(/_/g, " ")}</div>
-                    <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>{new Date(t.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} · {t.reference}</div>
+                    <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>{new Date(t.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} &middot; {t.reference}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>₦{(t.amount || 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>N{(t.amount || 0).toLocaleString()}</div>
                     <span style={{ fontSize: 11, color: t.status === "success" ? "#3DD68C" : "#f87171", fontWeight: 600, textTransform: "capitalize" }}>{t.status}</span>
                   </div>
                 </div>
@@ -3793,7 +3893,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
 
       <div style={{ marginTop: 32, padding: "16px 20px", background: isDark ? "#141416" : "#f8f8fb", borderRadius: 12, border: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
         <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa", lineHeight: 1.6 }}>
-          Payments processed securely by <strong style={{ color: isDark ? "#888" : "#666" }}>Paystack</strong> · All prices in Nigerian Naira (NGN) · Cancel anytime
+          Payments processed securely by <strong style={{ color: isDark ? "#888" : "#666" }}>Paystack</strong> &middot; All prices in Nigerian Naira (NGN) &middot; Cancel anytime
         </div>
       </div>
     </div>
@@ -3801,7 +3901,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
 }
 
 
-// ── Mini Bar Chart ───────────────────────────────────────────────────────────
+// -- Mini Bar Chart -----------------------------------------------------------
 function MiniBarChart({ data, labelKey, valueKey, color = "#0071E3", isDark, height = 120 }) {
   if (!data || data.length === 0) return (
     <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", color: isDark ? "#444" : "#ccc", fontSize: 12 }}>No data</div>
@@ -3826,7 +3926,7 @@ function MiniBarChart({ data, labelKey, valueKey, color = "#0071E3", isDark, hei
 }
 
 
-// ── Donut Chart ───────────────────────────────────────────────────────────────
+// -- Donut Chart ---------------------------------------------------------------
 function DonutChart({ data, labelKey, valueKey, isDark, size = 140 }) {
   if (!data || data.length === 0) return null;
   const total = data.reduce((s, d) => s + (d[valueKey] || 0), 0);
@@ -3876,7 +3976,7 @@ function DonutChart({ data, labelKey, valueKey, isDark, size = 140 }) {
 }
 
 
-// ── Analytics Page ────────────────────────────────────────────────────────────
+// -- Analytics Page ------------------------------------------------------------
 function AnalyticsPage({ isDark = true, user, onAuthRequired, toast }) {
   const [tab, setTab] = useState("candidate");
   const [data, setData] = useState(null);
@@ -3945,7 +4045,7 @@ function AnalyticsPage({ isDark = true, user, onAuthRequired, toast }) {
   const Card = ({ label, value, sub, color = "#0071E3" }) => (
     <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "18px 20px", flex: 1, minWidth: 120 }}>
       <div style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#666" : "#999", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color, letterSpacing: -1, marginBottom: 2 }}>{value ?? "—"}</div>
+      <div style={{ fontSize: 28, fontWeight: 700, color, letterSpacing: -1, marginBottom: 2 }}>{value ?? "-"}</div>
       {sub && <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>{sub}</div>}
     </div>
   );
@@ -3967,11 +4067,11 @@ function AnalyticsPage({ isDark = true, user, onAuthRequired, toast }) {
         {(isEmployer || isAdmin) && (
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => exportCSV("applications")} style={{ fontSize: 12, background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "7px 14px", cursor: "pointer", color: isDark ? "#888" : "#555", fontFamily: "'DM Sans', sans-serif" }}>
-              ↓ Export Applications
+              v Export Applications
             </button>
             {isAdmin && (
               <button onClick={() => exportCSV("jobs")} style={{ fontSize: 12, background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "7px 14px", cursor: "pointer", color: isDark ? "#888" : "#555", fontFamily: "'DM Sans', sans-serif" }}>
-                ↓ Export Jobs
+                v Export Jobs
               </button>
             )}
           </div>
@@ -4008,7 +4108,7 @@ function AnalyticsPage({ isDark = true, user, onAuthRequired, toast }) {
               <div key={a.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: isDark ? "1px solid #1e1e24" : "1px solid #f0f0f4" }}>
                 <div>
                   <div style={{ fontSize: 13, color: isDark ? "#e0e0e0" : "#1d1d1f" }}>{a.job_title || "Unknown job"}</div>
-                  <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>{a.company} · {new Date(a.submitted_at).toLocaleDateString("en-GB")}</div>
+                  <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>{a.company} &middot; {new Date(a.submitted_at).toLocaleDateString("en-GB")}</div>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 600, textTransform: "capitalize", color: a.status === "hired" ? "#3DD68C" : a.status === "rejected" ? "#f87171" : "#F5A623" }}>{a.status}</span>
               </div>
@@ -4055,7 +4155,7 @@ function AnalyticsPage({ isDark = true, user, onAuthRequired, toast }) {
             <Card label="Total Users"   value={data.totals?.users}         sub={`+${data.growth?.new_users} new`}  color="#0071E3" />
             <Card label="Active Jobs"   value={data.totals?.jobs}          sub={`+${data.growth?.new_jobs} new`}   color="#F5A623" />
             <Card label="Applications"  value={data.totals?.applications}  sub={`+${data.growth?.new_applications} new`} color="#3DD68C" />
-            <Card label="Revenue (NGN)" value={`₦${(data.totals?.revenue_ngn||0).toLocaleString()}`} color="#9B59B6" />
+            <Card label="Revenue (NGN)" value={`N${(data.totals?.revenue_ngn||0).toLocaleString()}`} color="#9B59B6" />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
             <Section title="Daily Signups (30 days)">
@@ -4086,7 +4186,7 @@ function AnalyticsPage({ isDark = true, user, onAuthRequired, toast }) {
 }
 
 
-// ── Docs / Legal Page ────────────────────────────────────────────────────────
+// -- Docs / Legal Page --------------------------------------------------------
 function DocsPage({ isDark = true, section = "privacy" }) {
   const [activeSection, setActiveSection] = useState(section);
 
@@ -4126,7 +4226,7 @@ function DocsPage({ isDark = true, section = "privacy" }) {
             <h1 style={{ fontSize: 26, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 4 }}>Privacy Policy</h1>
             <p style={{ ...prose(true), color: isDark ? "#555" : "#aaa", marginBottom: 28 }}>Last updated: June 2026</p>
             {[
-              ["1. Information We Collect", "We collect your name, email and password (hashed, never stored in plain text) when you register. Profile information you provide such as phone, location, skills and CV links. Application data when you apply for jobs. Usage data to improve the service. Payment transaction references (processed securely by Paystack — we never store card details). IP address and device information for security."],
+              ["1. Information We Collect", "We collect your name, email and password (hashed, never stored in plain text) when you register. Profile information you provide such as phone, location, skills and CV links. Application data when you apply for jobs. Usage data to improve the service. Payment transaction references (processed securely by Paystack - we never store card details). IP address and device information for security."],
               ["2. How We Use Your Information", "To operate the JobStream platform. To match candidates with relevant jobs. To send transactional emails (password resets, confirmations, job alerts). To process payments. To provide AI features when requested. To detect fraud and maintain security. To comply with Nigerian law."],
               ["3. Information Sharing", "We do not sell your personal data. When you apply for a job, your application details are shared with the employer. We use Resend (email), Paystack (payments), Railway (hosting) and Anthropic (AI). We may disclose data if required by law or court order."],
               ["4. Your Rights (NDPR)", "Under Nigeria's Data Protection Regulation, you have the right to access, correct, delete or export your data. Contact privacy@jobstream.ng to exercise these rights."],
@@ -4234,10 +4334,10 @@ function DocsPage({ isDark = true, section = "privacy" }) {
             {[
               ["Getting Started", "Register an account and go to the Employer section in the sidebar. Click 'Create workspace' to set up your organisation workspace. Enter your company name and choose a unique workspace URL (e.g. jobstream.ng/acme-corp)."],
               ["Posting Jobs", "From the Employer dashboard, click '+ Post a job'. Fill in the job title, company, location, type, description, and how candidates should apply (external URL or email). Jobs appear on the job board immediately. You can also use the AI Job Description Writer under AI Tools to generate a complete description from basic notes."],
-              ["Managing Applications", "Click any job in your Employer dashboard to see all applications. Each applicant shows their name, email, cover note and CV link. Use the status dropdown to move candidates through the pipeline: New → Reviewing → Shortlisted → Interview → Offer → Hired."],
+              ["Managing Applications", "Click any job in your Employer dashboard to see all applications. Each applicant shows their name, email, cover note and CV link. Use the status dropdown to move candidates through the pipeline: New -> Reviewing -> Shortlisted -> Interview -> Offer -> Hired."],
               ["Workspace Dashboard", "Go to Workspace in the sidebar for your hiring analytics. See active jobs, total applicants, hired count, offer rate and a full Kanban pipeline view of all candidates across all stages."],
-              ["Team Management", "Invite team members from the Workspace → Team tab. Assign roles: HR Admin, Recruiter, Hiring Manager or Interviewer. Each role has appropriate permissions — interviewers can submit feedback but can't post jobs."],
-              ["Plans & Billing", "The Free plan allows up to 3 active jobs. Upgrade to Starter (₦15,000/mo, 10 jobs) or Growth (₦35,000/mo, 50 jobs) from the Billing page. Payments are processed securely by Paystack."],
+              ["Team Management", "Invite team members from the Workspace -> Team tab. Assign roles: HR Admin, Recruiter, Hiring Manager or Interviewer. Each role has appropriate permissions - interviewers can submit feedback but can't post jobs."],
+              ["Plans & Billing", "The Free plan allows up to 3 active jobs. Upgrade to Starter (N15,000/mo, 10 jobs) or Growth (N35,000/mo, 50 jobs) from the Billing page. Payments are processed securely by Paystack."],
               ["Need help?", "Contact us at support@jobstream.ng"],
             ].map(([title, body]) => (
               <div key={title}>
@@ -4253,7 +4353,7 @@ function DocsPage({ isDark = true, section = "privacy" }) {
 }
 
 
-// ── Privacy Policy Page ──────────────────────────────────────────────────────
+// -- Privacy Policy Page ------------------------------------------------------
 function PrivacyPage({ isDark = true }) {
   const s = { fontSize: 13, color: isDark ? "#aaa" : "#555", lineHeight: 1.8, marginBottom: 12 };
   const h = { fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8, marginTop: 24 };
@@ -4290,7 +4390,7 @@ function PrivacyPage({ isDark = true }) {
 }
 
 
-// ── Terms of Service Page ─────────────────────────────────────────────────────
+// -- Terms of Service Page -----------------------------------------------------
 function TermsPage({ isDark = true }) {
   const s = { fontSize: 13, color: isDark ? "#aaa" : "#555", lineHeight: 1.8, marginBottom: 12 };
   const h = { fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8, marginTop: 24 };
@@ -4330,7 +4430,7 @@ function TermsPage({ isDark = true }) {
 }
 
 
-// ── My Alerts Page ───────────────────────────────────────────────────────────
+// -- My Alerts Page -----------------------------------------------------------
 function MyAlertsPage({ isDark = true, user, onAuthRequired, toast }) {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -4403,14 +4503,14 @@ function MyAlertsPage({ isDark = true, user, onAuthRequired, toast }) {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <Chip isDark={isDark}>📍 {alert.location || "Any location"}</Chip>
                   {alert.industry && <Chip variant="accent" isDark={isDark}>{alert.industry}</Chip>}
-                  <Chip isDark={isDark}>{alert.frequency === "daily" ? "Daily" : "Weekly"} · {alert.send_time}</Chip>
+                  <Chip isDark={isDark}>{alert.frequency === "daily" ? "Daily" : "Weekly"} &middot; {alert.send_time}</Chip>
                   {!alert.is_active && <Chip variant="red" isDark={isDark}>Paused</Chip>}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                <button onClick={() => setEditing(alert)} title="Edit" style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>✏️</button>
-                <button onClick={() => toggleActive(alert)} title={alert.is_active ? "Pause" : "Resume"} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>{alert.is_active ? "⏸" : "▶"}</button>
-                <button onClick={() => removeAlert(alert)} title="Delete" style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#f87171", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>✕</button>
+                <button onClick={() => setEditing(alert)} title="Edit" style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>*</button>
+                <button onClick={() => toggleActive(alert)} title={alert.is_active ? "Pause" : "Resume"} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>{alert.is_active ? "||" : ">"}</button>
+                <button onClick={() => removeAlert(alert)} title="Delete" style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#f87171", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>x</button>
               </div>
             </div>
           </div>
@@ -4474,7 +4574,7 @@ function ScraperPage({ toast, isDark = true }) {
     try {
       await api(`/companies/${id}`, { method: "PATCH", body: JSON.stringify({ industry }) });
       setCompanies(prev => prev.map(c => c.id === id ? { ...c, industry } : c));
-      toast("Industry updated — re-scrape to apply to existing jobs");
+      toast("Industry updated - re-scrape to apply to existing jobs");
     } catch (e) { toast("Failed: " + e.message); }
   }
 
@@ -4505,7 +4605,7 @@ function ScraperPage({ toast, isDark = true }) {
           previous_names: [],
         }),
       });
-      toast(`${company.name} registered as an organization — company page now available`);
+      toast(`${company.name} registered as an organization - company page now available`);
     } catch (e) {
       toast(e.message?.includes("already") ? `${company.name} is already an organization` : `Failed: ${e.message}`);
     }
@@ -4588,10 +4688,10 @@ function ScraperPage({ toast, isDark = true }) {
           <div style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f2", letterSpacing: -0.5 }}>Streamer Config</div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={exportCompanies} style={{ background: "none", border: "1px solid #2a2a32", borderRadius: 8, padding: "7px 14px", fontSize: 12, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-              ↓ Export companies
+              v Export companies
             </button>
             <button onClick={importCompanies} style={{ background: "none", border: "1px solid #2a2a32", borderRadius: 8, padding: "7px 14px", fontSize: 12, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-              ↑ Import companies
+              ^ Import companies
             </button>
           </div>
         </div>
@@ -4601,7 +4701,7 @@ function ScraperPage({ toast, isDark = true }) {
       {/* Companies list */}
       <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "20px 22px", marginBottom: 16 }}>
 
-        {/* Add company form — at top */}
+        {/* Add company form - at top */}
         <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: isDark ? "1px solid #1e1e24" : "1px solid #f0f0f4" }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#666" : "#888", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 8 }}>Add company</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -4629,7 +4729,7 @@ function ScraperPage({ toast, isDark = true }) {
           <input
             value={companySearch}
             onChange={e => setCompanySearch(e.target.value)}
-            placeholder="Search company name or URL…"
+            placeholder="Search company name or URL..."
             style={{ ...inp, flex: 1, minWidth: 160 }}
           />
           <select value={companyIndustryFilter} onChange={e => setCompanyIndustryFilter(e.target.value)}
@@ -4661,11 +4761,11 @@ function ScraperPage({ toast, isDark = true }) {
                   <div style={{ fontSize: 13, color: isDark ? "#f0f0f2" : "#1a1a1a" }}>{c.name}</div>
                   <div style={{ fontSize: 10, color: isDark ? "#555" : "#888", fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.url}</div>
                 </div>
-                {/* Industry — inline editable */}
+                {/* Industry - inline editable */}
                 <select
                   value={c.industry || ""}
                   onChange={(e) => updateIndustry(c.id, e.target.value)}
-                  title="Industry — used to match jobs across companies in this industry for job alerts"
+                  title="Industry - used to match jobs across companies in this industry for job alerts"
                   style={{ ...inp, padding: "4px 8px", fontSize: 11, width: 150, flexShrink: 0, cursor: "pointer", color: c.industry ? (isDark ? "#f0f0f2" : "#1a1a1a") : (isDark ? "#555" : "#aaa") }}
                 >
                   <option value="">No industry</option>
@@ -4677,7 +4777,7 @@ function ScraperPage({ toast, isDark = true }) {
                   disabled={busyId === c.id}
                   style={{ background: "rgba(0,113,227,0.1)", border: "1px solid rgba(123,110,246,0.3)", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: busyId === c.id ? "#555" : "#4DA3FF", cursor: busyId === c.id ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
                 >
-                  {busyId === c.id ? "Streaming..." : "⟳ Stream"}
+                  {busyId === c.id ? "Streaming..." : "< Stream"}
                 </button>
                 {/* Force rescrape button */}
                 <button
@@ -4685,7 +4785,7 @@ function ScraperPage({ toast, isDark = true }) {
                   disabled={busyId === c.id}
                   style={{ background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.3)", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: busyId === c.id ? "#555" : "#f87171", cursor: busyId === c.id ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
                 >
-                  ↺ Force
+                  Force
                 </button>
                 {/* Register as Org button */}
                 <button
@@ -4701,7 +4801,7 @@ function ScraperPage({ toast, isDark = true }) {
                   style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 4 }}
                   onMouseEnter={(e) => e.currentTarget.style.color = "#f87171"}
                   onMouseLeave={(e) => e.currentTarget.style.color = "#555"}
-                >✕</button>
+                >x</button>
               </div>
             ))}
           </div>
@@ -4721,7 +4821,7 @@ function ScraperPage({ toast, isDark = true }) {
               <div key={r.id} style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 0", borderBottom: isDark ? "1px solid #1e1e24" : "1px solid #ebebf0", fontSize: 12 }}>
                 <Chip variant={r.status === "success" ? "green" : r.status === "running" ? "accent" : "red"}>{r.status}</Chip>
                 <span style={{ color: isDark ? "#888" : "#555", fontFamily: "'DM Mono', monospace", flex: 1 }}>{new Date(r.started_at).toLocaleString()}</span>
-                <span style={{ color: isDark ? "#555" : "#888" }}>{r.jobs_found} found · <span style={{ color: "#3DD68C" }}>+{r.jobs_new} new</span></span>
+                <span style={{ color: isDark ? "#555" : "#888" }}>{r.jobs_found} found &middot; <span style={{ color: "#3DD68C" }}>+{r.jobs_new} new</span></span>
               </div>
             ))}
           </div>
@@ -4732,9 +4832,9 @@ function ScraperPage({ toast, isDark = true }) {
 }
 
 
-// ── My Applications Page ─────────────────────────────────────────────────────
-// ── Saved Jobs Page ──────────────────────────────────────────────────────────
-// ── Companies Page ───────────────────────────────────────────────────────────
+// -- My Applications Page -----------------------------------------------------
+// -- Saved Jobs Page ----------------------------------------------------------
+// -- Companies Page -----------------------------------------------------------
 function CompaniesPage({ isDark = true, user, onSelectCompany }) {
   const [companies, setCompanies] = useState([]);
   const [search, setSearch] = useState("");
@@ -4768,7 +4868,7 @@ function CompaniesPage({ isDark = true, user, onSelectCompany }) {
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search companies or industries…"
+          placeholder="Search companies or industries..."
           style={{ width: "100%", boxSizing: "border-box", background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "10px 12px 10px 36px", fontSize: 13, color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }}
         />
       </div>
@@ -4804,7 +4904,7 @@ function CompaniesPage({ isDark = true, user, onSelectCompany }) {
               )}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
                 {company.size && <span style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>{company.size} employees</span>}
-                <span style={{ fontSize: 11, color: "#0071E3", fontWeight: 500 }}>View jobs →</span>
+                <span style={{ fontSize: 11, color: "#0071E3", fontWeight: 500 }}>View jobs &rarr;</span>
               </div>
             </div>
           ))}
@@ -4822,7 +4922,7 @@ function CompaniesPage({ isDark = true, user, onSelectCompany }) {
 }
 
 
-// ── Company Profile Page ──────────────────────────────────────────────────────
+// -- Company Profile Page ------------------------------------------------------
 function CompanyProfilePage({ isDark = true, companyId, onApply, user, onAuthRequired, onBack, toast }) {
   const [company, setCompany] = useState(null);
   const [jobs, setJobs] = useState([]);
@@ -4874,7 +4974,7 @@ function CompanyProfilePage({ isDark = true, companyId, onApply, user, onAuthReq
         onClick={onBack}
         style={{ background: "none", border: "none", cursor: "pointer", color: isDark ? "#666" : "#888", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 20, display: "flex", alignItems: "center", gap: 6, padding: 0 }}
       >
-        ← All companies
+        &larr; All companies
       </button>
 
       {/* Company header */}
@@ -4999,21 +5099,21 @@ function SavedJobsPage({ isDark = true, user, onAuthRequired, onApply, toast }) 
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                   <div>
                     <div style={{ fontSize: 16, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 2 }}>{job.title}</div>
-                    <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{job.company} · {job.location}</div>
+                    <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{job.company} &middot; {job.location}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                     <button
                       onClick={() => onApply && onApply(job)}
                       style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 500, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
                     >
-                      Apply →
+                      Apply &rarr;
                     </button>
                     <button
                       onClick={() => removeSaved(job)}
                       title="Remove from saved"
                       style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: isDark ? "#666" : "#888", cursor: "pointer" }}
                     >
-                      ✕
+                      x
                     </button>
                   </div>
                 </div>
@@ -5091,7 +5191,7 @@ function MyApplicationsPage({ isDark = true, user, onAuthRequired }) {
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 2 }}>{a.job_title || "Job"}</div>
-                    <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{a.company} · {a.location}</div>
+                    <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{a.company} &middot; {a.location}</div>
                   </div>
                   <span style={{ background: sc.bg, color: sc.color, fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 500, whiteSpace: "nowrap", textTransform: "capitalize" }}>
                     {a.status || "new"}
@@ -5110,7 +5210,7 @@ function MyApplicationsPage({ isDark = true, user, onAuthRequired }) {
 }
 
 
-// ── Profile Page ──────────────────────────────────────────────────────────────
+// -- Profile Page --------------------------------------------------------------
 function ProfilePage({ isDark = true, user, setUser, onAuthRequired, toast }) {
   const [form, setForm] = useState({
     full_name: user?.full_name || "",
@@ -5218,7 +5318,7 @@ function ProfilePage({ isDark = true, user, setUser, onAuthRequired, toast }) {
           </div>
 
           <button type="submit" disabled={loading} style={{ background: loading ? "#ccc" : "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: loading ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-            {loading ? "Saving…" : "Save profile"}
+            {loading ? "Saving..." : "Save profile"}
           </button>
         </form>
       )}
@@ -5260,11 +5360,11 @@ function ApplicationsPage({ isDark = true }) {
                 </div>
                 <div style={{ fontSize: 12, color: "#666" }}>{a.email}</div>
                 <div style={{ fontSize: 11, color: "#444", marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
-                  {a.job_title} · {new Date(a.submitted_at).toLocaleDateString()}
+                  {a.job_title} &middot; {new Date(a.submitted_at).toLocaleDateString()}
                 </div>
               </div>
               {a.resume_url && (
-                <a href={a.resume_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#0071E3", textDecoration: "none", whiteSpace: "nowrap" }}>Resume →</a>
+                <a href={a.resume_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#0071E3", textDecoration: "none", whiteSpace: "nowrap" }}>Resume &rarr;</a>
               )}
             </div>
           ))}
@@ -5274,7 +5374,7 @@ function ApplicationsPage({ isDark = true }) {
   );
 }
 
-// ── App Shell ─────────────────────────────────────────────────────────────────
+// -- App Shell -----------------------------------------------------------------
 export default function App() {
   const [page, setPage] = useState("jobs");
   const [applyJob, setApplyJob] = useState(null);
@@ -5315,6 +5415,14 @@ export default function App() {
       if (brand?.name) { setBrandName(brand.name); localStorage.setItem("js_brand_name", brand.name); }
       if (brand?.logo_url !== undefined) { setBrandLogo(brand.logo_url || ""); localStorage.setItem("js_brand_logo", brand.logo_url || ""); }
     });
+    // Load invite info if token present
+    const params = new URLSearchParams(window.location.search);
+    const inv = params.get("invite");
+    if (inv) {
+      api(`/workspace/team/invite/${inv}/accept`)
+        .then(info => setInviteInfo(info))
+        .catch(() => {});
+    }
   }, []);
   const [myPermissions, setMyPermissions] = useState(new Set());
   const [resetToken, setResetToken] = useState(() => {
@@ -5329,11 +5437,17 @@ export default function App() {
     const m = path.match(/^\/jobs\/(.+)/);
     return m ? m[1] : "";
   });
-  // ?jobid=ID — direct job ID from alert emails (most reliable)
+  // ?jobid=ID - direct job ID from alert emails (most reliable)
   const [urlJobId, setUrlJobId] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("jobid") || "";
   });
+  // ?invite=TOKEN - workspace invitation link
+  const [inviteToken, setInviteToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("invite") || "";
+  });
+  const [inviteInfo, setInviteInfo] = useState(null);
   const [urlOrgSlug, setUrlOrgSlug] = useState(() => {
     const path = window.location.pathname;
     const m = path.match(/^\/companies\/(.+)/);
@@ -5363,16 +5477,16 @@ export default function App() {
   const ALL_NAV = [
     { id: "jobs",         icon: "💼", label: "Jobs" },
     { id: "companies",    icon: "🏢", label: "Companies" },
-    { id: "postjob",      icon: "➕",  label: "Post a Job" },
+    { id: "postjob",      icon: "+",  label: "Post a Job" },
     { id: "myapps",       icon: "📨", label: "My Applications" },
     { id: "saved",        icon: "🔖", label: "Saved Jobs" },
     { id: "employer",     icon: "🏢", label: "Employer" },
     { id: "applications", icon: "📋", label: "Applications" },
-    { id: "ai",           icon: "✨",  label: "AI Tools" },
+    { id: "ai",           icon: "*",  label: "AI Tools" },
     { id: "billing",      icon: "💳",  label: "Billing" },
     { id: "analytics",    icon: "📊",  label: "Analytics" },
     { id: "workspace",    icon: "📊",  label: "Workspace" },
-    { id: "admin",        icon: "⚙️",  label: "Admin" },
+    { id: "admin",        icon: "*",  label: "Admin" },
     { id: "scraper",      icon: "🤖",  label: "Streamer" },
   ];
 
@@ -5421,7 +5535,7 @@ export default function App() {
         ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a32; border-radius: 3px; }
         select option { background: ${isDark ? "#141416" : "#ffffff"}; color: ${isDark ? "#f0f0f2" : "#111111"}; }
         select { color-scheme: ${isDark ? "dark" : "light"}; }
-        /* Admin-controlled button colour — applied via CSS variables */
+        /* Admin-controlled button colour - applied via CSS variables */
         .js-btn-primary {
           background: ${isDark ? "var(--btn-dark, #0071E3)" : "var(--btn-light, #000000)"} !important;
         }
@@ -5441,7 +5555,7 @@ export default function App() {
       {/* Sidebar */}
       <aside style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: isDark ? "1px solid #1e1e24" : "1px solid #e0e0e8", padding: sidebarOpen ? "20px 14px" : "12px 8px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "all 0.25s ease", overflowY: "auto", overflowX: "hidden", width: sidebarOpen ? "220px" : "52px", minWidth: sidebarOpen ? "220px" : "52px", scrollbarWidth: "thin", scrollbarColor: isDark ? "#2a2a32 transparent" : "#d0d0d8 transparent" }}>
 
-        {/* Burger only — logo moved to main top bar */}
+        {/* Burger only - logo moved to main top bar */}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16, paddingTop: 4 }}>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -5470,7 +5584,7 @@ export default function App() {
           />
         ))}
 
-        {/* Streamer active status + version — admin only */}
+        {/* Streamer active status + version - admin only */}
         {isAdmin && (
           <>
             <div style={{ marginTop: "auto", background: isDark ? "#141416" : "#f0f0f4", border: isDark ? "1px solid #1e1e24" : "1px solid #d8d8e0", borderRadius: 10, padding: sidebarOpen ? "12px 14px" : "10px 6px", display: "flex", flexDirection: "column", alignItems: sidebarOpen ? "flex-start" : "center" }}>
@@ -5490,7 +5604,7 @@ export default function App() {
       {/* Main */}
       <main style={{ padding: "16px 16px 28px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s", position: "relative" }}>
 
-        {/* Header row — brand left, auth controls right. Wraps on mobile instead of overlapping. */}
+        {/* Header row - brand left, auth controls right. Wraps on mobile instead of overlapping. */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           flexWrap: "wrap", gap: "10px 12px", marginBottom: 20,
@@ -5499,12 +5613,12 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 0 }}>
             {brandLogo
               ? <img src={brandLogo} alt={brandName} style={{ height: 26, width: "auto", objectFit: "contain", borderRadius: 6, flexShrink: 0 }} onError={e => { e.target.style.display = "none"; }} />
-              : <div onClick={() => setPage("jobs")} style={{ width: 26, height: 26, background: "var(--btn-primary)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, cursor: "pointer" }}>⚡</div>
+              : <div onClick={() => setPage("jobs")} style={{ width: 26, height: 26, background: "var(--btn-primary)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, cursor: "pointer" }}>*</div>
             }
             <span onClick={() => setPage("jobs")} style={{ fontSize: 15, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1a1a1a", letterSpacing: -0.3, whiteSpace: "nowrap", cursor: "pointer" }}>{brandName}</span>
           </div>
 
-          {/* Auth controls — wraps below brand on narrow screens */}
+          {/* Auth controls - wraps below brand on narrow screens */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button
               onClick={() => setShowJobAlerts(true)}
@@ -5519,7 +5633,7 @@ export default function App() {
               title={isDark ? "Switch to light mode" : "Switch to dark mode"}
               style={{ background: isDark ? "#1C1C20" : "#e8e8ec", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 20, padding: "5px 12px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
             >
-              {isDark ? "☀" : "●"} <span className="hide-on-xs">{isDark ? "Light" : "Dark"}</span>
+              {isDark ? "*" : "o"} <span className="hide-on-xs">{isDark ? "Light" : "Dark"}</span>
             </button>
 
             {user ? (
@@ -5553,7 +5667,7 @@ export default function App() {
         {page === "postjob"   && (user
           ? <EmployerPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} can={can} />
           : <div style={{ textAlign: "center", padding: 60 }}>
-              <div style={{ fontSize: 36, marginBottom: 16 }}>➕</div>
+              <div style={{ fontSize: 36, marginBottom: 16 }}>+</div>
               <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Post a Job</div>
               <div style={{ fontSize: 14, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Sign in or create an account to post jobs</div>
               <button onClick={() => setShowAuth(true)} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "11px 28px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Sign in | Register</button>
@@ -5566,6 +5680,44 @@ export default function App() {
 
       {applyJob && <ApplyModal job={applyJob} onClose={() => setApplyJob(null)} onSuccess={showToast} user={user} />}
       {showAuth && <InlineAuthModal onClose={() => setShowAuth(false)} onSuccess={(u) => { setUser(u); showToast(`Welcome, ${u.full_name}!`); }} />}
+      {inviteInfo && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 20 }}>
+          <div style={{ background: isDark ? "#141416" : "#fff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 440, padding: "32px 28px", textAlign: "center" }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>🎉</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>
+              You've been invited!
+            </div>
+            <div style={{ fontSize: 13, color: isDark ? "#666" : "#888", marginBottom: 6 }}>
+              <strong>{inviteInfo.invited_by_name}</strong> invited you to join their workspace as <strong>{inviteInfo.role}</strong>.
+            </div>
+            <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa", marginBottom: 24 }}>
+              {user ? (user.email === inviteInfo.email ? "Click below to accept the invitation." : `This invite was sent to ${inviteInfo.email}. Please log in with that account.`) : "Sign in or create an account to accept."}
+            </div>
+            {user && user.email === inviteInfo.email ? (
+              <button onClick={async () => {
+                try {
+                  const res = await api(`/workspace/team/invite/${inviteToken}/confirm`, { method: "POST" });
+                  showToast(res.message);
+                  setInviteInfo(null);
+                  window.history.replaceState({}, "", "/");
+                  // Refresh user to get new role
+                  const me = await api("/auth/me");
+                  setUser(me);
+                } catch(e) { showToast(e.message || "Failed to accept invite"); }
+              }} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginRight: 10 }}>
+                Accept invitation
+              </button>
+            ) : (
+              <button onClick={() => { setShowAuth(true); }} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 10, padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginRight: 10 }}>
+                Sign in to accept
+              </button>
+            )}
+            <button onClick={() => { setInviteInfo(null); window.history.replaceState({}, "", "/"); }} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "12px 20px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              Decline
+            </button>
+          </div>
+        </div>
+      )}
       {urlJobId && <JobIdHandler jobId={urlJobId} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} onClose={() => { setUrlJobId(""); window.history.replaceState({}, "", "/"); }} />}
       {urlJobSlug && !urlJobId && <JobSlugHandler slug={urlJobSlug} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} onClose={() => { setUrlJobSlug(""); window.history.replaceState({}, "", "/"); }} />}
       {urlOrgSlug && <OrgSlugHandler slug={urlOrgSlug} isDark={isDark} onBack={() => { setUrlOrgSlug(""); window.history.replaceState({}, "", "/companies"); setPage("companies"); }} onApply={setApplyJob} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}

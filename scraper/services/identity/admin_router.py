@@ -695,12 +695,18 @@ class InviteTeamIn(BaseModel):
 @tenant_router.post("/team/invite", status_code=201)
 async def invite_team_member(
     body: InviteTeamIn,
+    request: Request,
     current_user: dict = Depends(require_org_admin),
 ):
     """
-    Invite a team member to the workspace.
-    Phase 8: Creates placeholder — full email invite in Phase 9.
+    Invite a colleague to join the workspace.
+    - Creates an invite token stored in admin_settings
+    - Sends email with accept link via Resend
+    - Invitee clicks link → account created/linked to tenant with assigned role
     """
+    import os, uuid as _uuid, json as _json
+    from datetime import datetime, timezone, timedelta
+
     tenant_id = current_user.get("tenant_id")
     if not tenant_id:
         raise HTTPException(400, "No workspace found")
@@ -709,19 +715,196 @@ async def invite_team_member(
     if body.role not in valid_roles:
         raise HTTPException(400, f"Role must be one of: {', '.join(valid_roles)}")
 
-    from core.audit import log_action
-    log_action(
-        "team.invite_sent",
-        user_id=str(current_user["id"]),
-        resource_type="user",
-        metadata={"email": body.email, "role": body.role, "tenant_id": tenant_id},
-        module="admin",
-    )
+    # Check if user already in this tenant
+    with get_conn() as conn:
+        cur = conn.cursor()
+        ph = "%s" if USE_POSTGRES else "?"
+        cur.execute(
+            f"SELECT id, tenant_id FROM users WHERE email = {ph}",
+            (body.email.lower(),)
+        )
+        existing = cur.fetchone()
+        if existing:
+            existing = dict(existing)
+            if str(existing.get("tenant_id")) == str(tenant_id):
+                raise HTTPException(400, "This person is already in your workspace")
 
-    # TODO Phase 9: Send invite email via Resend
+    # Create invite token (expires in 7 days)
+    token = str(_uuid.uuid4()).replace("-", "")
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+    invite_data = {
+        "email": body.email.lower(),
+        "role": body.role,
+        "tenant_id": tenant_id,
+        "invited_by": str(current_user["id"]),
+        "invited_by_name": current_user.get("full_name", "Your colleague"),
+        "expires_at": expires_at,
+    }
+
+    # Store invite in admin_settings keyed by token
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            cur.execute("""
+                INSERT INTO admin_settings (key, value, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            """, (f"invite:{token}", _json.dumps(invite_data)))
+        else:
+            cur.execute(
+                "INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)",
+                (f"invite:{token}", _json.dumps(invite_data))
+            )
+
+    # Send invite email
+    frontend_url = os.environ.get("FRONTEND_URL", os.environ.get("APP_URL", "")).rstrip("/")
+    accept_url = f"{frontend_url}/?invite={token}"
+
+    # Get tenant name
+    with get_conn() as conn:
+        cur = conn.cursor()
+        ph = "%s" if USE_POSTGRES else "?"
+        cur.execute(f"SELECT name FROM tenants WHERE id = {ph}", (tenant_id,))
+        row = cur.fetchone()
+        tenant_name = dict(row).get("name", "your team") if row else "your team"
+
+    role_label = {
+        "hr_admin": "HR Admin",
+        "recruiter": "Recruiter",
+        "hiring_manager": "Hiring Manager",
+        "interviewer": "Interviewer",
+    }.get(body.role, body.role)
+
+    html = f"""
+    <div style="font-family:'DM Sans',sans-serif;max-width:560px;margin:0 auto;padding:32px">
+      <h2 style="font-size:22px;font-weight:700;color:#1d1d1f;margin-bottom:8px">
+        You've been invited to join {tenant_name}
+      </h2>
+      <p style="font-size:15px;color:#555;margin-bottom:24px">
+        <strong>{invite_data['invited_by_name']}</strong> has invited you to join
+        <strong>{tenant_name}</strong> on JobStream as <strong>{role_label}</strong>.
+      </p>
+      <a href="{accept_url}"
+         style="display:inline-block;background:#0071E3;color:#fff;text-decoration:none;
+                font-weight:600;font-size:15px;padding:14px 32px;border-radius:10px">
+        Accept invitation
+      </a>
+      <p style="font-size:12px;color:#aaa;margin-top:24px">
+        This invitation expires in 7 days. If you didn't expect this, you can ignore it.
+      </p>
+    </div>
+    """
+
+    try:
+        from core.email import send_email
+        send_email(
+            to_email=body.email,
+            subject=f"You're invited to join {tenant_name} on JobStream",
+            html=html,
+            from_name="JobStream Invitations",
+        )
+        email_sent = True
+    except Exception as e:
+        log.warning(f"Invite email failed: {e}")
+        email_sent = False
+
+    from core.audit import log_action
+    log_action("team.invite_sent", user_id=str(current_user["id"]),
+               resource_type="user",
+               metadata={"email": body.email, "role": body.role, "tenant_id": tenant_id},
+               module="admin")
+
     return {
-        "message": f"Invite sent to {body.email} as {body.role}",
-        "note": "Email invite will be sent when email service is configured for this workspace"
+        "message": f"Invitation sent to {body.email} as {role_label}",
+        "email_sent": email_sent,
+        "accept_url": accept_url,
+        "expires_days": 7,
+    }
+
+
+@tenant_router.get("/team/invite/{token}/accept")
+async def accept_team_invite(token: str):
+    """
+    Accept a workspace invitation.
+    Called when user clicks the invite link.
+    Returns invite details so frontend can show signup/login form.
+    """
+    import json as _json
+    from datetime import datetime, timezone
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        ph = "%s" if USE_POSTGRES else "?"
+        cur.execute(
+            f"SELECT value FROM admin_settings WHERE key = {ph}",
+            (f"invite:{token}",)
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Invitation not found or already used")
+        invite = _json.loads(dict(row)["value"])
+
+    # Check expiry
+    expires = datetime.fromisoformat(invite["expires_at"])
+    if datetime.now(timezone.utc) > expires:
+        raise HTTPException(410, "This invitation has expired")
+
+    return {
+        "email": invite["email"],
+        "role": invite["role"],
+        "tenant_id": invite["tenant_id"],
+        "invited_by_name": invite.get("invited_by_name", "Your colleague"),
+        "token": token,
+    }
+
+
+@tenant_router.post("/team/invite/{token}/confirm")
+async def confirm_team_invite(token: str, current_user: dict = Depends(get_current_user)):
+    """
+    Confirm joining a workspace after user has logged in/registered.
+    Links the authenticated user to the tenant with the invited role.
+    """
+    import json as _json
+    from datetime import datetime, timezone
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        ph = "%s" if USE_POSTGRES else "?"
+        cur.execute(
+            f"SELECT value FROM admin_settings WHERE key = {ph}",
+            (f"invite:{token}",)
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Invitation not found or already used")
+        invite = _json.loads(dict(row)["value"])
+
+    # Verify email matches
+    if current_user.get("email", "").lower() != invite["email"].lower():
+        raise HTTPException(403, "This invitation was sent to a different email address")
+
+    # Check expiry
+    expires = datetime.fromisoformat(invite["expires_at"])
+    if datetime.now(timezone.utc) > expires:
+        raise HTTPException(410, "This invitation has expired")
+
+    # Link user to tenant with assigned role
+    from core.tenant import link_user_to_tenant
+    link_user_to_tenant(str(current_user["id"]), invite["tenant_id"], invite["role"])
+
+    # Delete the used invite token
+    with get_conn() as conn:
+        cur = conn.cursor()
+        ph = "%s" if USE_POSTGRES else "?"
+        cur.execute(
+            f"DELETE FROM admin_settings WHERE key = {ph}",
+            (f"invite:{token}",)
+        )
+
+    return {
+        "message": f"You've joined the workspace as {invite['role']}",
+        "tenant_id": invite["tenant_id"],
+        "role": invite["role"],
     }
 
 

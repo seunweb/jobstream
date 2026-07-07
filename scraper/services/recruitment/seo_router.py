@@ -837,7 +837,11 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
             if alert_time != local_now:
                 continue  # Not this alert's hour yet in their timezone
 
-        hours = 24 if alert.get("frequency") == "daily" else 168
+        # Search window: how far back to look for matching jobs
+        # For scheduled cron: use 7 days so users always get relevant jobs
+        # even if no new jobs were scraped in the last 24h
+        frequency = alert.get("frequency") or "daily"
+        hours = 168 if frequency == "weekly" else 168  # always 7 days for cron
         matching_jobs = _find_matching_jobs(
             keywords,
             alert.get("location", "") or "",
@@ -914,8 +918,10 @@ def _find_matching_jobs(keywords: list, location: str, industry: str, hours: int
                 continue
 
             # Build location / industry / time conditions (shared across all queries)
+            # is_active is SMALLINT — use 1 for both PG and SQLite
             extra_conditions = ["is_active = 1"]
             extra_params = []
+            # Note: no source filter — includes BOTH scraped and manually posted jobs
 
             loc = (location or "").strip()
             if loc and loc.lower() not in ("any", "anywhere", "remote"):
@@ -940,11 +946,14 @@ def _find_matching_jobs(keywords: list, location: str, industry: str, hours: int
                 extra_params.append(f"%{ind}%")
 
             if USE_POSTGRES:
+                # Use scraped_at if available, otherwise created_at (covers manual jobs)
                 extra_conditions.append(
-                    f"created_at > NOW() - INTERVAL '{int(hours)} hours'"
+                    f"COALESCE(scraped_at, created_at) > NOW() - INTERVAL '{int(hours)} hours'"
                 )
             else:
-                extra_conditions.append("created_at > datetime('now', ?)")
+                extra_conditions.append(
+                    "COALESCE(scraped_at, created_at) > datetime('now', ?)"
+                )
                 extra_params.append(f"-{int(hours)} hours")
 
             base_where = " AND ".join(extra_conditions)

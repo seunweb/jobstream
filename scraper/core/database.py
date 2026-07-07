@@ -463,6 +463,7 @@ def get_jobs(
     location: str = "",
     source: str = "",
     include_inactive: bool = False,
+    tenant_id: str = "",
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[list[dict], int]:
@@ -506,6 +507,10 @@ def get_jobs(
     if source:
         conditions.append("source = %s" if USE_POSTGRES else "source = ?")
         params.append(source)
+    if tenant_id:
+        # Strict tenant isolation
+        conditions.append("tenant_id = %s" if USE_POSTGRES else "tenant_id = ?")
+        params.append(tenant_id)
 
     where = " AND ".join(conditions) if conditions else "1=1"
 

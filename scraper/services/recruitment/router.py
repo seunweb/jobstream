@@ -158,11 +158,23 @@ def list_jobs(
     show_inactive = bool(include_inactive) and current_user and current_user.get("role") in (
         "org_owner", "hr_admin", "super_admin", "platform_admin"
     )
+    # Tenant isolation: if requesting manual jobs, scope to current tenant
+    tenant_filter = ""
+    if source == "manual" and current_user:
+        tenant_id = current_user.get("tenant_id")
+        role = current_user.get("role", "")
+        if role not in ("super_admin", "platform_admin") and tenant_id:
+            tenant_filter = tenant_id
+        elif not tenant_id and role not in ("super_admin", "platform_admin"):
+            # No tenant — return empty
+            return {"total": 0, "limit": limit, "offset": offset, "jobs": []}
+
     jobs, total = get_jobs(
         search=search, job_type=job_type, department=department,
         company=company, industry=industry, location=location,
         source=source,
         include_inactive=show_inactive,
+        tenant_id=tenant_filter,
         limit=limit, offset=offset,
     )
     return {"total": total, "limit": limit, "offset": offset, "jobs": jobs}
@@ -172,27 +184,39 @@ def list_jobs(
 def get_my_jobs(
     current_user: dict = Depends(get_current_user),
 ):
-    """Get all jobs posted by the current user's tenant — all statuses."""
+    """
+    Get jobs belonging to the current user's tenant ONLY.
+    Strict tenant isolation — never returns another tenant's jobs.
+    """
     tenant_id = current_user.get("tenant_id")
     user_id = str(current_user.get("id", ""))
+    role = current_user.get("role", "")
+
+    # Super/platform admins see all manual jobs for oversight
+    is_platform_admin = role in ("super_admin", "platform_admin")
 
     with get_conn() as conn:
         cur = conn.cursor()
-        if tenant_id:
-            # Get jobs by tenant
-            cur.execute(
-                "SELECT * FROM jobs WHERE (tenant_id = %s OR posted_by = %s) "
-                "AND source = 'manual' ORDER BY created_at DESC"
-                if USE_POSTGRES else
-                "SELECT * FROM jobs WHERE (tenant_id = ? OR posted_by = ?) "
-                "AND source = 'manual' ORDER BY created_at DESC",
-                (tenant_id, user_id)
-            )
-        else:
-            # Fallback: get all manual jobs (admin)
+
+        if is_platform_admin and not tenant_id:
+            # Platform admin with no tenant — show all for oversight only
             cur.execute(
                 "SELECT * FROM jobs WHERE source = 'manual' ORDER BY created_at DESC"
+                if USE_POSTGRES else
+                "SELECT * FROM jobs WHERE source = 'manual' ORDER BY created_at DESC"
             )
+        elif tenant_id:
+            # Strict isolation: only jobs belonging to THIS tenant
+            cur.execute(
+                "SELECT * FROM jobs WHERE tenant_id = %s AND source = 'manual' ORDER BY created_at DESC"
+                if USE_POSTGRES else
+                "SELECT * FROM jobs WHERE tenant_id = ? AND source = 'manual' ORDER BY created_at DESC",
+                (tenant_id,)
+            )
+        else:
+            # No tenant assigned — return empty, not another company's jobs
+            return {"jobs": [], "total": 0}
+
         jobs = [dict(r) for r in cur.fetchall()]
     return {"jobs": jobs, "total": len(jobs)}
 
@@ -342,6 +366,7 @@ class ManualJobIn(BaseModel):
     salary: str = ""
     apply_url: str = ""
     apply_email: str = ""
+    apply_mode: str = "insite"  # insite | url | email
 
 
 
@@ -569,6 +594,12 @@ async def create_manual_job(
     body: ManualJobIn,
     current_user: dict = Depends(get_current_user),
 ):
+    """
+    Post a manual job. Strict ownership checks:
+    - User must have a tenant (workspace)
+    - organization_id must belong to the user's tenant
+    - Prevents posting jobs under companies the user doesn't own
+    """
     """Post a job manually — tied to a company profile."""
     import hashlib, datetime as dt
 
@@ -594,6 +625,31 @@ async def create_manual_job(
             raise
         except Exception:
             pass
+
+    # ── Anti-impersonation: verify org ownership ────────────────────────────
+    _role = current_user.get("role", "")
+    _is_admin = _role in ("super_admin", "platform_admin")
+
+    if not _is_admin:
+        if not tenant_id:
+            raise HTTPException(403, "You must create a workspace before posting jobs.")
+        if body.organization_id:
+            with get_conn() as _c:
+                _cur = _c.cursor()
+                _ph = "%s" if USE_POSTGRES else "?"
+                _cur.execute(
+                    f"SELECT tenant_id FROM organizations WHERE id = {_ph}",
+                    (body.organization_id,)
+                )
+                _org = _cur.fetchone()
+                if not _org:
+                    raise HTTPException(404, "Organization not found.")
+                _org_tenant = str(dict(_org).get("tenant_id") or "")
+                if _org_tenant != str(tenant_id):
+                    raise HTTPException(403,
+                        "You cannot post jobs under a company you do not own. "
+                        "Create your own workspace to post jobs."
+                    )
 
     # Build apply_url from email if not provided
     apply_url = body.apply_url

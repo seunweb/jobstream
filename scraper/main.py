@@ -731,16 +731,15 @@ async def onboard_tenant(
                 if USE_POSTGRES:
                     cur.execute("""
                         INSERT INTO organizations
-                            (id, tenant_id, name, slug, country, is_active, created_at)
-                        VALUES (%s, %s, %s, %s, %s, TRUE, NOW())
-                        ON CONFLICT (slug) DO NOTHING
-                    """, (org_id, tenant["id"], body.name, org_slug, body.country or "NG"))
+                            (id, tenant_id, name, slug, country, industry, is_active, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, TRUE, NOW())
+                    """, (org_id, tenant["id"], body.name, org_slug, body.country or "NG", body.industry or ""))
                 else:
                     cur.execute("""
                         INSERT OR IGNORE INTO organizations
-                            (id, tenant_id, name, slug, country, is_active, created_at)
-                        VALUES (?, ?, ?, ?, ?, 1, datetime('now'))
-                    """, (org_id, tenant["id"], body.name, org_slug, body.country or "NG"))
+                            (id, tenant_id, name, slug, country, industry, is_active, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'))
+                    """, (org_id, tenant["id"], body.name, org_slug, body.country or "NG", body.industry or ""))
         except Exception as org_err:
             log.warning(f"Could not auto-create organization for tenant: {org_err}")
 

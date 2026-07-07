@@ -76,14 +76,30 @@ def q(pg, sq="?"):
 def list_all_organizations(
     current_user: dict = Depends(get_current_user),
 ):
-    """Return all organizations including inactive — for admin job posting dropdowns."""
+    """
+    Return organizations for the job posting dropdown.
+    - Platform admins: all organizations
+    - Employers: only their own tenant's organization
+    """
+    role = current_user.get("role", "")
+    tenant_id = current_user.get("tenant_id")
+    is_admin = role in ("super_admin", "platform_admin")
+
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute(
-            "SELECT id, name, industry, website, logo_url FROM organizations ORDER BY name"
-            if USE_POSTGRES else
-            "SELECT id, name, industry, website, logo_url FROM organizations ORDER BY name"
-        )
+        if is_admin:
+            cur.execute(
+                "SELECT id, name, industry, website, logo_url FROM organizations ORDER BY name"
+            )
+        elif tenant_id:
+            # Employers only see their own organization
+            ph = "%s" if USE_POSTGRES else "?"
+            cur.execute(
+                f"SELECT id, name, industry, website, logo_url FROM organizations WHERE tenant_id = {ph} ORDER BY name",
+                (tenant_id,)
+            )
+        else:
+            return []
         return [dict(r) for r in cur.fetchall()]
 
 

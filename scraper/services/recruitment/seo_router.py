@@ -678,6 +678,7 @@ async def debug_alerts():
     # Get active alerts
     with get_conn() as conn:
         cur = conn.cursor()
+        # job_alerts.is_active is BOOLEAN, jobs.is_active is SMALLINT
         cur.execute(
             "SELECT id, email, keywords, location, industry, frequency, send_time "
             "FROM job_alerts WHERE is_active = TRUE" if USE_POSTGRES
@@ -686,10 +687,11 @@ async def debug_alerts():
         )
         alerts = [dict(r) for r in cur.fetchall()]
 
-        # Count total active jobs
+        # Count total active jobs (SMALLINT column)
         cur.execute("SELECT COUNT(*) FROM jobs WHERE is_active = 1")
         row = cur.fetchone()
-        total_jobs = int(list(dict(row).values())[0]) if USE_POSTGRES else int(row[0])
+        row_dict = dict(row)
+        total_jobs = int(list(row_dict.values())[0])
 
         # Sample 5 job titles
         cur.execute(

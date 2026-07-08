@@ -690,8 +690,7 @@ async def debug_alerts():
         # Count total active jobs (SMALLINT column)
         cur.execute("SELECT COUNT(*) FROM jobs WHERE is_active = 1")
         row = cur.fetchone()
-        row_dict = dict(row)
-        total_jobs = int(list(row_dict.values())[0])
+        total_jobs = int(row[0]) if row else 0
 
         # Sample 5 job titles
         cur.execute(
@@ -950,11 +949,11 @@ def _find_matching_jobs(keywords: list, location: str, industry: str, hours: int
             if USE_POSTGRES:
                 # Use scraped_at if available, otherwise created_at (covers manual jobs)
                 extra_conditions.append(
-                    f"COALESCE(scraped_at, created_at) > NOW() - INTERVAL '{int(hours)} hours'"
+                    f"created_at > NOW() - INTERVAL '{int(hours)} hours'"
                 )
             else:
                 extra_conditions.append(
-                    "COALESCE(scraped_at, created_at) > datetime('now', ?)"
+                    "created_at > datetime('now', ?)"
                 )
                 extra_params.append(f"-{int(hours)} hours")
 

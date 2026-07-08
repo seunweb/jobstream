@@ -690,7 +690,7 @@ async def debug_alerts():
         # Count total active jobs (SMALLINT column)
         cur.execute("SELECT COUNT(*) FROM jobs WHERE is_active = 1")
         row = cur.fetchone()
-        total_jobs = int(row[0]) if row else 0
+        total_jobs = int(list(dict(row).values())[0]) if row else 0
 
         # Sample 5 job titles
         cur.execute(

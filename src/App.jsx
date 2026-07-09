@@ -1636,7 +1636,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                   <div onClick={() => loadApplications(job)} style={{ cursor: "pointer", flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{job.title}</div>
-                      {job.is_featured && <span style={{ fontSize: 10, fontWeight: 700, background: "#f59e0b", color: "#fff", padding: "2px 7px", borderRadius: 10 }}>&#11088; Featured</span>}
+                      {job.is_featured && <span style={{ fontSize: 10, fontWeight: 700, background: "#f59e0b", color: "#fff", padding: "2px 7px", borderRadius: 10 }}>★ Featured</span>}
                       <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 10, fontWeight: 600,
                         background: job.is_draft ? "rgba(251,191,36,0.15)" : job.is_active ? "rgba(61,214,140,0.15)" : "rgba(248,113,113,0.15)",
                         color: job.is_draft ? "#f59e0b" : job.is_active ? "#3DD68C" : "#f87171" }}>
@@ -1662,7 +1662,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                     setJobs(d.jobs || []);
                     toast(job.is_featured ? "Removed from featured" : "Job featured!");
                   }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #f59e0b", background: "none", color: "#f59e0b", cursor: "pointer" }}>
-                    {job.is_featured ? "&#11088; Unfeature" : "&#9734; Feature"}
+                    {job.is_featured ? "★ Unfeature" : "☆ Feature"}
                   </button>
                   <button onClick={async () => {
                     await api(`/admin/jobs/${job.id}`, { method: "PATCH", body: JSON.stringify({ is_active: !job.is_active }) });
@@ -1676,7 +1676,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                     style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: "none", color: isDark ? "#888" : "#555", cursor: "pointer" }}>
                     Duplicate
                   </button>
-                  <button onClick={e => { e.stopPropagation(); deleteJob(job); }}
+                  <button onClick={e => { e.stopPropagation(); if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return; deleteJob(job); }}
                     style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "none", background: "none", color: "#f87171", cursor: "pointer" }}>
                     &#128465; Delete
                   </button>
@@ -2338,7 +2338,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
     try {
       if (action === "publish")   await api(`/admin/jobs/${job.id}/publish`,   { method: "POST" });
       if (action === "unpublish") await api(`/admin/jobs/${job.id}/unpublish`, { method: "POST" });
-      if (action === "delete")    await api(`/admin/jobs/${job.id}/hard`,      { method: "DELETE" });
+      if (action === "delete" && window.confirm(`Permanently delete "${job.title}"?`))    await api(`/admin/jobs/${job.id}/hard`,      { method: "DELETE" });
       if (action === "publish" || action === "unpublish") {
         setJobs(prev => prev.map(j => j.id === job.id
           ? { ...j, is_active: action === "publish" ? 1 : 0 } : j));
@@ -4685,7 +4685,7 @@ function MyAlertsPage({ isDark = true, user, onAuthRequired, toast }) {
               <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                 <button onClick={() => setEditing(alert)} title="Edit" style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>*</button>
                 <button onClick={() => toggleActive(alert)} title={alert.is_active ? "Pause" : "Resume"} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>{alert.is_active ? "||" : ">"}</button>
-                <button onClick={() => removeAlert(alert)} title="Delete" style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#f87171", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>x</button>
+                <button onClick={() => { if (!window.confirm("Delete this alert?")) return; removeAlert(alert); }} title="Delete" style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 8, padding: "6px 10px", fontSize: 12, color: "#f87171", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>x</button>
               </div>
             </div>
           </div>
@@ -5560,7 +5560,9 @@ export default function App() {
   const [theme, setTheme] = useState("light");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
-  const sidebarExpanded = sidebarOpen || sidebarHovered;
+  // Only use hover expand on non-touch devices
+  const isTouchDevice = typeof window !== "undefined" && window.matchMedia("(hover: none)").matches;
+  const sidebarExpanded = sidebarOpen || (!isTouchDevice && sidebarHovered);
   const [user, setUser] = useState(getStoredUser());
   const [showAuth, setShowAuth] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState(null);
@@ -5746,8 +5748,9 @@ export default function App() {
 
       {/* Sidebar */}
       <aside
-        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseEnter={() => { if (!isTouchDevice) setSidebarHovered(true); }}
         onMouseLeave={() => setSidebarHovered(false)}
+        onTouchStart={() => setSidebarHovered(false)}
         style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: isDark ? "1px solid #1e1e24" : "1px solid #e0e0e8", padding: sidebarExpanded ? "20px 14px" : "12px 8px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "all 0.2s ease", overflowY: "auto", overflowX: "hidden", width: sidebarExpanded ? "220px" : "52px", minWidth: sidebarExpanded ? "220px" : "52px", scrollbarWidth: "thin", scrollbarColor: isDark ? "#2a2a32 transparent" : "#d0d0d8 transparent" }}>
 
         {/* Burger only - logo moved to main top bar */}

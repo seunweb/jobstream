@@ -807,7 +807,6 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
                 "unsubscribe_token, last_sent_at FROM job_alerts WHERE is_active = 1"
             )
             alerts = [dict(r) for r in cur.fetchall()]
-        alerts = [dict(r) for r in cur.fetchall()]
 
     for alert in alerts:
         keywords = [k.strip() for k in alert["keywords"].split(",") if k.strip()]

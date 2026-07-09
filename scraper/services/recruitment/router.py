@@ -367,6 +367,8 @@ class ManualJobIn(BaseModel):
     apply_url: str = ""
     apply_email: str = ""
     apply_mode: str = "insite"  # insite | url | email
+    deadline: Optional[str] = None  # ISO date string e.g. "2026-08-01"
+    is_draft: bool = False  # True = save as draft (not published)
 
 
 
@@ -668,14 +670,15 @@ async def create_manual_job(
                     (title, company, location, job_type, department,
                      description, salary, apply_url, source_url,
                      source, is_active, fingerprint, organization_id,
-                     tenant_id, scraped_at, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',1,%s,%s,%s,NOW(),NOW())
+                     tenant_id, apply_mode, deadline, scraped_at, created_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',%s,%s,%s,%s,%s,%s,NOW(),NOW())
                 RETURNING id
             """, (
                 body.title, body.company, body.location, body.job_type,
                 body.department, body.description, body.salary,
-                apply_url, apply_url, fingerprint, body.organization_id,
-                current_user.get("tenant_id")
+                apply_url, apply_url, 0 if body.is_draft else 1, fingerprint,
+                body.organization_id, current_user.get("tenant_id"),
+                body.apply_mode, body.deadline or None
             ))
             job_id = cur.fetchone()["id"]
         else:
@@ -684,13 +687,14 @@ async def create_manual_job(
                     (title, company, location, job_type, department,
                      description, salary, apply_url, source_url,
                      source, is_active, fingerprint, organization_id,
-                     tenant_id, scraped_at, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,'manual',1,?,?,?,datetime('now'),datetime('now'))
+                     tenant_id, apply_mode, deadline, scraped_at, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,'manual',?,?,?,?,?,?,datetime('now'),datetime('now'))
             """, (
                 body.title, body.company, body.location, body.job_type,
                 body.department, body.description, body.salary,
-                apply_url, apply_url, fingerprint, body.organization_id,
-                current_user.get("tenant_id")
+                apply_url, apply_url, 0 if body.is_draft else 1, fingerprint,
+                body.organization_id, current_user.get("tenant_id"),
+                body.apply_mode, body.deadline or None
             ))
             job_id = cur.lastrowid
 

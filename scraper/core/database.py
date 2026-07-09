@@ -187,10 +187,29 @@ def init_db():
                 cur.execute(stmt)
     _migrate_industry_columns()
     _migrate_user_tracking_columns()
+    _migrate_job_extra_columns()
     _migrate_featured_column()
     _migrate_alert_timezone_column()
     _seed_companies()
     logger.info("Database ready")
+
+
+def _migrate_job_extra_columns():
+    """Add apply_mode and deadline columns to jobs if missing."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if USE_POSTGRES:
+            try:
+                cur.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS apply_mode TEXT DEFAULT 'insite'")
+                cur.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS deadline DATE")
+            except Exception as e:
+                logger.warning(f"Migration skipped: {e}")
+        else:
+            for col, typ in [("apply_mode", "TEXT DEFAULT 'insite'"), ("deadline", "TEXT")]:
+                try:
+                    cur.execute(f"ALTER TABLE jobs ADD COLUMN {col} {typ}")
+                except Exception:
+                    pass
 
 
 def _migrate_featured_column():

@@ -761,10 +761,8 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
     import urllib.request
     from datetime import datetime as _dt, timezone as _tz
 
-    # Each alert uses its own timezone — now_hour is UTC reference only
     now_utc = _dt.now(_tz.utc)
-    now_hour = now_utc.strftime("%H:00")  # UTC fallback for alerts without timezone
-    log.info(f"Cron dispatch: UTC={now_hour}")
+    log.info(f"Cron dispatch: UTC={now_utc.strftime('%H:%M')}")
 
     resend_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("FROM_EMAIL", "onboarding@resend.dev")
@@ -816,27 +814,43 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
         if not keywords:
             continue
 
-        # Check preferred send_time in the alert's own timezone
+        # Check if alert should send now based on send_time and timezone
         if respect_send_time:
-            alert_time = (alert.get("send_time") or "08:00").strip()[:5]
+            alert_time = (alert.get("send_time") or "08:00").strip()[:5]  # e.g. "08:00"
             alert_tz   = (alert.get("timezone")  or "Africa/Lagos").strip()
             try:
-                try:
-                    import zoneinfo as _zi
-                    local_now = _dt.now(_zi.ZoneInfo(alert_tz)).strftime("%H:00")
-                except ImportError:
-                    # Python < 3.9 fallback
-                    import pytz as _pytz
-                    local_now = _dt.now(_pytz.timezone(alert_tz)).strftime("%H:00")
+                import zoneinfo as _zi
+                local_now_dt = _dt.now(_zi.ZoneInfo(alert_tz))
             except Exception:
-                local_now = now_hour  # fallback to UTC
-            log.info(
-                f"Alert {alert.get('email','')[:6]}*** | "
-                f"send_time={alert_time} | tz={alert_tz} | "
-                f"local_now={local_now} | match={'YES' if alert_time == local_now else 'NO'}"
-            )
-            if alert_time != local_now:
-                continue  # Not this alert's hour yet in their timezone
+                local_now_dt = _dt.now()
+            # Compare integer hours only (ignore minutes)
+            local_hour_int = local_now_dt.hour
+            alert_hour_int = int(alert_time[:2])  # "08:00" -> 8
+
+            if local_hour_int != alert_hour_int:
+                log.info(f"Alert {alert.get('email','')[:6]}*** | send_time={alert_hour_int:02d}:00 | local_now={local_hour_int:02d}:{local_now_dt.minute:02d} | match=NO")
+                continue
+            log.info(f"Alert {alert.get('email','')[:6]}*** | send_time={alert_hour_int:02d}:00 | local_now={local_hour_int:02d}:{local_now_dt.minute:02d} | match=YES")
+
+            # Also skip if already sent within the last 6 hours (prevent duplicate sends)
+            last_sent = alert.get("last_sent_at")
+            if last_sent:
+                try:
+                    if isinstance(last_sent, str):
+                        from datetime import timezone as _tz2
+                        last_dt = _dt.fromisoformat(last_sent.replace("Z", "+00:00"))
+                    else:
+                        last_dt = last_sent
+                    if not last_dt.tzinfo:
+                        last_dt = last_dt.replace(tzinfo=__import__("datetime").timezone.utc)
+                    hours_since = (_dt.now(__import__("datetime").timezone.utc) - last_dt).total_seconds() / 3600
+                    if hours_since < 6:
+                        log.info(f"Alert {alert.get('email','')[:6]}*** | skipped - sent {hours_since:.1f}h ago")
+                        continue
+                except Exception as e:
+                    log.warning(f"last_sent_at parse error: {e}")
+
+            
 
         # Search window: how far back to look for matching jobs
         # For scheduled cron: use 7 days so users always get relevant jobs

@@ -467,7 +467,7 @@ async def admin_patch_job(
     body = await request.json()
     with get_conn() as conn:
         cur = conn.cursor()
-        updatable = ["title", "description", "location", "salary", "department", "job_type"]
+        updatable = ["title", "description", "location", "salary", "department", "job_type", "apply_mode", "apply_url", "apply_email", "deadline"]
         for field in updatable:
             if field in body:
                 ph = "%s" if USE_POSTGRES else "?"

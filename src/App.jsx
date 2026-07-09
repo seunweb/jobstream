@@ -431,6 +431,11 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
               )}
           </div>
             <div style={{ fontSize: 12, color: isDark ? "#666" : "#555" }}>{job.company}</div>
+            {job.deadline && (
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#f87171", marginTop: 2 }}>
+                Deadline: {new Date(job.deadline).toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
             {isNew && <Chip variant="green" isDark={isDark}>New</Chip>}
@@ -587,15 +592,32 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
             >
               x <span className="hide-on-xs">Close</span>
             </button>
-            {/* Apply on company website */}
-            {job.apply_url && (
+            {/* Apply button — behaviour depends on apply_mode */}
+            {job.apply_mode === "insite" || (!job.apply_mode && !job.source_url) ? (
+              /* In-site application — Apply Now */
+              <button
+                onClick={() => {
+                  if (!user) { onAuthRequired(); return; }
+                  onApply(job);
+                }}
+                style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}
+              >
+                Apply Now
+              </button>
+            ) : job.apply_mode === "email" && job.apply_url ? (
+              /* Email application */
+              <a href={job.apply_url} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "none", whiteSpace: "nowrap" }}>
+                Apply by Email
+              </a>
+            ) : job.apply_url ? (
+              /* External URL — Apply on company website */
               <a href={job.apply_url} target="_blank" rel="noreferrer"
                 style={{ background: isDark ? "#1e1e2e" : "#e8e8ed", border: isDark ? "1px solid rgba(0,113,227,0.35)" : "1px solid #c7c7cc", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: isDark ? "#4DA3FF" : "#1d1d1f", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "none", fontWeight: 500, whiteSpace: "nowrap" }}>
                 🌐 <span className="hide-on-xs">Apply on company website &rarr;</span><span className="show-on-xs" style={{ display: "none" }}>Apply &rarr;</span>
               </a>
-            )}
-            {/* Apply now (direct) */}
-            {hasDirectApply(job) && (
+            ) : null}
+            {/* Apply now (direct) for scraped jobs with no apply_url */}
+            {hasDirectApply(job) && !job.apply_mode && (
               <button
                 onClick={() => {
                   if (!user) { onAuthRequired(); return; }
@@ -1136,10 +1158,11 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
     title: "", company: "", organization_id: "",
     location: "Lagos, Nigeria", job_type: "Full-time",
     department: "General", description: "",
-    salary: "", apply_url: "", apply_email: "", apply_mode: "insite",
+    salary: "", apply_url: "", apply_email: "", apply_mode: "insite", deadline: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
   const [organizations, setOrganizations] = useState(orgsProp);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -1155,13 +1178,13 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
   const inp = { width: "100%", boxSizing: "border-box", padding: "10px 14px", fontSize: 13, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, background: isDark ? "#141416" : "#ffffff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" };
   const sel = { ...inp, cursor: "pointer" };
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e, asDraft = false) {
     e.preventDefault();
-    // Validate - company name is set from org selection
     const companyName = form.company || (organizations.find(o => o.id === form.organization_id)?.name || "");
     if (!form.title) { setError("Job title is required"); return; }
     if (!companyName && !form.organization_id) { setError("Please select a company"); return; }
-    if (form.apply_mode !== "insite" && !form.apply_url && !form.apply_email) {
+    // Skip apply method validation for drafts
+    if (!asDraft && form.apply_mode !== "insite" && !form.apply_url && !form.apply_email) {
       setError("Provide an apply URL or email"); return;
     }
 
@@ -1169,15 +1192,16 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
       ...form,
       company: companyName || form.company,
       source: "manual",
+      is_draft: asDraft,  // draft = not published
     };
 
     setLoading(true); setError("");
     try {
       await api("/jobs", { method: "POST", body: JSON.stringify(payload) });
-      onSuccess("Job posted successfully!");
+      onSuccess(asDraft ? "Job saved as draft!" : "Job posted successfully!");
       onClose();
     } catch (err) {
-      setError(err.message || "Failed to post job - check all required fields");
+      setError(err.message || "Failed to save job");
     } finally {
       setLoading(false);
     }
@@ -1188,13 +1212,25 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
   );
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ padding: "24px 28px 16px", borderBottom: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div onClick={!fullscreen ? onClose : undefined} style={{ position: "fixed", inset: 0, background: fullscreen ? (isDark ? "#0D0D0F" : "#f4f4f6") : "rgba(0,0,0,0.5)", backdropFilter: fullscreen ? "none" : "blur(4px)", display: "flex", alignItems: fullscreen ? "flex-start" : "center", justifyContent: "center", zIndex: 9000, padding: fullscreen ? 0 : 20, overflowY: fullscreen ? "auto" : "hidden" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#ffffff", border: fullscreen ? "none" : (isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8"), borderRadius: fullscreen ? 0 : 20, width: "100%", maxWidth: fullscreen ? "100%" : 560, minHeight: fullscreen ? "100vh" : "auto", maxHeight: fullscreen ? "none" : "90vh", overflowY: fullscreen ? "visible" : "auto" }}>
+        <div style={{ padding: "20px 28px 16px", borderBottom: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", position: fullscreen ? "sticky" : "relative", top: fullscreen ? 0 : "auto", background: isDark ? "#141416" : "#ffffff", zIndex: 10 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", margin: 0 }}>Post a job</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: isDark ? "#666" : "#888" }}>x</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button type="button" onClick={() => { window.open("/?page=employer&postjob=1", "_blank"); onClose(); }}
+              title="Open in new tab"
+              style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "4px 10px", fontSize: 11, cursor: "pointer", color: isDark ? "#888" : "#555", fontFamily: "'DM Sans', sans-serif" }}>
+              Open in New Tab
+            </button>
+            <button type="button" onClick={() => setFullscreen(f => !f)}
+              title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+              style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "4px 10px", fontSize: 11, cursor: "pointer", color: isDark ? "#888" : "#555", fontFamily: "'DM Sans', sans-serif" }}>
+              {fullscreen ? "Exit fullscreen" : "Fullscreen"}
+            </button>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: isDark ? "#666" : "#888" }}>x</button>
+          </div>
         </div>
-        <form onSubmit={handleSubmit} style={{ padding: "20px 28px" }}>
+        <form onSubmit={handleSubmit} style={{ padding: fullscreen ? "24px 10% 40px" : "20px 28px", maxWidth: fullscreen ? 900 : "none", margin: fullscreen ? "0 auto" : 0 }}>
           {error && <div style={{ background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.3)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#f87171" }}>{error}</div>}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
@@ -1250,6 +1286,18 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
           </div>
 
           <div style={{ marginBottom: 16 }}>
+            <Label>Application deadline (optional)</Label>
+            <input type="date" value={form.deadline} onChange={set("deadline")}
+              min={new Date().toISOString().split("T")[0]}
+              style={{ ...inp, cursor: "pointer", colorScheme: isDark ? "dark" : "light" }} />
+            {form.deadline && (
+              <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 4 }}>
+                Applications close on {new Date(form.deadline).toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" })}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
             <Label>Job description</Label>
             <RichTextarea
               value={form.description}
@@ -1290,16 +1338,24 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
                 style={{ ...inp, marginTop: 4 }} />
             )}
             {form.apply_mode === "insite" && (
-              <div style={{ fontSize: 12, color: "#3DD68C", padding: "8px 12px", background: "rgba(61,214,140,0.1)", borderRadius: 8, marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: "rgb(7,86,48)", padding: "8px 12px", background: "rgba(7,86,48,0.08)", borderRadius: 8, marginTop: 4 }}>
                 Candidates will apply directly on JobStream. You will receive applications in your employer dashboard.
               </div>
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button type="button" onClick={onClose} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "10px 20px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-            <button type="submit" disabled={loading} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
-              {loading ? "Posting..." : "Post job"}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <button type="button" onClick={onClose}
+              style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "10px 18px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              Cancel
+            </button>
+            <button type="button" disabled={loading} onClick={e => handleSubmit(e, true)}
+              style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 10, padding: "10px 18px", fontSize: 13, fontWeight: 500, color: isDark ? "#aaa" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
+              Save as draft
+            </button>
+            <button type="submit" disabled={loading}
+              style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: loading ? 0.6 : 1 }}>
+              {loading ? "Saving..." : "Publish job"}
             </button>
           </div>
         </form>
@@ -1402,7 +1458,7 @@ function TenantOnboardModal({ isDark = true, onClose, onSuccess }) {
 }
 
 
-function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => true }) {
+function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => true, autoOpenPostJob = false, onAutoPostJobDone, autoEditJobId = "", onAutoEditDone }) {
   const [jobs, setJobs] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1411,6 +1467,9 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
   const [tenant, setTenant] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [editingJob, setEditingJob] = useState(null);
+  const [editFullscreen, setEditFullscreen] = useState(false);
+  const [empJobSearch, setEmpJobSearch] = useState("");
+  const [teamSearch, setTeamSearch] = useState("");
   const [applications, setApplications] = useState([]);
   const [appsLoading, setAppsLoading] = useState(false);
   const [empTab, setEmpTab] = useState("jobs"); // jobs | applications | team
@@ -1418,6 +1477,23 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("recruiter");
   const [inviteLoading, setInviteLoading] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenPostJob && user) {
+      setShowPostJob(true);
+      onAutoPostJobDone && onAutoPostJobDone();
+    }
+  }, [autoOpenPostJob, user]);
+
+  useEffect(() => {
+    if (autoEditJobId && jobs.length > 0) {
+      const job = jobs.find(j => String(j.id) === String(autoEditJobId));
+      if (job) {
+        setEditingJob(job);
+        onAutoEditDone && onAutoEditDone();
+      }
+    }
+  }, [autoEditJobId, jobs]);
 
   useEffect(() => {
     if (!user) return;
@@ -1453,6 +1529,30 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
       setApplications(prev => prev.map(a => a.id === appId ? { ...a, status } : a));
       toast(`Status updated to ${status}`);
     } catch { toast("Failed to update status"); }
+  }
+
+  async function duplicateJob(job) {
+    try {
+      const payload = {
+        title: `${job.title} (Copy)`,
+        company: job.company,
+        organization_id: job.organization_id || "",
+        location: job.location || "Lagos, Nigeria",
+        job_type: job.job_type || "Full-time",
+        department: job.department || "General",
+        description: job.description || "",
+        salary: job.salary || "",
+        apply_url: job.apply_url || "",
+        apply_email: job.apply_email || "",
+        apply_mode: job.apply_mode || "insite",
+        deadline: "",  // reset deadline for duplicate
+        is_draft: true,  // always save duplicate as draft
+      };
+      await api("/jobs", { method: "POST", body: JSON.stringify(payload) });
+      const d = await api("/jobs/mine");
+      setJobs(d.jobs || []);
+      toast(`Duplicated as draft: "${payload.title}"`);
+    } catch (e) { toast(e.message || "Failed to duplicate"); }
   }
 
   async function deleteJob(job) {
@@ -1512,7 +1612,14 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
       <div style={{ display: "grid", gridTemplateColumns: selectedJob ? "1fr 1fr" : "1fr", gap: 16 }}>
         {/* Jobs list */}
         <div>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#888" : "#666", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.5px" }}>Your jobs</h2>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#888" : "#666", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>Your jobs</h2>
+            <input
+              value={empJobSearch} onChange={e => setEmpJobSearch(e.target.value)}
+              placeholder="Search jobs..."
+              style={{ padding: "6px 12px", fontSize: 12, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none", width: 180 }}
+            />
+          </div>
           {loading && <Spinner />}
           {!loading && jobs.length === 0 && (
             <div style={{ textAlign: "center", padding: "32px 20px", background: isDark ? "#141416" : "#f8f8fb", borderRadius: 14, border: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0" }}>
@@ -1521,7 +1628,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
             </div>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {jobs.map(job => (
+            {jobs.filter(job => !empJobSearch || job.title?.toLowerCase().includes(empJobSearch.toLowerCase()) || job.company?.toLowerCase().includes(empJobSearch.toLowerCase()) || job.location?.toLowerCase().includes(empJobSearch.toLowerCase())).map(job => (
               <div key={job.id}
                 style={{ background: isDark ? "#141416" : "#ffffff", border: `1px solid ${selectedJob?.id === job.id ? "#0071E3" : (isDark ? "#2a2a32" : "#e0e0e8")}`, borderRadius: 12, padding: "14px 16px", transition: "border-color 0.15s" }}
               >
@@ -1529,11 +1636,11 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                   <div onClick={() => loadApplications(job)} style={{ cursor: "pointer", flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{job.title}</div>
-                      {job.is_featured && <span style={{ fontSize: 10, fontWeight: 700, background: "#f59e0b", color: "#fff", padding: "2px 7px", borderRadius: 10 }}>* Featured</span>}
+                      {job.is_featured && <span style={{ fontSize: 10, fontWeight: 700, background: "#f59e0b", color: "#fff", padding: "2px 7px", borderRadius: 10 }}>&#11088; Featured</span>}
                       <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 10, fontWeight: 600,
-                        background: job.is_active ? "rgba(61,214,140,0.15)" : "rgba(248,113,113,0.15)",
-                        color: job.is_active ? "#3DD68C" : "#f87171" }}>
-                        {job.is_active ? "Published" : "Unpublished"}
+                        background: job.is_draft ? "rgba(251,191,36,0.15)" : job.is_active ? "rgba(61,214,140,0.15)" : "rgba(248,113,113,0.15)",
+                        color: job.is_draft ? "#f59e0b" : job.is_active ? "#3DD68C" : "#f87171" }}>
+                        {job.is_draft ? "Draft" : job.is_active ? "Published" : "Unpublished"}
                       </span>
                     </div>
                     <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>{job.company} &middot; {job.location} &middot; {job.job_type}</div>
@@ -1547,7 +1654,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                   </button>
                   <button onClick={() => setEditingJob(job)}
                     style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: "none", color: isDark ? "#888" : "#555", cursor: "pointer" }}>
-                    * Edit
+                    &#9999;&#65039; Edit
                   </button>
                   <button onClick={async () => {
                     await api(`/jobs/${job.id}/feature`, { method: "PATCH" });
@@ -1555,7 +1662,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                     setJobs(d.jobs || []);
                     toast(job.is_featured ? "Removed from featured" : "Job featured!");
                   }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #f59e0b", background: "none", color: "#f59e0b", cursor: "pointer" }}>
-                    {job.is_featured ? "* Unfeature" : "o Feature"}
+                    {job.is_featured ? "&#11088; Unfeature" : "&#9734; Feature"}
                   </button>
                   <button onClick={async () => {
                     await api(`/admin/jobs/${job.id}`, { method: "PATCH", body: JSON.stringify({ is_active: !job.is_active }) });
@@ -1565,9 +1672,13 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                   }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${job.is_active ? "#f87171" : "#3DD68C"}`, background: "none", color: job.is_active ? "#f87171" : "#3DD68C", cursor: "pointer" }}>
                     {job.is_active ? "Unpublish" : "Publish"}
                   </button>
+                  <button onClick={() => duplicateJob(job)}
+                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: "none", color: isDark ? "#888" : "#555", cursor: "pointer" }}>
+                    Duplicate
+                  </button>
                   <button onClick={e => { e.stopPropagation(); deleteJob(job); }}
                     style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "none", background: "none", color: "#f87171", cursor: "pointer" }}>
-                    🗑 Delete
+                    &#128465; Delete
                   </button>
                 </div>
               </div>
@@ -1656,7 +1767,12 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
         </div>
         {team.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {team.map(m => (
+            <input
+              value={teamSearch} onChange={e => setTeamSearch(e.target.value)}
+              placeholder="Search team members..."
+              style={{ padding: "7px 12px", fontSize: 12, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none", marginBottom: 4 }}
+            />
+            {team.filter(m => !teamSearch || m.full_name?.toLowerCase().includes(teamSearch.toLowerCase()) || m.email?.toLowerCase().includes(teamSearch.toLowerCase()) || m.role?.toLowerCase().includes(teamSearch.toLowerCase())).map(m => (
               <div key={m.id} style={{ background: isDark ? "#141416" : "#fff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#0071E3", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13 }}>
@@ -1675,12 +1791,24 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
       </div>
 
       {editingJob && (
-        <div onClick={() => setEditingJob(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#fff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto", padding: "24px 28px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div onClick={() => !editFullscreen && setEditingJob(null)} style={{ position: "fixed", inset: 0, background: editFullscreen ? (isDark ? "#0D0D0F" : "#f4f4f6") : "rgba(0,0,0,0.5)", backdropFilter: editFullscreen ? "none" : "blur(4px)", display: "flex", alignItems: editFullscreen ? "flex-start" : "center", justifyContent: "center", zIndex: 9000, padding: editFullscreen ? 0 : 20, overflowY: editFullscreen ? "auto" : "hidden" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#fff", border: editFullscreen ? "none" : (isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8"), borderRadius: editFullscreen ? 0 : 20, width: "100%", maxWidth: editFullscreen ? "100%" : 560, minHeight: editFullscreen ? "100vh" : "auto", maxHeight: editFullscreen ? "none" : "90vh", overflowY: editFullscreen ? "visible" : "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 28px 16px", borderBottom: isDark ? "1px solid #2a2a32" : "1px solid #e8e8f0", position: editFullscreen ? "sticky" : "relative", top: editFullscreen ? 0 : "auto", background: isDark ? "#141416" : "#fff", zIndex: 10 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", margin: 0 }}>Edit Job</h3>
-              <button onClick={() => setEditingJob(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888" }}>&times;</button>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button type="button" onClick={() => { const url = `/?page=employer&editjob=${editingJob.id}`; window.open(url, "_blank"); setEditingJob(null); }}
+                  title="Open in new tab"
+                  style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "4px 10px", fontSize: 11, cursor: "pointer", color: isDark ? "#888" : "#555", fontFamily: "'DM Sans', sans-serif" }}>
+                  Open in New Tab
+                </button>
+                <button type="button" onClick={() => setEditFullscreen(f => !f)}
+                  style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "4px 10px", fontSize: 11, cursor: "pointer", color: isDark ? "#888" : "#555", fontFamily: "'DM Sans', sans-serif" }}>
+                  {editFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                </button>
+                <button onClick={() => { setEditingJob(null); setEditFullscreen(false); }} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888" }}>&times;</button>
+              </div>
             </div>
+            <div style={{ padding: editFullscreen ? "24px 10% 40px" : "20px 28px", maxWidth: editFullscreen ? 900 : "none", margin: editFullscreen ? "0 auto" : 0 }}>
             {["title","location","salary","department"].map(field => (
               <div key={field} style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 5 }}>{field}</label>
@@ -1688,6 +1816,43 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                   style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
               </div>
             ))}
+
+            {/* Application Deadline */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 5 }}>Application deadline (optional)</label>
+              <input type="date" value={editingJob.deadline || ""}
+                onChange={e => setEditingJob(j => ({...j, deadline: e.target.value}))}
+                min={new Date().toISOString().split("T")[0]}
+                style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none", cursor: "pointer", colorScheme: isDark ? "dark" : "light" }} />
+            </div>
+
+            {/* Application Mode */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 8 }}>How candidates apply</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {[
+                  { val: "insite", label: "Accept on JobStream" },
+                  { val: "url",    label: "External URL" },
+                  { val: "email",  label: "By email" },
+                ].map(opt => (
+                  <label key={opt.val} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 10px", borderRadius: 7, border: (editingJob.apply_mode || "insite") === opt.val ? "1px solid #0071E3" : (isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8"), background: (editingJob.apply_mode || "insite") === opt.val ? "rgba(0,113,227,0.08)" : "transparent" }}>
+                    <input type="radio" name="edit_apply_mode" value={opt.val}
+                      checked={(editingJob.apply_mode || "insite") === opt.val}
+                      onChange={() => setEditingJob(j => ({...j, apply_mode: opt.val}))} />
+                    <span style={{ fontSize: 13, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+              {(editingJob.apply_mode === "url") && (
+                <input value={editingJob.apply_url || ""} onChange={e => setEditingJob(j => ({...j, apply_url: e.target.value}))}
+                  placeholder="https://company.com/apply" style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none", marginTop: 8 }} />
+              )}
+              {(editingJob.apply_mode === "email") && (
+                <input value={editingJob.apply_email || ""} onChange={e => setEditingJob(j => ({...j, apply_email: e.target.value}))}
+                  placeholder="hr@company.com" type="email" style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#141416" : "#fff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none", marginTop: 8 }} />
+              )}
+            </div>
+
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 5 }}>Description</label>
               <RichTextarea value={editingJob.description || ""} onChange={val => setEditingJob(j => ({...j, description: val}))} isDark={isDark}
@@ -1698,14 +1863,20 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                 title: editingJob.title, location: editingJob.location,
                 salary: editingJob.salary, department: editingJob.department,
                 description: editingJob.description,
+                apply_mode: editingJob.apply_mode || "insite",
+                apply_url: editingJob.apply_url || "",
+                apply_email: editingJob.apply_email || "",
+                deadline: editingJob.deadline || "",
               })});
-              const d = await api("/jobs/mine"); setJobs(d.jobs||[]);
+              const d = await api("/jobs/mine");
               setJobs(d.jobs || []);
               setEditingJob(null);
+              setEditFullscreen(false);
               toast("Job updated!");
-            }} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+            }} style={{ background: "var(--btn-primary)", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", marginTop: 8 }}>
               Save changes
             </button>
+            </div>
           </div>
         </div>
       )}
@@ -2090,10 +2261,12 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
   const [brandSettings, setBrandSettings] = useState({ name: "JobStream", logo_url: "" });
   const [brandDirty, setBrandDirty] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
-  const [jobSearch, setJobSearch] = useState("");
+  const [editFullscreen, setEditFullscreen] = useState(false);
+    const [teamSearch, setTeamSearch] = useState("");
   const [jobStatusFilter, setJobStatusFilter] = useState("");
   const [jobPage, setJobPage] = useState(0);
   const [selectedJobs, setSelectedJobs] = useState(new Set());
+  const [jobSearch, setJobSearch] = useState("");
   const JOB_PAGE_SIZE = 20;
   const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(true);
@@ -2557,7 +2730,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                   </span>
                   <button onClick={() => setEditingJob(j)}
                     style={{ fontSize: 11, background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: isDark ? "#888" : "#555", fontFamily: "'DM Sans', sans-serif" }}>
-                    * Edit
+                    &#9999;&#65039; Edit
                   </button>
                   <button onClick={() => adminJobAction(j.is_active ? "unpublish" : "publish", j)}
                     style={{ fontSize: 11, background: j.is_active ? "rgba(245,166,35,0.1)" : "rgba(61,214,140,0.1)", border: j.is_active ? "1px solid rgba(245,166,35,0.3)" : "1px solid rgba(61,214,140,0.3)", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: j.is_active ? "#F5A623" : "#3DD68C", fontFamily: "'DM Sans', sans-serif" }}>
@@ -2565,7 +2738,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                   </button>
                   <button onClick={() => { if (window.confirm("Permanently delete this job and all its applications?")) adminJobAction("delete", j); }}
                     style={{ fontSize: 11, background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.3)", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: "#f87171", fontFamily: "'DM Sans', sans-serif" }}>
-                    🗑 Delete
+                    &#128465; Delete
                   </button>
                 </div>
               </div>
@@ -2853,7 +3026,7 @@ function AdminJobEditModal({ job, isDark, onSave, onClose, jobTypes, departments
         {/* Header */}
         <div style={{ padding: "20px 28px 16px", borderBottom: isDark ? "1px solid #1e1e24" : "1px solid #f0f0f4", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>* Edit Job</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>&#9999;&#65039; Edit Job</div>
             <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 2 }}>{job.company} &middot; ID {job.id}</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -5378,11 +5551,16 @@ function ApplicationsPage({ isDark = true }) {
 
 // -- App Shell -----------------------------------------------------------------
 export default function App() {
-  const [page, setPage] = useState("jobs");
+  const [page, setPage] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("page") || "jobs";
+  });
   const [applyJob, setApplyJob] = useState(null);
   const [toast, setToast] = useState("");
   const [theme, setTheme] = useState("light");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const sidebarExpanded = sidebarOpen || sidebarHovered;
   const [user, setUser] = useState(getStoredUser());
   const [showAuth, setShowAuth] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState(null);
@@ -5444,6 +5622,18 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     return params.get("jobid") || "";
   });
+  // ?postjob=1 - open post job modal directly from new tab
+  const [autoPostJob, setAutoPostJob] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("postjob") === "1";
+  });
+  const [autoEditJobId, setAutoEditJobId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("editjob") || "";
+  });
+
+
+
   // ?invite=TOKEN - workspace invitation link
   const [inviteToken, setInviteToken] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -5513,7 +5703,7 @@ export default function App() {
 
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: sidebarOpen ? "220px 1fr" : "52px 1fr", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", background: isDark ? "#0D0D0F" : "#f4f4f6", color: isDark ? "#f0f0f2" : "#1a1a1a", transition: "all 0.25s ease" }}>
+    <div style={{ display: "grid", gridTemplateColumns: sidebarExpanded ? "220px 1fr" : "52px 1fr", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", background: isDark ? "#0D0D0F" : "#f4f4f6", color: isDark ? "#f0f0f2" : "#1a1a1a", transition: "all 0.25s ease" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
         :root {
@@ -5555,7 +5745,10 @@ export default function App() {
       `}</style>
 
       {/* Sidebar */}
-      <aside style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: isDark ? "1px solid #1e1e24" : "1px solid #e0e0e8", padding: sidebarOpen ? "20px 14px" : "12px 8px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "all 0.25s ease", overflowY: "auto", overflowX: "hidden", width: sidebarOpen ? "220px" : "52px", minWidth: sidebarOpen ? "220px" : "52px", scrollbarWidth: "thin", scrollbarColor: isDark ? "#2a2a32 transparent" : "#d0d0d8 transparent" }}>
+      <aside
+        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseLeave={() => setSidebarHovered(false)}
+        style={{ background: isDark ? "#0f0f12" : "#ffffff", borderRight: isDark ? "1px solid #1e1e24" : "1px solid #e0e0e8", padding: sidebarExpanded ? "20px 14px" : "12px 8px", display: "flex", flexDirection: "column", gap: 4, position: "sticky", top: 0, height: "100vh", transition: "all 0.2s ease", overflowY: "auto", overflowX: "hidden", width: sidebarExpanded ? "220px" : "52px", minWidth: sidebarExpanded ? "220px" : "52px", scrollbarWidth: "thin", scrollbarColor: isDark ? "#2a2a32 transparent" : "#d0d0d8 transparent" }}>
 
         {/* Burger only - logo moved to main top bar */}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16, paddingTop: 4 }}>
@@ -5580,7 +5773,7 @@ export default function App() {
             icon={icon}
             label={label}
             active={page === id}
-            sidebarOpen={sidebarOpen}
+            sidebarOpen={sidebarExpanded}
             isDark={isDark}
             onClick={() => setPage(id)}
           />
@@ -5589,10 +5782,10 @@ export default function App() {
         {/* Streamer active status + version - admin only */}
         {isAdmin && (
           <>
-            <div style={{ marginTop: "auto", background: isDark ? "#141416" : "#f0f0f4", border: isDark ? "1px solid #1e1e24" : "1px solid #d8d8e0", borderRadius: 10, padding: sidebarOpen ? "12px 14px" : "10px 6px", display: "flex", flexDirection: "column", alignItems: sidebarOpen ? "flex-start" : "center" }}>
+            <div style={{ marginTop: "auto", background: isDark ? "#141416" : "#f0f0f4", border: isDark ? "1px solid #1e1e24" : "1px solid #d8d8e0", borderRadius: 10, padding: sidebarExpanded ? "12px 14px" : "10px 6px", display: "flex", flexDirection: "column", alignItems: sidebarExpanded ? "flex-start" : "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ width: 8, height: 8, background: "#3DD68C", borderRadius: "50%", display: "inline-block", flexShrink: 0, boxShadow: "0 0 6px #3DD68C" }} />
-                {sidebarOpen && <span style={{ fontSize: 12, fontWeight: 500, color: isDark ? "#e0e0e0" : "#222" }}>Streamer active</span>}
+                {sidebarExpanded && <span style={{ fontSize: 12, fontWeight: 500, color: isDark ? "#e0e0e0" : "#222" }}>Streamer active</span>}
               </div>
               {sidebarOpen && <div style={{ fontSize: 10, color: isDark ? "#aaa" : "#666", fontFamily: "'DM Mono', monospace", marginTop: 4 }}>Streams every 2 hours</div>}
             </div>
@@ -5665,9 +5858,9 @@ export default function App() {
         {page === "analytics" && <AnalyticsPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}
         {page === "privacy"   && <PrivacyPage isDark={isDark} />}
         {page === "terms"     && <TermsPage isDark={isDark} />}
-        {page === "employer"   && <EmployerPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} can={can} />}
+        {(page === "employer" || autoPostJob || autoEditJobId) && <EmployerPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} can={can} autoOpenPostJob={autoPostJob} onAutoPostJobDone={() => { setAutoPostJob(false); window.history.replaceState({}, "", "/"); }} autoEditJobId={autoEditJobId} onAutoEditDone={() => { setAutoEditJobId(""); window.history.replaceState({}, "", "/"); }} />}
         {page === "postjob"   && (user
-          ? <EmployerPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} can={can} />
+          ? <EmployerPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} can={can} autoOpenPostJob={autoPostJob} onAutoPostJobDone={() => { setAutoPostJob(false); window.history.replaceState({}, "", "/"); }} autoEditJobId={autoEditJobId} onAutoEditDone={() => { setAutoEditJobId(""); window.history.replaceState({}, "", "/"); }} />
           : <div style={{ textAlign: "center", padding: 60 }}>
               <div style={{ fontSize: 36, marginBottom: 16 }}>+</div>
               <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Post a Job</div>

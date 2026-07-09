@@ -708,8 +708,20 @@ async def invite_team_member(
     from datetime import datetime, timezone, timedelta
 
     tenant_id = current_user.get("tenant_id")
+    role = current_user.get("role", "")
+
+    # Super/platform admins may not have tenant_id set — look it up from their org
+    if not tenant_id and role in ("super_admin", "platform_admin"):
+        with get_conn() as _c:
+            _cur = _c.cursor()
+            ph = "%s" if USE_POSTGRES else "?"
+            _cur.execute(f"SELECT id FROM tenants WHERE id IS NOT NULL LIMIT 1")
+            _row = _cur.fetchone()
+            if _row:
+                tenant_id = dict(_row).get("id")
+
     if not tenant_id:
-        raise HTTPException(400, "No workspace found")
+        raise HTTPException(400, "No workspace found. Create a workspace first before inviting team members.")
 
     valid_roles = ["hr_admin", "recruiter", "hiring_manager", "interviewer"]
     if body.role not in valid_roles:

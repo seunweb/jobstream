@@ -398,6 +398,7 @@ function hasDirectApply(job) {
 }
 
 function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuthRequired, isSaved = false, onToggleSave }) {
+  const [shareOpen, setShareOpen] = useState(false);
   const isNew = (() => {
     try { return (Date.now() - new Date(job.created_at).getTime()) < 86400000 * 2; } catch { return false; }
   })();
@@ -557,15 +558,41 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
 
           {/* Action buttons - wraps on mobile */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", paddingTop: 16, borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e4e4ed" }}>
-            {/* Share */}
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(`${job.title} at ${job.company} - Apply on JobStream: ${window.location.origin}`)}`}
-              target="_blank" rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              style={{ display: "flex", alignItems: "center", gap: 4, background: "#25D366", border: "none", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#fff", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", fontWeight: 500, whiteSpace: "nowrap" }}
-            >
-              📱 <span className="hide-on-xs">Share</span>
-            </a>
+            {/* Share dropdown */}
+            <div style={{ position: "relative" }} onClick={e => e.stopPropagation()}>
+              <button
+                onClick={e => { e.stopPropagation(); setShareOpen(o => !o); }}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "9px 14px", fontSize: 13, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 500, whiteSpace: "nowrap" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                </svg>
+                <span className="hide-on-xs">Share</span>
+              </button>
+              {shareOpen && (
+                <div style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 6, background: isDark ? "#1a1a1e" : "#fff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 12, padding: "8px", zIndex: 100, minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+                  {[
+                    { label: "LinkedIn", color: "#0077b5", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(`${window.location.origin}/?jobid=${job.id}`)}` },
+                    { label: "WhatsApp", color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(`${job.title} at ${job.company} - ${window.location.origin}/?jobid=${job.id}`)}` },
+                    { label: "X (Twitter)", color: "#000", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(`${job.title} at ${job.company}`)}&url=${encodeURIComponent(`${window.location.origin}/?jobid=${job.id}`)}` },
+                    { label: "Facebook", color: "#1877f2", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/?jobid=${job.id}`)}` },
+                    { label: "Telegram", color: "#2ca5e0", url: `https://t.me/share/url?url=${encodeURIComponent(`${window.location.origin}/?jobid=${job.id}`)}&text=${encodeURIComponent(`${job.title} at ${job.company}`)}` },
+                    { label: "Email", color: "#555", url: `mailto:?subject=${encodeURIComponent(`Job: ${job.title} at ${job.company}`)}&body=${encodeURIComponent(`Check out this job: ${window.location.origin}/?jobid=${job.id}`)}` },
+                  ].map(s => (
+                    <a key={s.label} href={s.url} target="_blank" rel="noreferrer"
+                      onClick={() => setShareOpen(false)}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, textDecoration: "none", color: isDark ? "#f0f0f2" : "#1d1d1f", fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}
+                      onMouseEnter={e => e.currentTarget.style.background = isDark ? "#2a2a32" : "#f0f0f4"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                    >
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.color, display: "inline-block", flexShrink: 0 }} />
+                      {s.label}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
             {/* Copy link */}
             <button
               onClick={(e) => {
@@ -593,8 +620,8 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
               x <span className="hide-on-xs">Close</span>
             </button>
             {/* Apply button — behaviour depends on apply_mode */}
-            {job.apply_mode === "insite" || (!job.apply_mode && !job.source_url) ? (
-              /* In-site application — Apply Now */
+            {(job.apply_mode === "insite" && job.source !== "scraped" && !job.source_url) ? (
+              /* In-site application — Apply Now (manual jobs only, never scraped) */
               <button
                 onClick={() => {
                   if (!user) { onAuthRequired(); return; }
@@ -604,12 +631,12 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
               >
                 Apply Now
               </button>
-            ) : job.apply_mode === "email" && job.apply_url ? (
-              /* Email application */
+            ) : (job.apply_mode === "email" || (job.apply_url && job.apply_url.startsWith("mailto:"))) && job.apply_url ? (
+              /* Email application — Apply by Email */
               <a href={job.apply_url} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "none", whiteSpace: "nowrap" }}>
                 Apply by Email
               </a>
-            ) : job.apply_url ? (
+            ) : job.apply_url && !job.apply_url.startsWith("mailto:") ? (
               /* External URL — Apply on company website */
               <a href={job.apply_url} target="_blank" rel="noreferrer"
                 style={{ background: isDark ? "#1e1e2e" : "#e8e8ed", border: isDark ? "1px solid rgba(0,113,227,0.35)" : "1px solid #c7c7cc", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: isDark ? "#4DA3FF" : "#1d1d1f", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "none", fontWeight: 500, whiteSpace: "nowrap" }}>
@@ -1757,7 +1784,10 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                 const res = await api("/workspace/team/invite", { method: "POST", body: JSON.stringify({ email: inviteEmail, role: inviteRole }) });
                 toast(res.email_sent ? `Invitation sent to ${inviteEmail}` : `Invite link: ${res.accept_url}`);
                 setInviteEmail("");
-              } catch (e) { toast(e.message || "Failed"); }
+              } catch (e) {
+                const msg = e.message || "Failed to send invite";
+                toast(msg.includes("workspace") ? "You need a workspace before inviting team members." : msg);
+              }
               finally { setInviteLoading(false); }
             }} disabled={inviteLoading}
               style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>

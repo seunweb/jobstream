@@ -6,7 +6,7 @@ Moved from main.py to keep main.py clean.
 import asyncio
 import logging
 from core.database import get_conn, USE_POSTGRES, get_companies, upsert_jobs, mark_jobs_inactive, start_scrape_run, finish_scrape_run
-from services.recruitment.scraper import scrape_all, fetch_job_description
+from services.recruitment.scraper import scrape_all, fetch_job_description, _cache_invalidate, _extract_greenhouse_token
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +96,14 @@ async def run_backfill():
 
 
 async def run_force_rescrape(company: dict):
+    # Invalidate Greenhouse cache for this company so fresh data is fetched
+    src_url = company.get("source_url", "")
+    if "greenhouse.io" in src_url:
+        token = _extract_greenhouse_token(src_url)
+        if token:
+            _cache_invalidate(token)
+            log.info(f"Greenhouse cache invalidated for {token} (force rescrape)")
+
     with get_conn() as conn:
         cur = conn.cursor()
         if USE_POSTGRES:

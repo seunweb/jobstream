@@ -37,99 +37,65 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 
 # ── Plan definitions ──────────────────────────────────────────────────────────
 
-PLANS = {
-    # Candidate plans
-    "candidate_free": {
-        "name": "Free",
-        "type": "candidate",
-        "price_ngn": 0,
-        "interval": None,
-        "features": [
-            "Apply to unlimited jobs",
-            "Save up to 10 jobs",
-            "Basic profile",
-            "My Applications tracking",
-        ],
-        "limits": {"saved_jobs": 10, "ai_credits": 0},
-    },
-    "candidate_premium": {
-        "name": "Premium",
-        "type": "candidate",
-        "price_ngn": 2500,
-        "interval": "monthly",
-        "paystack_plan_code": os.environ.get("PAYSTACK_PLAN_CANDIDATE_PREMIUM", ""),
-        "features": [
-            "Everything in Free",
-            "Unlimited saved jobs",
-            "AI CV Optimiser",
-            "AI Job Match Scoring",
-            "AI Cover Letter Writer",
-            "AI Interview Preparation",
-            "Priority profile visibility",
-        ],
-        "limits": {"saved_jobs": -1, "ai_credits": 50},
-    },
 
-    # Employer plans
-    "employer_free": {
-        "name": "Free",
-        "type": "employer",
-        "price_ngn": 0,
-        "interval": None,
-        "features": [
-            "Post up to 3 jobs",
-            "Basic applicant tracking",
-            "Company profile page",
-        ],
-        "limits": {"max_jobs": 3, "team_members": 1, "ai_credits": 0},
-    },
-    "employer_starter": {
-        "name": "Starter",
-        "type": "employer",
-        "price_ngn": 15000,
-        "interval": "monthly",
-        "paystack_plan_code": os.environ.get("PAYSTACK_PLAN_EMPLOYER_STARTER", ""),
-        "features": [
-            "Post up to 10 jobs",
-            "Full applicant pipeline",
-            "Team: up to 3 members",
-            "AI Job Description Writer",
-            "Email notifications",
-        ],
-        "limits": {"max_jobs": 10, "team_members": 3, "ai_credits": 20},
-    },
-    "employer_growth": {
-        "name": "Growth",
-        "type": "employer",
-        "price_ngn": 35000,
-        "interval": "monthly",
-        "paystack_plan_code": os.environ.get("PAYSTACK_PLAN_EMPLOYER_GROWTH", ""),
-        "features": [
-            "Post up to 50 jobs",
-            "Full applicant pipeline",
-            "Team: up to 10 members",
-            "All AI features",
-            "Advanced analytics",
-            "Priority listing",
-        ],
-        "limits": {"max_jobs": 50, "team_members": 10, "ai_credits": 100},
-    },
-    "employer_enterprise": {
-        "name": "Enterprise",
-        "type": "employer",
-        "price_ngn": 0,  # custom pricing
-        "interval": "monthly",
-        "features": [
-            "Unlimited jobs",
-            "Unlimited team members",
-            "White-label career portal",
-            "Dedicated account manager",
-            "Custom AI settings",
-            "SLA support",
-        ],
-        "limits": {"max_jobs": -1, "team_members": -1, "ai_credits": -1},
-    },
-}
+def _get_plan_from_db(plan_id: str):
+    """Fetch a single plan from billing_plans table. Returns None if not found."""
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                import psycopg2.extras
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur.execute("SELECT * FROM billing_plans WHERE id=%s", (plan_id,))
+            else:
+                cur.execute("SELECT * FROM billing_plans WHERE id=?", (plan_id,))
+                cols = [d[0] for d in cur.description]
+            row = cur.fetchone()
+            if not row:
+                return None
+            if not USE_POSTGRES:
+                row = dict(zip(cols, row))
+            row = dict(row)
+            for f in ("features", "feature_list", "limits", "prices", "durations", "gateways"):
+                if isinstance(row.get(f), str):
+                    try:
+                        row[f] = json.loads(row[f])
+                    except Exception:
+                        row[f] = {} if f != "feature_list" and f != "durations" and f != "gateways" else []
+            return row
+    except Exception:
+        return None
+
+
+def _get_free_plan_from_db(plan_type: str = "candidate"):
+    """Get the cheapest/free plan for a given type from DB."""
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                import psycopg2.extras
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur.execute("SELECT * FROM billing_plans WHERE type=%s AND is_active=true ORDER BY sort_order ASC LIMIT 1", (plan_type,))
+            else:
+                cur.execute("SELECT * FROM billing_plans WHERE type=? AND is_active=1 ORDER BY sort_order ASC LIMIT 1", (plan_type,))
+                cols = [d[0] for d in cur.description]
+            row = cur.fetchone()
+            if not row:
+                return None
+            if not USE_POSTGRES:
+                row = dict(zip(cols, row))
+            row = dict(row)
+            for f in ("features", "feature_list", "limits", "prices", "durations", "gateways"):
+                if isinstance(row.get(f), str):
+                    try:
+                        row[f] = json.loads(row[f])
+                    except Exception:
+                        row[f] = {} if f != "feature_list" and f != "durations" and f != "gateways" else []
+            return row
+    except Exception:
+        return None
+
+
 
 
 # ── Paystack helpers ──────────────────────────────────────────────────────────
@@ -172,22 +138,68 @@ def verify_webhook_signature(payload: bytes, signature: str) -> bool:
 
 @router.get("/plans")
 def list_plans(plan_type: str = ""):
-    """List all available plans."""
-    plans = []
-    for plan_id, plan in PLANS.items():
-        if plan_type and plan["type"] != plan_type:
-            continue
-        plans.append({
-            "id": plan_id,
-            "name": plan["name"],
-            "type": plan["type"],
-            "price_ngn": plan["price_ngn"],
-            "interval": plan.get("interval"),
-            "features": plan["features"],
-            "limits": plan["limits"],
-        })
-    return plans
-
+    """List active plans from DB."""
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                import psycopg2.extras
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                q = "SELECT * FROM billing_plans WHERE is_active=true"
+                params = []
+                if plan_type:
+                    q += " AND type=%s"
+                    params.append(plan_type)
+                q += " ORDER BY sort_order ASC, created_at ASC"
+                cur.execute(q, params)
+                rows = cur.fetchall()
+            else:
+                # SQLite stores booleans as 0/1 but JSON True may come in as 1 or "true"
+                q = "SELECT * FROM billing_plans WHERE is_active NOT IN (0, 'false', 'False', '')"
+                params = []
+                if plan_type:
+                    q += " AND type=?"
+                    params.append(plan_type)
+                q += " ORDER BY sort_order ASC, created_at ASC"
+                cur.execute(q, params)
+                cols = [d[0] for d in cur.description]
+                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        result = []
+        for row in rows:
+            row = dict(row)
+            prices = json.loads(row["prices"]) if isinstance(row.get("prices"), str) else (row.get("prices") or {})
+            features = json.loads(row["features"]) if isinstance(row.get("features"), str) else (row.get("features") or {})
+            feature_list = json.loads(row["feature_list"]) if isinstance(row.get("feature_list"), str) else (row.get("feature_list") or [])
+            limits = json.loads(row["limits"]) if isinstance(row.get("limits"), str) else (row.get("limits") or {})
+            durations = json.loads(row["durations"]) if isinstance(row.get("durations"), str) else (row.get("durations") or [])
+            usd_price = 0
+            if durations and prices.get("USD"):
+                first_dur = durations[0].get("id", "")
+                usd_price = float(prices["USD"].get(first_dur, 0) or 0)
+            try:
+                ngn_rate = _get_fx_rate("NGN")
+                price_ngn = round(usd_price / ngn_rate) if ngn_rate and usd_price else 0
+            except Exception:
+                price_ngn = round(usd_price * 1600) if usd_price else 0
+            result.append({
+                "id": row["id"],
+                "name": row["name"],
+                "type": row["type"],
+                "description": row.get("description", ""),
+                "price_ngn": price_ngn,
+                "price_usd": usd_price,
+                "prices": prices,
+                "durations": durations,
+                "interval": durations[0].get("id") if durations else "monthly",
+                "features": features,
+                "feature_list": feature_list,
+                "limits": limits,
+                "is_featured": bool(row.get("is_featured")),
+                "sort_order": row.get("sort_order", 0),
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"Failed to load plans: {e}")
 
 @router.get("/my-subscription")
 async def get_my_subscription(current_user: dict = Depends(get_current_user)):
@@ -196,7 +208,7 @@ async def get_my_subscription(current_user: dict = Depends(get_current_user)):
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute("""
-                SELECT s.*, p.name as plan_name, p.price_ngn
+                SELECT s.*, p.name as plan_name
                 FROM subscriptions s
                 JOIN subscription_plans p ON s.plan_id = p.id
                 WHERE s.user_id = %s AND s.status = 'active'
@@ -204,7 +216,7 @@ async def get_my_subscription(current_user: dict = Depends(get_current_user)):
             """, (str(current_user["id"]),))
         else:
             cur.execute("""
-                SELECT s.*, p.name as plan_name, p.price_ngn
+                SELECT s.*, p.name as plan_name
                 FROM subscriptions s
                 JOIN subscription_plans p ON s.plan_id = p.id
                 WHERE s.user_id = ? AND s.status = 'active'
@@ -214,21 +226,28 @@ async def get_my_subscription(current_user: dict = Depends(get_current_user)):
         if not row:
             role = current_user.get("role", "candidate")
             default = "candidate_free" if role == "candidate" else "employer_free"
-            plan = PLANS[default]
+            role = current_user.get("role", "candidate")
+            plan_type = "candidate" if "candidate" in role else "employer"
+            free_plan = _get_free_plan_from_db(plan_type) or {}
             return {
-                "plan_id": default,
-                "plan_name": plan["name"],
+                "plan_id": free_plan.get("id", plan_type + "_free"),
+                "plan_name": free_plan.get("name", "Free"),
                 "status": "active",
                 "is_free": True,
-                "features": plan["features"],
-                "limits": plan["limits"],
+                "features": free_plan.get("features", {}),
+                "limits": free_plan.get("limits", {}),
             }
         sub = dict(row)
-        plan_key = sub.get("plan_id", "candidate_free")
-        plan_def = PLANS.get(plan_key, PLANS["candidate_free"])
-        sub["features"] = plan_def["features"]
-        sub["limits"] = plan_def["limits"]
-        sub["is_free"] = plan_def["price_ngn"] == 0
+        plan_key = sub.get("plan_id", "")
+        plan_def = _get_plan_from_db(plan_key) or {}
+        sub["features"] = plan_def.get("features", {})
+        sub["limits"] = plan_def.get("limits", {})
+        prices = plan_def.get("prices", {})
+        durations = plan_def.get("durations", [])
+        usd_price = 0
+        if durations and prices.get("USD"):
+            usd_price = float(prices["USD"].get(durations[0].get("id",""), 0) or 0)
+        sub["is_free"] = usd_price == 0
         return sub
 
 
@@ -248,11 +267,21 @@ async def initiate_payment(
     Initiate Paystack payment for a plan.
     Returns authorization_url to redirect user to Paystack.
     """
-    plan = PLANS.get(body.plan_id)
+    plan = _get_plan_from_db(body.plan_id)
     if not plan:
         raise HTTPException(400, f"Unknown plan: {body.plan_id}")
-    if plan["price_ngn"] == 0:
+    prices = plan.get("prices", {})
+    durations = plan.get("durations", [])
+    usd_price = 0
+    if durations and prices.get("USD"):
+        usd_price = float(prices["USD"].get(durations[0].get("id",""), 0) or 0)
+    if usd_price == 0:
         raise HTTPException(400, "Free plans don't require payment")
+    try:
+        ngn_rate = _get_fx_rate("NGN")
+        price_ngn = round(usd_price / ngn_rate) if ngn_rate else round(usd_price * 1600)
+    except Exception:
+        price_ngn = round(usd_price * 1600)
 
     app_url = os.environ.get("APP_URL", "http://localhost:3000").rstrip("/")
     callback = body.callback_url or f"{app_url}/billing/success"
@@ -261,7 +290,7 @@ async def initiate_payment(
 
     payload = {
         "email": current_user["email"],
-        "amount": plan["price_ngn"] * 100,  # Paystack uses kobo
+        "amount": price_ngn * 100,  # Paystack uses kobo
         "currency": "NGN",
         "reference": reference,
         "callback_url": callback,
@@ -292,21 +321,21 @@ async def initiate_payment(
                 VALUES (%s,%s,%s,%s,'NGN',%s,'pending')
                 ON CONFLICT (reference) DO NOTHING
             """, (str(uuid.uuid4()), str(current_user["id"]),
-                  body.plan_id, plan["price_ngn"], reference))
+                  body.plan_id, price_ngn, reference))
         else:
             cur.execute("""
                 INSERT OR IGNORE INTO billing_transactions
                     (id, user_id, plan_id, amount, currency, reference, status)
                 VALUES (?,?,?,?,'NGN',?,'pending')
             """, (str(uuid.uuid4()), str(current_user["id"]),
-                  body.plan_id, plan["price_ngn"], reference))
+                  body.plan_id, price_ngn, reference))
 
     log.info(f"Payment initiated: {reference} for {current_user['email']} ({body.plan_id})")
 
     return {
         "authorization_url": result["data"]["authorization_url"],
         "reference": reference,
-        "amount_ngn": plan["price_ngn"],
+        "amount_ngn": price_ngn,
         "plan": plan["name"],
     }
 
@@ -387,7 +416,7 @@ async def _activate_subscription(
     amount: int,
 ):
     """Activate a subscription after successful payment."""
-    plan = PLANS.get(plan_id, {})
+    plan = _get_plan_from_db(plan_id) or {}
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=30)
 

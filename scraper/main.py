@@ -52,6 +52,9 @@ from services.identity.rbac_router import router as rbac_router
 from services.identity.admin_router import platform_router, tenant_router
 from services.identity.ai_router import router as ai_router
 from services.identity.billing_router import router as billing_router
+from services.identity.billing_admin_router import router as billing_admin_router
+from services.identity.payment_router import router as payment_router
+from services.identity.quota_router import router as quota_router
 from services.identity.analytics_router import router as analytics_router
 from services.identity.rbac_models import (
     RBAC_TABLES_POSTGRES, RBAC_TABLES_SQLITE,
@@ -639,7 +642,10 @@ app.include_router(recruitment_router)    # /jobs /applications /scrape /compani
 app.include_router(people_router)         # /persons/*
 app.include_router(seo_router)            # /jobs/slug, /sitemap, /job-alerts
 app.include_router(ai_router)             # /ai/*
-app.include_router(billing_router)        # /billing/*
+app.include_router(billing_router)
+app.include_router(billing_admin_router)
+app.include_router(payment_router)
+app.include_router(quota_router)        # /billing/*
 app.include_router(analytics_router)      # /analytics/*
 app.include_router(rbac_router)           # /rbac/*
 app.include_router(platform_router)       # /admin/*
@@ -964,6 +970,42 @@ if _DIST.exists():
         return FileResponse(str(_DIST / "index.html"))
 else:
     log.info(f"No dist/ folder found at {_DIST} — frontend served separately")
+
+
+@app.on_event("startup")
+async def startup_refresh_fx():
+    """Auto-refresh FX rates from frankfurter.app on startup."""
+    import asyncio as _aio
+    await _aio.sleep(3)  # Let DB connect first
+    try:
+        import urllib.request as _req, json as _json
+        url = "https://api.frankfurter.app/latest?base=USD&symbols=NGN,GBP,EUR,KES,GHS,ZAR,CAD,AUD,INR,EGP,MAD"
+        with _req.urlopen(url, timeout=8) as r:
+            data = _json.loads(r.read())
+        rates_usd = data.get("rates", {})
+        ngn_usd = float(rates_usd.get("NGN", 1600))
+        from datetime import datetime, timezone as _tz
+        now = datetime.now(_tz.utc).isoformat()
+        # Store as 1 currency = X USD
+        to_usd = {"USD": 1.0}
+        for c, v in rates_usd.items():
+            to_usd[c] = round(1.0 / float(v), 6) if float(v) else 0.0
+        for c, d in [("RWF",1300),("UGX",3700),("TZS",2600)]:
+            if c not in to_usd:
+                to_usd[c] = round(1.0 / d, 6)
+        try:
+            with get_conn() as conn:
+                cur = conn.cursor()
+                for c, rate in to_usd.items():
+                    if USE_POSTGRES:
+                        cur.execute("INSERT INTO fx_rates(currency,rate_to_usd,updated_at) VALUES(%s,%s,NOW()) ON CONFLICT(currency) DO UPDATE SET rate_to_usd=EXCLUDED.rate_to_usd,updated_at=NOW()", (c, rate))
+                    else:
+                        cur.execute("INSERT OR REPLACE INTO fx_rates(currency,rate_to_usd,updated_at) VALUES(?,?,?)", (c, rate, now))
+            log.info(f"FX rates refreshed: {len(to_usd)} currencies from frankfurter.app")
+        except Exception as db_err:
+            log.warning(f"FX DB write failed: {db_err}")
+    except Exception as e:
+        log.warning(f"FX startup refresh skipped: {e}")
 
 
 if __name__ == "__main__":

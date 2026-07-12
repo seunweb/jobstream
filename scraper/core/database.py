@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS companies (
     name     TEXT NOT NULL,
     url      TEXT NOT NULL UNIQUE,
     industry TEXT DEFAULT '',
+    logo_url TEXT DEFAULT '',
     active   SMALLINT DEFAULT 1,
     added_at TIMESTAMP DEFAULT NOW()
 );
@@ -89,6 +90,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary      TEXT DEFAULT '',
     description TEXT DEFAULT '',
     apply_url   TEXT DEFAULT '',
+    logo_url    TEXT DEFAULT '',
     is_active   SMALLINT DEFAULT 1,
     scraped_at  TEXT NOT NULL,
     created_at  TIMESTAMP DEFAULT NOW()
@@ -127,6 +129,7 @@ CREATE TABLE IF NOT EXISTS companies (
     name     TEXT NOT NULL,
     url      TEXT NOT NULL UNIQUE,
     industry TEXT DEFAULT '',
+    logo_url TEXT DEFAULT '',
     active   INTEGER DEFAULT 1,
     added_at TEXT DEFAULT (datetime('now'))
 );
@@ -144,6 +147,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary      TEXT DEFAULT '',
     description TEXT DEFAULT '',
     apply_url   TEXT DEFAULT '',
+    logo_url    TEXT DEFAULT '',
     is_active   INTEGER DEFAULT 1,
     scraped_at  TEXT NOT NULL,
     created_at  TEXT DEFAULT (datetime('now'))
@@ -190,6 +194,7 @@ def init_db():
     _migrate_job_extra_columns()
     _migrate_featured_column()
     _migrate_alert_timezone_column()
+    _migrate_schema()          # adds logo_url to companies
     _seed_companies()
     logger.info("Database ready")
 
@@ -289,46 +294,32 @@ def _migrate_industry_columns():
                     pass  # column already exists
 
 
-def _seed_companies():
-    """
-    Seed default companies on first boot.
-    Only inserts if the company URL does not already exist.
-    Edit this list to match your actual target companies.
-    """
-    defaults = [
-        # Nigerian Telecom
-        ("MTN Nigeria",    "https://ehle.fa.em2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/jobs",            "Telecommunications"),
-        ("Airtel Nigeria", "https://airtel.wd3.myworkdayjobs.com/Airtel_Nigeria",                                          "Telecommunications"),
-        ("Glo Nigeria",    "https://gloworld.com/ng/careers",                                                              "Telecommunications"),
-        # Nigerian Banks
-        ("Guaranty Trust Bank", "https://gtbank.com/careers",                                                              "Banking & Finance"),
-        ("Zenith Bank",    "https://www.zenithbank.com/careers",                                                           "Banking & Finance"),
-        ("Access Bank",    "https://www.accessbankplc.com/careers",                                                        "Banking & Finance"),
-        ("UBA",            "https://www.ubagroup.com/careers",                                                             "Banking & Finance"),
-        # Fintech
-        ("Paystack",       "https://paystack.com/careers",                                                                 "Banking & Finance"),
-        ("Flutterwave",    "https://flutterwave.com/careers",                                                              "Banking & Finance"),
-        # Oil & Gas
-        ("Shell Nigeria",  "https://shell.wd3.myworkdayjobs.com/ShellCareers",                                            "Oil & Gas"),
-        ("TotalEnergies",  "https://careers.totalenergies.com",                                                            "Oil & Gas"),
-        # Tech
-        ("Andela",         "https://andela.com/talent",                                                                    "Information Technology"),
-        ("Interswitch",    "https://interswitchgroup.com/careers",                                                         "Banking & Finance"),
-    ]
-    with get_conn() as conn:
-        cur = conn.cursor()
-        for name, url, industry in defaults:
+
+def _migrate_schema():
+    """Add columns introduced after initial deploy."""
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
             if USE_POSTGRES:
-                cur.execute(
-                    "INSERT INTO companies (name, url, industry, active) VALUES (%s, %s, %s, 1) "
-                    "ON CONFLICT (url) DO NOTHING",
-                    (name, url, industry)
-                )
+                cur.execute("ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT ''")
+                cur.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT ''")
             else:
-                cur.execute(
-                    "INSERT OR IGNORE INTO companies (name, url, industry, active) VALUES (?, ?, ?, 1)",
-                    (name, url, industry)
-                )
+                for sql in [
+                    "ALTER TABLE companies ADD COLUMN logo_url TEXT DEFAULT ''",
+                    "ALTER TABLE jobs ADD COLUMN logo_url TEXT DEFAULT ''",
+                ]:
+                    try:
+                        cur.execute(sql)
+                    except Exception:
+                        pass  # column already exists
+    except Exception as e:
+        pass  # non-fatal
+
+
+def _seed_companies():
+    """No default companies — all companies are managed via the admin UI."""
+    pass
+
 
 
 # ---------------------------------------------------------------------------
@@ -345,20 +336,20 @@ def get_companies(active_only=True) -> list[dict]:
         return [row_to_dict(r) for r in cur.fetchall()]
 
 
-def add_company(name: str, url: str, industry: str = "") -> dict:
+def add_company(name: str, url: str, industry: str = "", logo_url: str = "") -> dict:
     with get_conn() as conn:
         cur = conn.cursor()
         if USE_POSTGRES:
             cur.execute(
-                "INSERT INTO companies (name, url, industry, active) VALUES (%s, %s, %s, 1) "
-                "ON CONFLICT (url) DO UPDATE SET active = 1, industry = EXCLUDED.industry RETURNING *",
-                (name, url, industry)
+                "INSERT INTO companies (name, url, industry, logo_url, active) VALUES (%s, %s, %s, %s, 1) "
+                "ON CONFLICT (url) DO UPDATE SET active = 1, industry = EXCLUDED.industry, logo_url = EXCLUDED.logo_url RETURNING *",
+                (name, url, industry, logo_url)
             )
             return row_to_dict(cur.fetchone())
         else:
             cur.execute(
-                "INSERT OR IGNORE INTO companies (name, url, industry, active) VALUES (?, ?, ?, 1)",
-                (name, url, industry)
+                "INSERT OR REPLACE INTO companies (name, url, industry, logo_url, active) VALUES (?, ?, ?, ?, 1)",
+                (name, url, industry, logo_url)
             )
             cur.execute("UPDATE companies SET industry = ? WHERE url = ?", (industry, url))
             cur.execute("SELECT * FROM companies WHERE url = ?", (url,))
@@ -382,6 +373,17 @@ def delete_company(company_id: int):
 # ---------------------------------------------------------------------------
 # Jobs
 # ---------------------------------------------------------------------------
+
+def _get_company_logo(cur, company_name: str) -> str:
+    """Look up logo_url from companies table by company name."""
+    try:
+        cur.execute("SELECT logo_url FROM companies WHERE name = ? OR name LIKE ? LIMIT 1",
+                    (company_name, f"%{company_name}%"))
+        row = cur.fetchone()
+        return (row[0] or "") if row else ""
+    except Exception:
+        return ""
+
 
 def _get_company_industry(cur, company_name: str) -> str:
     """
@@ -452,21 +454,24 @@ def upsert_jobs(scraped) -> tuple[int, int]:
             cur.execute(q("SELECT id FROM jobs WHERE fingerprint = ?"), (job.fingerprint,))
             existing = cur.fetchone()
             if existing:
+                job_logo = getattr(job, "logo_url", "") or _get_company_logo(cur, job.company)
                 cur.execute(
                     q("UPDATE jobs SET scraped_at = ?, is_active = 1, "
-                      "job_type = ?, department = ?, industry = ? WHERE fingerprint = ?"),
-                    (job.scraped_at.isoformat(), job_type, department, industry, job.fingerprint)
+                      "job_type = ?, department = ?, industry = ?, logo_url = COALESCE(NULLIF(?, ''), logo_url) WHERE fingerprint = ?"),
+                    (job.scraped_at.isoformat(), job_type, department, industry, job_logo, job.fingerprint)
                 )
             else:
+                # Get logo_url from ScrapedJob or look up from companies table
+                job_logo = getattr(job, "logo_url", "") or _get_company_logo(cur, job.company)
                 cur.execute(q("""
                     INSERT INTO jobs
                       (fingerprint, title, company, source_url, location,
-                       job_type, department, industry, salary, description, apply_url, is_active, scraped_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                       job_type, department, industry, salary, description, apply_url, logo_url, is_active, scraped_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                 """), (
                     job.fingerprint, job.title, job.company, job.source_url,
                     job.location, job_type, department, industry,
-                    job.salary, job.description, job.apply_url,
+                    job.salary, job.description, job.apply_url, job_logo,
                     job.scraped_at.isoformat()
                 ))
                 new_count += 1

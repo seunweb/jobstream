@@ -229,6 +229,7 @@ function UserMenu({ user, onLogout, isDark, setPage }) {
       )}
     </div>
   );
+  
 }
 
 function StatsBar({ isDark = true }) {
@@ -350,6 +351,7 @@ function CompanyLogo({ name, sourceUrl, size = 42 }) {
         />
       </div>
     );
+    
   }
 
   // Fallback: styled initials
@@ -573,12 +575,12 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
               {shareOpen && (
                 <div style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 6, background: isDark ? "#1a1a1e" : "#fff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 12, padding: "8px", zIndex: 100, minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
                   {[
-                    { label: "LinkedIn", color: "#0077b5", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(`${window.location.origin}/?jobid=${job.id}`)}` },
-                    { label: "WhatsApp", color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(`${job.title} at ${job.company} - ${window.location.origin}/?jobid=${job.id}`)}` },
-                    { label: "X (Twitter)", color: "#000", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(`${job.title} at ${job.company}`)}&url=${encodeURIComponent(`${window.location.origin}/?jobid=${job.id}`)}` },
-                    { label: "Facebook", color: "#1877f2", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/?jobid=${job.id}`)}` },
-                    { label: "Telegram", color: "#2ca5e0", url: `https://t.me/share/url?url=${encodeURIComponent(`${window.location.origin}/?jobid=${job.id}`)}&text=${encodeURIComponent(`${job.title} at ${job.company}`)}` },
-                    { label: "Email", color: "#555", url: `mailto:?subject=${encodeURIComponent(`Job: ${job.title} at ${job.company}`)}&body=${encodeURIComponent(`Check out this job: ${window.location.origin}/?jobid=${job.id}`)}` },
+                    { label: "LinkedIn", color: "#0077b5", url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.origin + "/?jobid=" + job.id)}` },
+                    { label: "WhatsApp", color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(job.title + " at " + job.company + " - " + window.location.origin + "/?jobid=" + job.id)}` },
+                    { label: "X (Twitter)", color: "#000", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(job.title + " at " + job.company)}&url=${encodeURIComponent(window.location.origin + "/?jobid=" + job.id)}` },
+                    { label: "Facebook", color: "#1877f2", url: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.origin + "/?jobid=" + job.id)}` },
+                    { label: "Telegram", color: "#2ca5e0", url: `https://t.me/share/url?url=${encodeURIComponent(window.location.origin + "/?jobid=" + job.id)}&text=${encodeURIComponent(job.title + " at " + job.company)}` },
+                    { label: "Email", color: "#555", url: `mailto:?subject=${encodeURIComponent("Job: " + job.title + " at " + job.company)}&body=${encodeURIComponent("Check out this job: " + window.location.origin + "/?jobid=" + job.id)}` },
                   ].map(s => (
                     <a key={s.label} href={s.url} target="_blank" rel="noreferrer"
                       onClick={() => setShareOpen(false)}
@@ -660,6 +662,7 @@ function JobCard({ job, onApply, onView, isExpanded, isDark = true, user, onAuth
       )}
     </div>
   );
+  
 }
 
 // -- Pages ---------------------------------------------------------------------
@@ -918,6 +921,7 @@ function ApplyModal({ job, onClose, onSuccess, user }) {
       </div>
     </div>
   );
+  
 }
 
 function JobsPage({ onApply, toast, isDark = true, user, onAuthRequired }) {
@@ -1389,6 +1393,7 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
       </div>
     </div>
   );
+  
 }
 
 
@@ -1485,6 +1490,30 @@ function TenantOnboardModal({ isDark = true, onClose, onSuccess }) {
 }
 
 
+function UsageBar({ label, used, limit, color = "#0071E3", icon = "" }) {
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const isUnlimited = limit === null || limit === undefined;
+  const isWarning = pct >= 80;
+  const barColor = isWarning ? "#f59e0b" : color;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <span style={{ fontSize: 12, color: "var(--text-secondary, #888)" }}>{icon} {label}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: isUnlimited ? "#3DD68C" : (isWarning ? "#f59e0b" : "var(--text-primary, #1d1d1f)") }}>
+          {isUnlimited ? "Unlimited" : `${used} / ${limit}`}
+        </span>
+      </div>
+      {!isUnlimited && (
+        <div style={{ height: 6, background: "rgba(128,128,128,0.15)", borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: barColor, borderRadius: 3, transition: "width 0.4s ease" }} />
+        </div>
+      )}
+    </div>
+  );
+  
+}
+
+
 function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => true, autoOpenPostJob = false, onAutoPostJobDone, autoEditJobId = "", onAutoEditDone }) {
   const [jobs, setJobs] = useState([]);
   const [organizations, setOrganizations] = useState([]);
@@ -1497,6 +1526,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
   const [editFullscreen, setEditFullscreen] = useState(false);
   const [empJobSearch, setEmpJobSearch] = useState("");
   const [teamSearch, setTeamSearch] = useState("");
+  const [quota, setQuota] = useState(null);
   const [applications, setApplications] = useState([]);
   const [appsLoading, setAppsLoading] = useState(false);
   const [empTab, setEmpTab] = useState("jobs"); // jobs | applications | team
@@ -1528,10 +1558,13 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
       api("/jobs/mine"),
       api("/organizations/all").catch(() => []),
       api("/workspace/overview").catch(() => null),
-    ]).then(([jobsData, orgs, _workspace]) => {
-      // Show all manual jobs (active + unpublished) for the employer
+      api("/workspace/team").catch(() => []),
+      api("/quota/my").catch(() => null),
+    ]).then(([jobsData, orgs, _workspace, teamData, quotaData]) => {
       setJobs((jobsData.jobs || []));
       setOrganizations(Array.isArray(orgs) ? orgs : []);
+      setTeam(Array.isArray(teamData) ? teamData : (teamData?.members || []));
+      if (quotaData) setQuota(quotaData);
       // tenant is populated separately via onboarding, not needed here
     }).catch(() => {})
     .finally(() => setLoading(false));
@@ -1639,6 +1672,39 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
       <div style={{ display: "grid", gridTemplateColumns: selectedJob ? "1fr 1fr" : "1fr", gap: 16 }}>
         {/* Jobs list */}
         <div>
+          {/* Quota Usage Dashboard */}
+          {quota && (
+            <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "16px 18px", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>
+                    {quota.plan_id === "free" ? "Free Plan" : quota.plan_id}
+                  </div>
+                  {quota.expires_at && (
+                    <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>
+                      Expires {new Date(quota.expires_at).toLocaleDateString("en-GB", {day:"numeric",month:"short",year:"numeric"})}
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => setPage && setPage("pricing")}
+                  style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+                  Upgrade
+                </button>
+              </div>
+              <UsageBar label="Active jobs" used={quota.active_jobs} limit={quota.job_limit} icon="💼" color="#0071E3" />
+              {quota.job_credits !== null && quota.job_credits !== undefined && (
+                <UsageBar label="Job credits" used={quota.credits_used} limit={quota.job_credits} icon="🎟" color="#a855f7" />
+              )}
+              <UsageBar label="Featured slots" used={quota.active_featured || 0} limit={quota.featured_limit} icon="⭐" color="#f59e0b" />
+              <UsageBar label="Team seats" used={quota.team_count || 0} limit={quota.team_limit} icon="👥" color="#3DD68C" />
+              {!quota.can_post && (
+                <div style={{ background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#f87171", marginTop: 8 }}>
+                  You have reached your job posting limit. Upgrade your plan to post more jobs.
+                </div>
+              )}
+            </div>
+          )}
+
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10 }}>
             <h2 style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#888" : "#666", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>Your jobs</h2>
             <input
@@ -1703,7 +1769,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                     style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: "none", color: isDark ? "#888" : "#555", cursor: "pointer" }}>
                     Duplicate
                   </button>
-                  <button onClick={e => { e.stopPropagation(); if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return; deleteJob(job); }}
+                  <button onClick={e => { e.stopPropagation(); if (window.confirm("Delete \"" + job.title + "\"? This cannot be undone.")) { deleteJob(job); } }}
                     style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "none", background: "none", color: "#f87171", cursor: "pointer" }}>
                     &#128465; Delete
                   </button>
@@ -1925,14 +1991,12 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
           organizations={organizations}
           onClose={() => setShowPostJob(false)}
           onCreateWorkspace={() => { setShowPostJob(false); setShowOnboard(true); }}
-          onSuccess={msg => { toast(msg); setShowPostJob(false); api("/jobs/mine").then(d => setJobs(d.jobs||[])); }}
+          onSuccess={msg => { toast(msg); setShowPostJob(false); api("/jobs/mine").then(d => setJobs(d.jobs||[])); api("/quota/my").catch(()=>{}).then(q => q && setQuota(q)); }}
         />
       )}
     </div>
   );
 }
-
-
 
 // -- Platform Admin Dashboard --------------------------------------------------
 // -- Email Template Editor ----------------------------------------------------
@@ -1970,7 +2034,7 @@ function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
       <div style="padding:12px 0;border-bottom:1px solid #f0f0f4">
         <a href="#" style="font-size:14px;font-weight:600;color:${settings.accentColor};text-decoration:none">${j.title}</a>
         <div style="font-size:12px;color:#888;margin-top:3px">
-          ${j.company}${settings.showLocation ? ` - ${j.location}` : ""}${settings.showIndustry && j.industry ? ` &middot; ${j.industry}` : ""}
+          ${j.company}${settings.showLocation ? " - " + j.location : ""}${settings.showIndustry && j.industry ? " &middot; " + j.industry : ""}
         </div>
       </div>`).join("");
 
@@ -2165,6 +2229,7 @@ function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
       </div>
     </div>
   );
+  
 }
 
 
@@ -2247,15 +2312,15 @@ function NavSettingsEditor({ isDark, toast }) {
               {ALL_ITEMS.map(item => {
                 const checked = (settings[group.key] || []).includes(item.id);
                 const locked = group.key === "admin" && ["admin","scraper"].includes(item.id);
-                return (
-                  <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, cursor: locked ? "default" : "pointer", opacity: locked ? 0.5 : 1 }}>
+                return <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, cursor: locked ? "default" : "pointer", opacity: locked ? 0.5 : 1 }}>
+
                     <input type="checkbox" checked={checked} disabled={locked}
                       onChange={() => !locked && toggle(group.key, item.id)}
                       style={{ accentColor: "#0071E3", width: 14, height: 14 }} />
                     <span style={{ fontSize: 12, color: isDark ? "#ccc" : "#333" }}>{item.label}</span>
                     {locked && <span style={{ fontSize: 10, color: isDark ? "#444" : "#bbb" }}>always on</span>}
                   </label>
-                );
+                
               })}
             </div>
           </div>
@@ -2267,6 +2332,92 @@ function NavSettingsEditor({ isDark, toast }) {
           style={{ background: dirty ? "#0071E3" : (isDark ? "#222" : "#ddd"), border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: dirty ? "#fff" : (isDark ? "#444" : "#aaa"), cursor: dirty ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
           {dirty ? "Save nav settings" : "OK Saved"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+
+function QuotaAdminPanel({ isDark, toast }) {
+  const [tenants, setTenants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+  const FLAGS = ["post_jobs","featured_jobs","applications_dashboard","applications_export","team_management","analytics","candidate_database","custom_branding","api_access","ai_screening","priority_support","duplicate_jobs","draft_jobs"];
+
+  useEffect(() => {
+    api("/quota/admin/tenants").then(data => setTenants(Array.isArray(data) ? data : [])).catch(()=>{}).finally(()=>setLoading(false));
+  }, []);
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div>
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        {tenants.length === 0 ? (
+          <div style={{ textAlign:"center", color:isDark?"#555":"#aaa", padding:"32px 0", fontSize:13 }}>No workspaces found</div>
+        ) : tenants.map(t => (
+          <div key={t.tenant_id} style={{ background:isDark?"#141416":"#fff", border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:12, padding:"12px 16px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f" }}>{t.tenant_name || t.tenant_id}</div>
+                <div style={{ fontSize:11, color:isDark?"#555":"#aaa" }}>
+                  Plan: {t.plan_id} - Jobs: {t.jobs_posted || 0}/{t.active_jobs} - Credits: {t.job_credits ? `${t.credits_used}/${t.job_credits}` : "N/A"}
+                  {t.is_overridden && <span style={{ marginLeft:6, color:"#f59e0b" }}>Overridden</span>}
+                </div>
+              </div>
+              <button onClick={() => setEditing(editing?.tenant_id === t.tenant_id ? null : {...t, features: typeof t.features === "string" ? JSON.parse(t.features||"{}") : (t.features||{})})}
+                style={{ background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:7, padding:"4px 12px", fontSize:11, cursor:"pointer", color:isDark?"#888":"#555" }}>
+                {editing?.tenant_id === t.tenant_id ? "Close" : "Edit"}
+              </button>
+            </div>
+            {editing?.tenant_id === t.tenant_id && (
+              <div style={{ marginTop:12, paddingTop:12, borderTop:isDark?"1px solid #1e1e24":"1px solid #f0f0f4" }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
+                  {[["active_jobs","Active jobs"],["featured_slots","Featured slots"],["team_seats","Team seats"],["job_credits","Job credits"]].map(([f,lbl]) => (
+                    <div key={f}>
+                      <label style={{ fontSize:10, color:isDark?"#555":"#aaa", display:"block", marginBottom:3 }}>{lbl}</label>
+                      <input type="number" value={editing[f] ?? ""}
+                        onChange={e => setEditing(p => ({...p, [f]: e.target.value === "" ? null : parseInt(e.target.value)}))}
+                        style={{ width:"100%", boxSizing:"border-box", padding:"5px 8px", fontSize:12, borderRadius:6, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#f8f8fb", color:isDark?"#f0f0f2":"#1d1d1f", fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4, marginBottom:12 }}>
+                  {FLAGS.map(flag => (
+                    <label key={flag} style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer", fontSize:11, color:isDark?"#d0d0d8":"#1d1d1f" }}>
+                      <input type="checkbox" checked={!!(editing.features?.[flag])}
+                        onChange={e => setEditing(p => ({...p, features:{...(p.features||{}),[flag]:e.target.checked}}))} />
+                      {flag.replace(/_/g," ")}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <label style={{ fontSize:10, color:isDark?"#555":"#aaa", display:"block", marginBottom:3 }}>Override note</label>
+                  <input value={editing.override_note || ""} onChange={e => setEditing(p => ({...p, override_note: e.target.value}))}
+                    placeholder="e.g. Custom enterprise deal, expires 2027-01-01"
+                    style={{ width:"100%", boxSizing:"border-box", padding:"5px 8px", fontSize:12, borderRadius:6, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#f8f8fb", color:isDark?"#f0f0f2":"#1d1d1f", fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={async () => {
+                    await api(`/quota/admin/tenants/${editing.tenant_id}`, { method:"PATCH", body:JSON.stringify({ active_jobs:editing.active_jobs, featured_slots:editing.featured_slots, team_seats:editing.team_seats, job_credits:editing.job_credits, features:editing.features, override_note:editing.override_note }) });
+                    toast("Quota updated!");
+                    setEditing(null);
+                    api("/quota/admin/tenants").then(data => setTenants(Array.isArray(data)?data:[]));
+                  }} style={{ background:"var(--btn-primary)", border:"none", borderRadius:7, padding:"7px 16px", fontSize:12, fontWeight:600, color:"#fff", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                    Save changes
+                  </button>
+                  <button onClick={async () => {
+                    if (!window.confirm("Reset job credits used to 0?")) return;
+                    await api(`/quota/admin/tenants/${editing.tenant_id}/reset`, { method:"POST" });
+                    toast("Credits reset");
+                  }} style={{ background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:7, padding:"7px 14px", fontSize:12, color:isDark?"#888":"#555", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                    Reset credits
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -2291,12 +2442,10 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
   const [brandSettings, setBrandSettings] = useState({ name: "JobStream", logo_url: "" });
   const [brandDirty, setBrandDirty] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
-  const [editFullscreen, setEditFullscreen] = useState(false);
-    const [teamSearch, setTeamSearch] = useState("");
+  const [jobSearch, setJobSearch] = useState("");
   const [jobStatusFilter, setJobStatusFilter] = useState("");
   const [jobPage, setJobPage] = useState(0);
   const [selectedJobs, setSelectedJobs] = useState(new Set());
-  const [jobSearch, setJobSearch] = useState("");
   const JOB_PAGE_SIZE = 20;
   const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(true);
@@ -2342,6 +2491,20 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
       }
       if (t === "tenants")    setTenants((await api("/admin/tenants?limit=100")).tenants || []);
       if (t === "alerts")     setAlerts((await api("/admin/alerts?limit=100")).alerts || []);
+      if (t === "billing") {
+        try {
+          const [stats, plans, orders, fx] = await Promise.all([
+            api("/admin/billing/stats").catch(() => null),
+            api("/admin/billing/plans").catch(() => []),
+            api("/admin/billing/orders?limit=50").catch(() => ({ orders: [] })),
+            api("/admin/billing/fx-rates").catch(() => []),
+          ]);
+          setBillingStats(stats || {});
+          setBillingPlans(Array.isArray(plans) ? plans : []);
+          setBillingOrders(Array.isArray(orders) ? orders : (orders?.orders || []));
+          setFxRates(Array.isArray(fx) ? fx : []);
+        } catch (err) { setBillingStats({}); }
+      }
       if (t === "settings") {
         const [m, tmpl, theme, streamer, brand] = await Promise.all([
           api("/admin/industries"),
@@ -2368,7 +2531,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
     try {
       if (action === "publish")   await api(`/admin/jobs/${job.id}/publish`,   { method: "POST" });
       if (action === "unpublish") await api(`/admin/jobs/${job.id}/unpublish`, { method: "POST" });
-      if (action === "delete" && window.confirm(`Permanently delete "${job.title}"?`))    await api(`/admin/jobs/${job.id}/hard`,      { method: "DELETE" });
+      if (action === "delete")    await api(`/admin/jobs/${job.id}/hard`,      { method: "DELETE" });
       if (action === "publish" || action === "unpublish") {
         setJobs(prev => prev.map(j => j.id === job.id
           ? { ...j, is_active: action === "publish" ? 1 : 0 } : j));
@@ -2444,16 +2607,39 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
     { id: "tenants",   label: "🏢 Tenants"   },
     { id: "users",     label: "👥 Users"     },
     { id: "alerts",    label: "🔔 Alerts"    },
-    { id: "settings",  label: "* Settings"  },
+    { id: "billing",   label: "💳 Billing"   },
+    { id: "analytics", label: "📈 Analytics" },
+    { id: "settings",  label: "⚙️ Settings"  },
   ];
 
-  const tabStyle = (t) => ({
-    background: tab === t ? "#0071E3" : "none",
-    border: tab === t ? "none" : isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8",
-    borderRadius: 8, padding: "7px 16px", fontSize: 13,
-    color: tab === t ? "#fff" : isDark ? "#888" : "#555",
-    cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: tab === t ? 600 : 400,
-  });
+  function tabStyle(t) {
+    return {
+      background: tab === t ? "#0071E3" : "none",
+      border: tab === t ? "none" : isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8",
+      borderRadius: 8, padding: "7px 16px", fontSize: 13,
+      color: tab === t ? "#fff" : isDark ? "#888" : "#555",
+      cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: tab === t ? 600 : 400,
+    };
+  }
+
+  const [billingStats, setBillingStats] = useState(null);
+  const [billingPlans, setBillingPlans] = useState([]);
+  const [billingOrders, setBillingOrders] = useState([]);
+  const [fxRates, setFxRates] = useState([]);
+  const [billingSubTab, setBillingSubTab] = useState("overview");
+  const [editingPlan, setEditingPlan] = useState(null);
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [planFullscreen, setPlanFullscreen] = useState(false);
+  const [orderStatusFilter, setOrderStatusFilter] = useState("");
+  const [planSearch, setPlanSearch] = useState("");
+  const [planTypeFilter, setPlanTypeFilter] = useState("");
+
+  const newPlanDefaults = {id:"",name:"",type:"employer",description:"",is_active:true,is_featured:false,sort_order:0,features:{},limits:{},prices:{USD:{}},feature_list:[],durations:[{id:"monthly",label:"Monthly",months:1,discount:0}],gateways:{}};
+
+  function openNewPlan() {
+    setEditingPlan({id:"",name:"",type:"employer",description:"",is_active:true,is_featured:false,sort_order:0,features:{},limits:{},prices:{USD:{}},feature_list:[],durations:[{id:"monthly",label:"Monthly",months:1,discount:0}],gateways:{}});
+    setShowPlanForm(true);
+  }
 
   return (
     <div>
@@ -2518,7 +2704,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
               <div key={t.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{t.name}</div>
-                  <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>/{t.slug} &middot; {t.country}</div>
+                  <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>/{t.slug} · {t.country}</div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <span style={{ fontSize: 11, background: "rgba(0,113,227,0.1)", color: "#0071E3", padding: "2px 10px", borderRadius: 20 }}>{t.plan}</span>
@@ -2546,7 +2732,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
           {/* Search + filter bar */}
           <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
             <input value={userSearch} onChange={e => setUserSearch(e.target.value)}
-              placeholder="Search name or email..."
+              placeholder="Search name or email…"
               style={{ flex: 1, minWidth: 160, padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#1a1a1e" : "#f8f8fb", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }} />
             <select value={userRoleFilter} onChange={e => setUserRoleFilter(e.target.value)}
               style={{ padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#1a1a1e" : "#f8f8fb", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none", cursor: "pointer" }}>
@@ -2620,8 +2806,8 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                     <div style={{ fontSize: 11, color: isDark ? "#555" : "#888", marginTop: 2 }}>{u.email}</div>
                     <div style={{ fontSize: 11, color: isDark ? "#444" : "#aaa", marginTop: 2 }}>
                       Last login: {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Never"}
-                      {u.last_ip ? ` - IP: ${u.last_ip}` : ""}
-                      {u.mfa_enabled ? " - 🔐 2FA on" : " - 2FA off"}
+                      {u.last_ip ? ` · IP: ${u.last_ip}` : ""}
+                      {u.mfa_enabled ? " · 🔐 2FA on" : " · 2FA off"}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", flexShrink: 0 }}>
@@ -2668,7 +2854,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
               value={jobSearch}
               onChange={e => setJobSearch(e.target.value)}
               onKeyDown={e => e.key === "Enter" && loadTab("jobs")}
-              placeholder="Search title or company..."
+              placeholder="Search title or company…"
               style={{ flex: 1, minWidth: 180, padding: "8px 12px", fontSize: 13, borderRadius: 8, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: isDark ? "#1a1a1e" : "#f8f8fb", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" }}
             />
             <select value={jobStatusFilter} onChange={e => { setJobStatusFilter(e.target.value); loadTab("jobs"); }}
@@ -2700,7 +2886,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
               <>
                 <span style={{ fontSize: 12, color: isDark ? "#888" : "#555" }}>{selectedJobs.size} selected</span>
                 <button onClick={async () => {
-                  if (!window.confirm(`Unpublish ${selectedJobs.size} jobs?`)) return;
+                  if (!window.confirm("Unpublish " + selectedJobs.size + " jobs?")) return;
                   await Promise.all([...selectedJobs].map(id =>
                     api(`/admin/jobs/${id}`, { method: "PATCH", body: JSON.stringify({ is_active: false }) })
                   ));
@@ -2711,7 +2897,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                   Unpublish selected
                 </button>
                 <button onClick={async () => {
-                  if (!window.confirm(`Publish ${selectedJobs.size} jobs?`)) return;
+                  if (!window.confirm("Publish " + selectedJobs.size + " jobs?")) return;
                   await Promise.all([...selectedJobs].map(id =>
                     api(`/admin/jobs/${id}`, { method: "PATCH", body: JSON.stringify({ is_active: true }) })
                   ));
@@ -2722,7 +2908,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                   Publish selected
                 </button>
                 <button onClick={async () => {
-                  if (!window.confirm(`Permanently delete ${selectedJobs.size} jobs? This cannot be undone.`)) return;
+                  if (!window.confirm("Permanently delete " + selectedJobs.size + " jobs? This cannot be undone.")) return;
                   await Promise.all([...selectedJobs].map(id =>
                     api(`/admin/jobs/${id}`, { method: "DELETE" })
                   ));
@@ -2750,8 +2936,8 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{j.title}</div>
                   <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 2 }}>
-                    {j.company} &middot; {j.job_type} &middot; {j.department}
-                    {j.industry ? ` - 🏷 ${j.industry}` : ""}
+                    {j.company} · {j.job_type} · {j.department}
+                    {j.industry ? ` · 🏷 ${j.industry}` : ""}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0, flexWrap: "wrap" }}>
@@ -2760,15 +2946,15 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                   </span>
                   <button onClick={() => setEditingJob(j)}
                     style={{ fontSize: 11, background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: isDark ? "#888" : "#555", fontFamily: "'DM Sans', sans-serif" }}>
-                    &#9999;&#65039; Edit
+                    ✏️ Edit
                   </button>
                   <button onClick={() => adminJobAction(j.is_active ? "unpublish" : "publish", j)}
                     style={{ fontSize: 11, background: j.is_active ? "rgba(245,166,35,0.1)" : "rgba(61,214,140,0.1)", border: j.is_active ? "1px solid rgba(245,166,35,0.3)" : "1px solid rgba(61,214,140,0.3)", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: j.is_active ? "#F5A623" : "#3DD68C", fontFamily: "'DM Sans', sans-serif" }}>
-                    {j.is_active ? "|| Unpublish" : "> Publish"}
+                    {j.is_active ? "⏸ Unpublish" : "▶ Publish"}
                   </button>
                   <button onClick={() => { if (window.confirm("Permanently delete this job and all its applications?")) adminJobAction("delete", j); }}
                     style={{ fontSize: 11, background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.3)", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: "#f87171", fontFamily: "'DM Sans', sans-serif" }}>
-                    &#128465; Delete
+                    🗑 Delete
                   </button>
                 </div>
               </div>
@@ -2780,14 +2966,14 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16, justifyContent: "center" }}>
               <button onClick={() => setJobPage(p => Math.max(0, p-1))} disabled={jobPage === 0}
                 style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "6px 14px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: jobPage === 0 ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: jobPage === 0 ? 0.4 : 1 }}>
-                &larr; Prev
+                ← Prev
               </button>
               <span style={{ fontSize: 12, color: isDark ? "#555" : "#aaa" }}>
                 Page {jobPage + 1} of {Math.ceil(jobs.length / JOB_PAGE_SIZE)} ({jobs.length} jobs)
               </span>
               <button onClick={() => setJobPage(p => p + 1)} disabled={(jobPage + 1) * JOB_PAGE_SIZE >= jobs.length}
                 style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "6px 14px", fontSize: 12, color: isDark ? "#888" : "#555", cursor: (jobPage + 1) * JOB_PAGE_SIZE >= jobs.length ? "default" : "pointer", fontFamily: "'DM Sans', sans-serif", opacity: (jobPage + 1) * JOB_PAGE_SIZE >= jobs.length ? 0.4 : 1 }}>
-                Next &rarr;
+                Next →
               </button>
             </div>
           )}
@@ -2799,11 +2985,11 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: isDark ? "#555" : "#aaa" }}>
-              {alerts.length} alerts - open count updates when recipient clicks a job link
+              {alerts.length} alerts — open count updates when recipient clicks a job link
             </div>
             <button onClick={() => loadTab("alerts")}
               style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 7, padding: "5px 12px", fontSize: 11, color: isDark ? "#666" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
-              &#8635; Refresh
+              ↺ Refresh
             </button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2812,9 +2998,9 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                 <div style={{ flex: 1, minWidth: 180 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{a.keywords}</div>
                   <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 2 }}>
-                    {a.email} &middot; {a.frequency} at {a.send_time}
-                    {a.location ? ` - 📍 ${a.location}` : ""}
-                    {a.industry ? ` - 🏷 ${a.industry}` : ""}
+                    {a.email} · {a.frequency} at {a.send_time}
+                    {a.location ? ` · 📍 ${a.location}` : ""}
+                    {a.industry ? ` · 🏷 ${a.industry}` : ""}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 16, fontSize: 12, flexShrink: 0 }}>
@@ -2827,8 +3013,8 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
                     <div style={{ color: isDark ? "#555" : "#aaa", fontSize: 10 }}>Opened</div>
                   </div>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontWeight: 600, color: a.emails_sent ? Math.round((a.emails_opened||0)/(a.emails_sent)*100) + "%" : "-", fontSize: 11 }}>
-                      {a.emails_sent ? Math.round((a.emails_opened||0)/a.emails_sent*100) + "%" : "-"}
+                    <div style={{ fontWeight: 600, color: a.emails_sent ? Math.round((a.emails_opened||0)/(a.emails_sent)*100) + "%" : "—", fontSize: 11 }}>
+                      {a.emails_sent ? Math.round((a.emails_opened||0)/a.emails_sent*100) + "%" : "—"}
                     </div>
                     <div style={{ color: isDark ? "#555" : "#aaa", fontSize: 10 }}>Open rate</div>
                   </div>
@@ -2865,7 +3051,236 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
         </div>
       )}
 
-      {/* Settings */}
+      {tab === "billing" && (
+        <div>
+          <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: isDark ? "1px solid #1e1e24" : "1px solid #e0e0e8" }}>
+            {[["overview","Revenue"],["plans","Plans"],["orders","Orders"],["fx","FX Rates"],["quotas","Quotas"]].map(([id,label]) => (
+              <button key={id} onClick={() => setBillingSubTab(id)}
+                style={{ background:"none", border:"none", borderBottom: billingSubTab===id?"2px solid #0071E3":"2px solid transparent", padding:"8px 16px", fontSize:13, fontWeight: billingSubTab===id?600:400, color: billingSubTab===id?"#0071E3":(isDark?"#666":"#888"), cursor:"pointer", fontFamily:"'DM Sans',sans-serif", marginBottom:-1 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {billingSubTab === "overview" && (
+            <div>
+              {!billingStats ? <Spinner /> : (
+                <div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:12, marginBottom:24 }}>
+                    {[
+                      {label:"Total Revenue",  value:`N${Number(billingStats.total_revenue_usd||0).toLocaleString()}`,  color:"#3DD68C"},
+                      {label:"This Month",      value:`N${Number(billingStats.revenue_this_month_usd||0).toLocaleString()}`, color:"#0071E3"},
+                      {label:"MRR",             value:`N${Number(billingStats.mrr_usd||0).toLocaleString()}`,           color:"#f59e0b"},
+                      {label:"ARR",             value:`N${Number(billingStats.arr_usd||0).toLocaleString()}`,           color:"#a855f7"},
+                      {label:"Growth",          value:`${billingStats.growth_pct>=0?"+":""}${billingStats.growth_pct}%`, color: billingStats.growth_pct>=0?"#3DD68C":"#f87171"},
+                      {label:"Active Subs",     value:billingStats.active_subscriptions||0,                             color:"#0071E3"},
+                      {label:"Orders (month)",  value:billingStats.orders_this_month||0,                               color:"#888"},
+                    ].map(s => (
+                      <div key={s.label} style={{ background:isDark?"#141416":"#fff", border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:12, padding:"14px 16px" }}>
+                        <div style={{ fontSize:11, color:isDark?"#555":"#aaa", textTransform:"uppercase", letterSpacing:"0.5px", marginBottom:6 }}>{s.label}</div>
+                        <div style={{ fontSize:20, fontWeight:700, color:s.color }}>{s.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize:13, fontWeight:600, color:isDark?"#888":"#666", marginBottom:10, textTransform:"uppercase", letterSpacing:"0.5px" }}>Recent paid orders</div>
+                  {(billingStats.recent_orders||[]).length === 0 ? (
+                    <div style={{ color:isDark?"#555":"#aaa", fontSize:13, textAlign:"center", padding:"24px 0" }}>No paid orders yet</div>
+                  ) : (billingStats.recent_orders||[]).map(o => (
+                    <div key={o.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:isDark?"1px solid #1e1e24":"1px solid #f0f0f4", fontSize:13 }}>
+                      <div>
+                        <div style={{ fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f" }}>{o.email||o.user_id}</div>
+                        <div style={{ fontSize:11, color:isDark?"#555":"#aaa" }}>{o.plan_id} - {o.duration} - {o.gateway}</div>
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ color:"#3DD68C", fontWeight:600 }}>$ {Number(o.amount_usd||o.amount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+                        <div style={{ fontSize:11, color:isDark?"#555":"#aaa" }}>{o.paid_at?new Date(o.paid_at).toLocaleDateString():""}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {billingSubTab === "plans" && (
+            <div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, gap:8, flexWrap:"wrap" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                  <div style={{ fontSize:14, fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f" }}>{billingPlans.length} plans</div>
+                  <input value={planSearch} onChange={e => setPlanSearch(e.target.value)} placeholder="Search plans..." style={{ padding:"6px 10px", fontSize:12, borderRadius:7, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none", width:150 }} />
+                  {["","employer","candidate","credit"].map(t => <button key={t} onClick={() => setPlanTypeFilter(t)} style={{ padding:"5px 12px", fontSize:11, borderRadius:7, border:"none", cursor:"pointer", fontWeight:planTypeFilter===t?600:400, background:planTypeFilter===t?"var(--btn-primary)":(isDark?"#1a1a1e":"#f0f0f4"), color:planTypeFilter===t?"#fff":(isDark?"#888":"#555") }}>{t||"All"}</button>)}
+                </div>
+                <button onClick={openNewPlan} style={{ background:"var(--btn-primary)", border:"none", borderRadius:8, padding:"8px 16px", fontSize:12, fontWeight:600, color:"#fff", cursor:"pointer" }}>+ New plan</button>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {billingPlans.filter(p => (!planTypeFilter || p.type === planTypeFilter) && (!planSearch || p.name.toLowerCase().includes(planSearch.toLowerCase()) || (p.description||"").toLowerCase().includes(planSearch.toLowerCase()))).map(plan => (
+                  <div key={plan.id} style={{ background:isDark?"#141416":"#fff", border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:12, padding:"14px 16px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
+                          <span style={{ fontSize:14, fontWeight:700, color:isDark?"#f0f0f2":"#1d1d1f" }}>{plan.name}</span>
+                          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:plan.type==="employer"?"rgba(0,113,227,0.15)":"rgba(61,214,140,0.15)", color:plan.type==="employer"?"#0071E3":"#3DD68C", fontWeight:600 }}>{plan.type}</span>
+                          {plan.is_featured ? <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"rgba(245,158,11,0.15)", color:"#f59e0b", fontWeight:600 }}>Featured</span> : null}
+                          {(plan.is_active === false || plan.is_active === 0) ? <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"rgba(248,113,113,0.15)", color:"#f87171", fontWeight:600 }}>Draft</span> : null}
+                        </div>
+                        <div style={{ fontSize:12, color:isDark?"#555":"#aaa" }}>{plan.description}</div>
+                        <div style={{ fontSize:11, color:isDark?"#444":"#bbb", marginTop:4 }}>{(plan.durations||[]).map(d => d.label + ": $" + Number((plan.prices && plan.prices.USD && plan.prices.USD[d.id]) || 0).toLocaleString()).join(" - ")}</div>
+                      </div>
+                      <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                        <button onClick={() => { setEditingPlan(Object.assign({}, plan, {id: plan.id + "_copy", name: plan.name + " (Copy)", is_active: false})); setShowPlanForm(true); }} title="Duplicate" style={{ background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:7, padding:"4px 10px", fontSize:11, cursor:"pointer", color:isDark?"#888":"#555" }}>⧉</button>
+                        <button onClick={() => { setEditingPlan(Object.assign({}, plan)); setShowPlanForm(true); }} style={{ background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:7, padding:"4px 10px", fontSize:11, cursor:"pointer", color:isDark?"#888":"#555" }}>Edit</button>
+                        <button onClick={() => { if (window.confirm("Delete " + plan.name + "?")) { api("/admin/billing/plans/" + plan.id, {method:"DELETE"}).then(() => { setBillingPlans(p => p.filter(x => x.id !== plan.id)); toast("Deleted"); }); } }} style={{ background:"none", border:"none", borderRadius:7, padding:"4px 10px", fontSize:11, cursor:"pointer", color:"#f87171" }}>Delete</button>
+                      </div>
+                    </div>
+                    <div style={{ marginTop:8, display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+                      {(Array.isArray(plan.feature_list) ? plan.feature_list : []).slice(0,4).map((f,fi) => <span key={fi} style={{ fontSize:10, padding:"2px 8px", background:isDark?"#1a1a1e":"#f0f0f4", borderRadius:10, color:isDark?"#666":"#888" }}>{f}</span>)}
+                      <span style={{ fontSize:10, padding:"2px 8px", background:"rgba(0,113,227,0.1)", borderRadius:10, color:"#0071E3" }}>{Object.values(plan.features||{}).filter(Boolean).length} features</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {showPlanForm && editingPlan && (
+                <div onClick={() => { setShowPlanForm(false); setPlanFullscreen(false); }} style={{ position:"fixed", inset:0, background:planFullscreen?"transparent":"rgba(0,0,0,0.55)", backdropFilter:planFullscreen?"none":"blur(4px)", display:"flex", alignItems:planFullscreen?"flex-start":"center", justifyContent:"center", zIndex:9500, padding:planFullscreen?0:16, overflowY:planFullscreen?"auto":"hidden" }}>
+                  <div onClick={e => e.stopPropagation()} style={{ background:isDark?"#141416":"#fff", border:planFullscreen?"none":(isDark?"1px solid #2a2a32":"1px solid #e0e0e8"), borderRadius:planFullscreen?0:20, width:"100%", maxWidth:planFullscreen?"100%":700, minHeight:planFullscreen?"100vh":"auto", maxHeight:planFullscreen?"none":"92vh", overflowY:"auto", display:"flex", flexDirection:"column" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"16px 24px", borderBottom:isDark?"1px solid #2a2a32":"1px solid #e8e8f0", position:planFullscreen?"sticky":"relative", top:0, background:isDark?"#141416":"#fff", zIndex:10, flexShrink:0 }}>
+                      <h3 style={{ fontSize:16, fontWeight:700, color:isDark?"#f0f0f2":"#1d1d1f", margin:0 }}>{billingPlans.find(p => p.id === editingPlan.id) ? "Edit plan" : "New plan"}</h3>
+                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        <button type="button" onClick={() => window.open(window.location.pathname + "?page=admin", "_blank")} style={{ background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:7, padding:"4px 10px", fontSize:11, cursor:"pointer", color:isDark?"#888":"#555" }}>Open in New Tab</button>
+                        <button type="button" onClick={() => setPlanFullscreen(f => !f)} style={{ background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:7, padding:"4px 10px", fontSize:11, cursor:"pointer", color:isDark?"#888":"#555" }}>{planFullscreen ? "Exit Fullscreen" : "Fullscreen"}</button>
+                        <button onClick={() => { setShowPlanForm(false); setPlanFullscreen(false); }} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#888" }}>x</button>
+                      </div>
+                    </div>
+                    <div style={{ padding:planFullscreen?"24px 10% 40px":"20px 24px", maxWidth:planFullscreen?860:"none", margin:planFullscreen?"0 auto":0, width:"100%", boxSizing:"border-box" }}>
+                      {[["Plan ID","id","employer_starter"],["Name","name","Starter"],["Description","description","For growing teams"]].map(([lbl,fld,ph]) => <div key={fld} style={{ marginBottom:14 }}><label style={{ fontSize:11, fontWeight:600, color:isDark?"#888":"#555", display:"block", marginBottom:4, textTransform:"uppercase" }}>{lbl}</label><input value={editingPlan[fld]||""} onChange={e => { var v=e.target.value; setEditingPlan(p => Object.assign({},p,{[fld]:v})); }} placeholder={ph} style={{ width:"100%", boxSizing:"border-box", padding:"9px 12px", fontSize:13, borderRadius:8, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none" }} /></div>)}
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+                        <div><label style={{ fontSize:11, fontWeight:600, color:isDark?"#888":"#555", display:"block", marginBottom:4, textTransform:"uppercase" }}>Type</label><select value={editingPlan.type||"employer"} onChange={e => { var v=e.target.value; setEditingPlan(p => Object.assign({},p,{type:v})); }} style={{ width:"100%", padding:"9px 12px", fontSize:13, borderRadius:8, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f" }}><option value="employer">Employer</option><option value="candidate">Candidate</option><option value="credit">Credit Pack</option></select></div>
+                        <div><label style={{ fontSize:11, fontWeight:600, color:isDark?"#888":"#555", display:"block", marginBottom:4, textTransform:"uppercase" }}>Sort order</label><input type="number" value={editingPlan.sort_order||0} onChange={e => { var v=parseInt(e.target.value)||0; setEditingPlan(p => Object.assign({},p,{sort_order:v})); }} style={{ width:"100%", boxSizing:"border-box", padding:"9px 12px", fontSize:13, borderRadius:8, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none" }} /></div>
+                      </div>
+                      <div style={{ display:"flex", gap:20, marginBottom:16 }}>
+                        <label style={{ display:"flex", alignItems:"center", gap:7, cursor:"pointer", fontSize:13, color:isDark?"#d0d0d8":"#1d1d1f" }}><input type="checkbox" checked={!!editingPlan.is_active} onChange={e => { var v=e.target.checked; setEditingPlan(p => Object.assign({},p,{is_active:v})); }} /> Active (uncheck = draft)</label>
+                        <label style={{ display:"flex", alignItems:"center", gap:7, cursor:"pointer", fontSize:13, color:isDark?"#d0d0d8":"#1d1d1f" }}><input type="checkbox" checked={!!editingPlan.is_featured} onChange={e => { var v=e.target.checked; setEditingPlan(p => Object.assign({},p,{is_featured:v})); }} /> Featured</label>
+                      </div>
+                      <div style={{ marginBottom:16 }}>
+                        <label style={{ fontSize:11, fontWeight:600, color:isDark?"#888":"#555", display:"block", marginBottom:8, textTransform:"uppercase" }}>Durations & USD prices</label>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr auto", gap:6, marginBottom:4 }}>
+                          {["ID","Label","USD ($)",""].map((h,hi) => <div key={hi} style={{ fontSize:10, color:isDark?"#444":"#bbb", fontWeight:600 }}>{h}</div>)}
+                        </div>
+                        {(editingPlan.durations||[]).map((dur,idx) => <div key={idx} style={{ display:"flex", gap:6, marginBottom:8, alignItems:"center" }}><input value={dur.id||""} onChange={e => { var v=e.target.value,ix=idx; setEditingPlan(p => { var d=[...p.durations]; d[ix]=Object.assign({},d[ix],{id:v}); return Object.assign({},p,{durations:d}); }); }} placeholder="monthly" style={{ flex:1, padding:"8px 10px", fontSize:12, borderRadius:7, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none" }} /><input value={dur.label||""} onChange={e => { var v=e.target.value,ix=idx; setEditingPlan(p => { var d=[...p.durations]; d[ix]=Object.assign({},d[ix],{label:v}); return Object.assign({},p,{durations:d}); }); }} placeholder="Monthly" style={{ flex:1, padding:"8px 10px", fontSize:12, borderRadius:7, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none" }} /><input type="number" min="0" step="0.01" value={editingPlan.prices && editingPlan.prices.USD && editingPlan.prices.USD[dur.id] !== undefined ? editingPlan.prices.USD[dur.id] : ""} onChange={e => { var v=e.target.value===""?undefined:parseFloat(e.target.value),ix=idx,dk=dur.id; setEditingPlan(p => { var u=Object.assign({},p.prices&&p.prices.USD?p.prices.USD:{}); if(v!==undefined)u[dk]=v; else delete u[dk]; return Object.assign({},p,{prices:Object.assign({},p.prices,{USD:u})}); }); }} placeholder="e.g. 49" style={{ flex:1, padding:"8px 10px", fontSize:12, borderRadius:7, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none" }} /><button onClick={() => { var ix=idx; setEditingPlan(p => Object.assign({},p,{durations:p.durations.filter((_,j) => j!==ix)})); }} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:18, padding:"0 4px" }}>x</button></div>)}
+                        <button onClick={() => setEditingPlan(p => Object.assign({},p,{durations:[...(p.durations||[]),{id:"",label:"",months:1,discount:0}]}))} style={{ fontSize:12, color:"#0071E3", background:"none", border:"none", cursor:"pointer", padding:0 }}>+ Add duration</button>
+                      </div>
+                      <div style={{ marginBottom:16 }}>
+                        <label style={{ fontSize:11, fontWeight:600, color:isDark?"#888":"#555", display:"block", marginBottom:8, textTransform:"uppercase" }}>Plan limits</label>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                          {[["active_jobs","Active jobs","5"],["featured_slots","Featured slots","0"],["team_seats","Team seats","1"],["job_credits","Job credits",""],["applications_per_job","Max apps/job","100"]].map(([f,lbl,ph]) => <div key={f}><label style={{ fontSize:10, color:isDark?"#555":"#999", display:"block", marginBottom:3, fontWeight:500 }}>{lbl}</label><input type="number" min="0" value={editingPlan.limits&&editingPlan.limits[f]!==null&&editingPlan.limits[f]!==undefined?editingPlan.limits[f]:""} onChange={e => { var fk=f,v=e.target.value===""?null:parseInt(e.target.value); setEditingPlan(p => Object.assign({},p,{limits:Object.assign({},p.limits||{},{[fk]:v})})); }} placeholder={ph} style={{ width:"100%", boxSizing:"border-box", padding:"7px 10px", fontSize:12, borderRadius:7, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none" }} /></div>)}
+                        </div>
+                      </div>
+                      <div style={{ marginBottom:16 }}>
+                        <label style={{ fontSize:11, fontWeight:600, color:isDark?"#888":"#555", display:"block", marginBottom:4, textTransform:"uppercase" }}>Feature access</label>
+                        <div style={{ fontSize:11, color:isDark?"#555":"#aaa", marginBottom:8 }}>{editingPlan.type === "candidate" ? "Controls what candidates can access (gates AI features, saved job limits, etc.)" : "Controls what employers can do (posting, analytics, team management, etc.)"} These are separate from the pricing page bullet points below.</div>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4 }}>
+                          {(editingPlan.type === "candidate" ? [
+                            ["apply_jobs","Apply to jobs"],["save_jobs","Save jobs"],["basic_profile","Basic profile"],["track_applications","Application tracking"],["unlimited_saves","Unlimited saved jobs"],["ai_cv","AI CV Optimiser"],["ai_job_match","AI Job Match Scoring"],["ai_cover_letter","AI Cover Letter Writer"],["ai_interview","AI Interview Prep"],["priority_visibility","Priority profile visibility"],["advanced_search","Advanced search filters"],["salary_insights","Salary insights"],["recruiter_contact","Recruiter direct contact"],["profile_boost","Profile boost"]
+                          ] : [
+                            ["post_jobs","Post Jobs"],["featured_jobs","Featured Jobs"],["applications_dashboard","Applications Dashboard"],["applications_export","Export Applications"],["team_management","Team Management"],["analytics","Analytics"],["candidate_database","Candidate Database"],["custom_branding","Custom Branding"],["api_access","API Access"],["ai_screening","AI Screening"],["priority_support","Priority Support"],["duplicate_jobs","Duplicate Jobs"],["draft_jobs","Draft Jobs"],["bulk_actions","Bulk Actions"],["advanced_filters","Advanced Filters"]
+                          ]).map(([flag,lbl]) => { var flags=editingPlan.features&&typeof editingPlan.features==="object"&&!Array.isArray(editingPlan.features)?editingPlan.features:{}; return <label key={flag} style={{ display:"flex", alignItems:"center", gap:7, cursor:"pointer", fontSize:12, color:isDark?"#d0d0d8":"#1d1d1f", padding:"3px 0" }}><input type="checkbox" checked={!!flags[flag]} onChange={e => { var fk=flag,v=e.target.checked; setEditingPlan(p => { var f=p.features&&typeof p.features==="object"&&!Array.isArray(p.features)?Object.assign({},p.features):{}; f[fk]=v; return Object.assign({},p,{features:f}); }); }} />{lbl}</label>; })}
+                        </div>
+                      </div>
+                      <div style={{ marginBottom:20 }}>
+                        <label style={{ fontSize:11, fontWeight:600, color:isDark?"#888":"#555", display:"block", marginBottom:4, textTransform:"uppercase" }}>Pricing page bullet points (one per line)</label>
+                        <div style={{ fontSize:11, color:isDark?"#555":"#aaa", marginBottom:6 }}>Marketing text — does not affect feature access above.</div>
+                        <textarea value={(Array.isArray(editingPlan.feature_list)?editingPlan.feature_list:[]).join(String.fromCharCode(10))} onChange={e => { var v=e.target.value; setEditingPlan(p => Object.assign({},p,{feature_list:v.split(String.fromCharCode(10))})); }} placeholder="5 active job listings" rows={5} style={{ width:"100%", boxSizing:"border-box", padding:"9px 12px", fontSize:12, borderRadius:8, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none", resize:"vertical" }} />
+                      </div>
+                      <div style={{ display:"flex", gap:10 }}>
+                        <button onClick={async () => { var exists=billingPlans.find(p=>p.id===editingPlan.id); var method=exists?"PATCH":"POST"; var url=exists?"/admin/billing/plans/"+editingPlan.id:"/admin/billing/plans"; var flags=editingPlan.features&&typeof editingPlan.features==="object"&&!Array.isArray(editingPlan.features)?editingPlan.features:{}; var s=Object.assign({},editingPlan,{features:flags,feature_list:Array.isArray(editingPlan.feature_list)?editingPlan.feature_list.filter(Boolean):[],is_active:!!editingPlan.is_active}); await api(url,{method,body:JSON.stringify(s)}); setBillingPlans(prev => { var u=Object.assign({},editingPlan,s); return exists?prev.map(p=>p.id===editingPlan.id?u:p):[...prev,u]; }); setShowPlanForm(false); setPlanFullscreen(false); toast(exists?"Plan updated!":"Plan created!"); }} style={{ background:"var(--btn-primary)", color:"#fff", border:"none", borderRadius:10, padding:"11px 28px", fontSize:14, fontWeight:600, cursor:"pointer" }}>Save plan</button>
+                        <button onClick={async () => { var exists=billingPlans.find(p=>p.id===editingPlan.id); var method=exists?"PATCH":"POST"; var url=exists?"/admin/billing/plans/"+editingPlan.id:"/admin/billing/plans"; var flags=editingPlan.features&&typeof editingPlan.features==="object"&&!Array.isArray(editingPlan.features)?editingPlan.features:{}; var s=Object.assign({},editingPlan,{features:flags,feature_list:Array.isArray(editingPlan.feature_list)?editingPlan.feature_list.filter(Boolean):[],is_active:false}); await api(url,{method,body:JSON.stringify(s)}); setBillingPlans(prev => { var u=Object.assign({},editingPlan,s); return exists?prev.map(p=>p.id===editingPlan.id?u:p):[...prev,u]; }); setShowPlanForm(false); setPlanFullscreen(false); toast("Saved as draft"); }} style={{ background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", color:isDark?"#888":"#555", borderRadius:10, padding:"11px 20px", fontSize:14, cursor:"pointer" }}>Save as draft</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {billingSubTab === "orders" && (
+            <div>
+              <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+                <select value={orderStatusFilter} onChange={e=>setOrderStatusFilter(e.target.value)}
+                  style={{ padding:"7px 12px", fontSize:12, borderRadius:8, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#141416":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", fontFamily:"'DM Sans',sans-serif", cursor:"pointer" }}>
+                  <option value="">All statuses</option>
+                  {["pending","paid","failed","refunded","cancelled"].map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+                <button onClick={async()=>{ const d=await api("/admin/billing/orders?limit=50" + (orderStatusFilter ? "&status=" + orderStatusFilter : "")).catch(()=>({orders:[]})); setBillingOrders(d.orders||[]); }}
+                  style={{ background:"var(--btn-primary)", border:"none", borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:600, color:"#fff", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Filter</button>
+              </div>
+              {billingOrders.length===0?(
+                <div style={{ textAlign:"center", color:isDark?"#555":"#aaa", padding:"40px 0", fontSize:13 }}>No orders found</div>
+              ):(
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {billingOrders.map(o=>(
+                    <div key={o.id} style={{ background:isDark?"#141416":"#fff", border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:10, padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f" }}>{o.email||o.user_id}</div>
+                        <div style={{ fontSize:11, color:isDark?"#555":"#aaa" }}>{o.plan_id} - {o.duration} - {o.gateway} - {o.country_code}</div>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                        <div>
+                          <div style={{ fontSize:14, fontWeight:700, color:o.status==="paid"?"#3DD68C":o.status==="pending"?"#f59e0b":"#f87171" }}>{o.currency} {Number(o.amount||0).toLocaleString()}</div>
+                          <div style={{ fontSize:10, padding:"2px 8px", borderRadius:10, display:"inline-block", background:o.status==="paid"?"rgba(61,214,140,0.15)":o.status==="pending"?"rgba(245,158,11,0.15)":"rgba(248,113,113,0.15)", color:o.status==="paid"?"#3DD68C":o.status==="pending"?"#f59e0b":"#f87171" }}>{o.status}</div>
+                        </div>
+                        <select onChange={async e=>{ await api(`/admin/billing/orders/${o.id}`,{method:"PATCH",body:JSON.stringify({status:e.target.value})}); setBillingOrders(prev=>prev.map(x=>x.id===o.id?{...x,status:e.target.value}:x)); toast("Order updated"); }} defaultValue={o.status}
+                          style={{ padding:"4px 8px", fontSize:11, borderRadius:6, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#141416":"#fff", color:isDark?"#888":"#555", cursor:"pointer" }}>
+                          {["pending","paid","failed","refunded","cancelled"].map(s=><option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {billingSubTab === "quotas" && (
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f", marginBottom:4 }}>Tenant Quota Management</div>
+              <div style={{ fontSize:12, color:isDark?"#555":"#aaa", marginBottom:16 }}>Override any tenant's plan limits and feature access individually.</div>
+              <QuotaAdminPanel isDark={isDark} toast={toast} />
+            </div>
+          )}
+          {billingSubTab === "fx" && (
+            <div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, gap:12 }}>
+                <div style={{ fontSize:12, color:isDark?"#555":"#aaa" }}>
+                  Rates auto-refresh from ECB on every deploy. Stored as: 1 currency = X USD (e.g. NGN = 0.000625, GBP = 1.27).
+                  {fxRates.every(f => !f.rate_to_usd) && <span style={{ color:"#f87171", fontWeight:600, marginLeft:6 }}>Rates not loaded yet — click Refresh.</span>}
+                </div>
+                <button onClick={async () => {
+                  try {
+                    toast("Fetching live rates...");
+                    const result = await api("/admin/billing/fx-rates/refresh", { method: "POST" });
+                    const fx = await api("/admin/billing/fx-rates");
+                    setFxRates(Array.isArray(fx) ? fx : []);
+                    toast(`✓ Updated ${Object.keys(result.rates||{}).length} currencies from ${result.source}`);
+                  } catch(e) { toast(e.message || "FX refresh failed"); }
+                }} style={{ background:"var(--btn-primary)", border:"none", borderRadius:8, padding:"8px 16px", fontSize:12, fontWeight:600, color:"#fff", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap", flexShrink:0 }}>
+                  🔄 Refresh now
+                </button>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                {fxRates.map(fx=>(
+                  <div key={fx.currency} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:isDark?"1px solid #1e1e24":"1px solid #f0f0f4" }}>
+                    <span style={{ fontSize:14, fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f", width:60 }}>{fx.symbol} {fx.currency}</span>
+                    <span style={{ fontSize:12, color:isDark?"#555":"#aaa", flex:1 }}>1 {fx.currency} = </span>
+                    <span style={{ fontSize:14, fontWeight:600, color:fx.rate_to_usd ? (isDark?"#f0f0f2":"#1d1d1f") : "#f87171", width:100, textAlign:"right" }}>
+                      {fx.rate_to_usd ? Number(fx.rate_to_usd).toLocaleString(undefined,{minimumFractionDigits:4,maximumFractionDigits:6}) : "not set"}
+                    </span>
+                    <span style={{ fontSize:12, color:isDark?"#555":"#aaa" }}>USD</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop:12, fontSize:11, color:isDark?"#444":"#bbb" }}>
+                Source: European Central Bank via frankfurter.app. Base currency: USD. Free, no API key required.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === "settings" && !loading && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "start" }}>
           {/* Sidebar Nav Control - per user group */}
@@ -3283,6 +3698,7 @@ function WorkspaceDashboardPage({ isDark = true, user, onAuthRequired, toast }) 
       )}
     </div>
   );
+  
 }
 
 
@@ -3364,6 +3780,7 @@ function JobSlugHandler({ slug, isDark, user, onAuthRequired, toast, onClose }) 
         </div>
       </div>
     );
+    
   }
 
   return (
@@ -4028,8 +4445,8 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
           {loading ? <Spinner /> : plans.map(plan => {
             const isCurrentPlan = plan.id === currentPlanId;
             const colors = planColors[plan.name] || planColors.Free;
-            return (
-              <div key={plan.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isCurrentPlan ? "2px solid #0071E3" : isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 16, padding: "22px 20px", position: "relative" }}>
+            return <div key={plan.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isCurrentPlan ? "2px solid #0071E3" : isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 16, padding: "22px 20px", position: "relative" }}>
+
                 {isCurrentPlan && (
                   <div style={{ position: "absolute", top: -1, right: 16, background: "var(--btn-primary)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: "0 0 8px 8px" }}>CURRENT</div>
                 )}
@@ -4048,7 +4465,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
                   )}
                 </div>
                 <div style={{ marginBottom: 20 }}>
-                  {(plan.features || []).map((f, i) => (
+                  {(Array.isArray(plan.feature_list) && plan.feature_list.length > 0 ? plan.feature_list : Array.isArray(plan.features) ? plan.features : []).map((f, i) => (
                     <div key={i} style={{ fontSize: 12, color: isDark ? "#aaa" : "#555", padding: "3px 0", display: "flex", gap: 6 }}>
                       <span style={{ color: "#3DD68C" }}>OK</span> {f}
                     </div>
@@ -4067,7 +4484,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
                   <div style={{ fontSize: 12, color: "#3DD68C", textAlign: "center", marginTop: 4 }}>OK Active subscription</div>
                 )}
               </div>
-            );
+            
           })}
         </div>
       )}
@@ -4116,18 +4533,19 @@ function MiniBarChart({ data, labelKey, valueKey, color = "#0071E3", isDark, hei
     <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height, paddingTop: 8 }}>
       {data.map((d, i) => {
         const pct = ((d[valueKey] || 0) / max) * 100;
-        return (
-          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+        return <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+
             <div style={{ fontSize: 9, color: isDark ? "#555" : "#aaa" }}>{d[valueKey] || 0}</div>
             <div style={{ width: "100%", height: `${Math.max(pct, 3)}%`, background: color, borderRadius: "3px 3px 0 0", transition: "height 0.3s ease", minHeight: 3 }} />
             <div style={{ fontSize: 8, color: isDark ? "#444" : "#bbb", transform: "rotate(-45deg)", transformOrigin: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 28 }}>
               {String(d[labelKey] || "").slice(-5)}
             </div>
           </div>
-        );
+        
       })}
     </div>
   );
+  
 }
 
 
@@ -4178,6 +4596,7 @@ function DonutChart({ data, labelKey, valueKey, isDark, size = 140 }) {
       </div>
     </div>
   );
+  
 }
 
 
@@ -4555,6 +4974,7 @@ function DocsPage({ isDark = true, section = "privacy" }) {
       </div>
     </div>
   );
+  
 }
 
 
@@ -4592,6 +5012,7 @@ function PrivacyPage({ isDark = true }) {
       <p style={s}>For privacy enquiries: privacy@jobstream.ng</p>
     </div>
   );
+  
 }
 
 
@@ -4632,6 +5053,7 @@ function TermsPage({ isDark = true }) {
       <p style={s}>Legal enquiries: legal@jobstream.ng</p>
     </div>
   );
+  
 }
 
 
@@ -4739,6 +5161,7 @@ function ScraperPage({ toast, isDark = true }) {
   const [newName, setNewName] = useState("");
   const [newIndustry, setNewIndustry] = useState("");
   const [newUrl, setNewUrl] = useState("");
+  const [newLogoUrl, setNewLogoUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null); // company id currently being scraped
   const [industryOptions, setIndustryOptions] = useState([]);
@@ -4768,8 +5191,8 @@ function ScraperPage({ toast, isDark = true }) {
   async function addCompany() {
     if (!newName || !newUrl) return;
     try {
-      await api("/companies", { method: "POST", body: JSON.stringify({ name: newName, url: newUrl, industry: newIndustry }) });
-      setNewName(""); setNewUrl(""); setNewIndustry("");
+      await api("/companies", { method: "POST", body: JSON.stringify({ name: newName, url: newUrl, industry: newIndustry, logo_url: newLogoUrl }) });
+      setNewName(""); setNewUrl(""); setNewIndustry(""); setNewLogoUrl("");
       load();
       toast(`Added ${newName}`);
     } catch (e) { toast("Failed: " + e.message); }
@@ -4921,6 +5344,9 @@ function ScraperPage({ toast, isDark = true }) {
             <input value={newUrl} onChange={(e) => setNewUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addCompany()}
               placeholder="https://company.com/careers" style={{ ...inp, flex: 1, minWidth: 200 }} />
+            <input value={newLogoUrl} onChange={(e) => setNewLogoUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addCompany()}
+              placeholder="Logo URL (optional)" style={{ ...inp, width: 200 }} />
             <button onClick={addCompany}
               style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>+ Add</button>
           </div>
@@ -5124,6 +5550,7 @@ function CompaniesPage({ isDark = true, user, onSelectCompany }) {
       )}
     </div>
   );
+  
 }
 
 
@@ -5247,6 +5674,7 @@ function CompanyProfilePage({ isDark = true, companyId, onApply, user, onAuthReq
       </div>
     </div>
   );
+  
 }
 
 
@@ -5389,8 +5817,8 @@ function MyApplicationsPage({ isDark = true, user, onAuthRequired }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {apps.map((a) => {
           const sc = statusColors[a.status] || statusColors.new;
-          return (
-            <div key={a.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 14 }}>
+          return <div key={a.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 14 }}>
+
               <CompanyLogo name={a.company || "?"} sourceUrl={a.source_url} size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -5407,7 +5835,7 @@ function MyApplicationsPage({ isDark = true, user, onAuthRequired }) {
                 </div>
               </div>
             </div>
-          );
+          
         })}
       </div>
     </div>
@@ -5577,14 +6005,153 @@ function ApplicationsPage({ isDark = true }) {
       )}
     </div>
   );
+  
 }
 
+
 // -- App Shell -----------------------------------------------------------------
-export default function App() {
-  const [page, setPage] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("page") || "jobs";
-  });
+function PricingPage({ isDark, user, onAuthRequired, toast }) {
+  const [plans, setPlans] = useState([]);
+  const [currency, setCurrency] = useState("USD");
+  const [symbol, setSymbol] = useState("$");
+  const [gateway, setGateway] = useState("stripe");
+  const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState(null);
+  const [selectedDuration, setSelectedDuration] = useState({});
+
+  useEffect(() => {
+    api("/billing/pricing").then(data => {
+      setPlans(data.plans || []);
+      setCurrency(data.currency || "USD");
+      setSymbol(data.symbol || "$");
+      setGateway(data.gateway || "stripe");
+      // Default to first duration for each plan
+      const defs = {};
+      (data.plans || []).forEach(p => {
+        if (p.durations?.length) defs[p.id] = p.durations[0].id;
+      });
+      setSelectedDuration(defs);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  async function handleCheckout(plan) {
+    if (!user) { onAuthRequired(); return; }
+    const dur = selectedDuration[plan.id] || plan.durations?.[0]?.id;
+    if (!dur) { toast("No duration available"); return; }
+    setPaying(plan.id);
+    try {
+      const res = await api("/billing/initiate", {
+        method: "POST",
+        body: JSON.stringify({ plan_id: plan.id, duration_id: dur }),
+      });
+      if (res.checkout_url) {
+        window.location.href = res.checkout_url;
+      }
+    } catch(e) {
+      toast(e.message || "Payment initiation failed");
+    } finally {
+      setPaying(null);
+    }
+  }
+
+  if (loading) return <div style={{ textAlign:"center", padding:"60px 0" }}><Spinner /></div>;
+
+  return (
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 20px" }}>
+      <div style={{ textAlign:"center", marginBottom: 48 }}>
+        <h1 style={{ fontSize: 36, fontWeight: 800, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 12, letterSpacing: -1 }}>
+          Simple, transparent pricing
+        </h1>
+        <p style={{ fontSize: 16, color: isDark ? "#666" : "#888", marginBottom: 24 }}>
+          Prices shown in <strong>{currency}</strong> based on your location. Pay in your local currency.
+        </p>
+        <div style={{ display:"inline-flex", gap: 8, background: isDark?"#141416":"#f5f5f7", borderRadius: 10, padding: 4 }}>
+          {["employer","candidate"].map(t => (
+            <button key={t} style={{ padding:"6px 20px", borderRadius: 8, border:"none", fontSize: 13, fontWeight: 600, cursor:"pointer", background: "none", color: isDark?"#888":"#555", fontFamily:"'DM Sans',sans-serif", textTransform:"capitalize" }}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:`repeat(${Math.min(plans.length, 3)}, 1fr)`, gap: 20 }}>
+        {plans.map(plan => {
+          const dur = selectedDuration[plan.id] || plan.durations?.[0]?.id;
+          const pricing = plan.pricing?.[dur] || {};  // pricing includes gateway markup
+          const durObj = (plan.durations || []).find(d => d.id === dur) || {};
+
+          return <div key={plan.id} style={{
+
+              background: isDark ? "#141416" : "#ffffff",
+              border: plan.is_featured ? "2px solid #0071E3" : (isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8"),
+              borderRadius: 20, padding: "28px 24px",
+              position: "relative",
+              boxShadow: plan.is_featured ? "0 0 0 4px rgba(0,113,227,0.1)" : "none",
+            }}>
+              {plan.is_featured && (
+                <div style={{ position:"absolute", top:-12, left:"50%", transform:"translateX(-50%)", background:"#0071E3", color:"#fff", fontSize:11, fontWeight:700, padding:"3px 14px", borderRadius:20, whiteSpace:"nowrap" }}>
+                  Most popular
+                </div>
+              )}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: isDark?"#f0f0f2":"#1d1d1f", marginBottom: 6 }}>{plan.name}</div>
+                <div style={{ fontSize: 13, color: isDark?"#555":"#888" }}>{plan.description}</div>
+              </div>
+
+              {/* Duration selector */}
+              {plan.durations?.length > 1 && (
+                <div style={{ display:"flex", gap: 6, marginBottom: 20, flexWrap:"wrap" }}>
+                  {plan.durations.map(d => (
+                    <button key={d.id} onClick={() => setSelectedDuration(p => ({...p, [plan.id]: d.id}))}
+                      style={{ padding:"4px 12px", borderRadius: 8, border: dur===d.id?"1px solid #0071E3":"1px solid "+(isDark?"#2a2a32":"#d0d0d8"), background: dur===d.id?"rgba(0,113,227,0.1)":"none", color: dur===d.id?"#0071E3":(isDark?"#888":"#555"), fontSize: 12, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                      {d.label}
+                      {d.discount > 0 && <span style={{ marginLeft:4, fontSize:10, color:"#3DD68C" }}>-{d.discount}%</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Price */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display:"flex", alignItems:"baseline", gap: 4 }}>
+                  <span style={{ fontSize: 40, fontWeight: 800, color: isDark?"#f0f0f2":"#1d1d1f" }}>
+                    {pricing.display || "$0"}
+                  </span>
+                  <span style={{ fontSize: 14, color: isDark?"#555":"#888" }}>/{durObj.label || "month"}</span>
+                </div>
+              </div>
+
+              {/* CTA */}
+              <button onClick={() => handleCheckout(plan)} disabled={paying === plan.id}
+                style={{ width:"100%", background: plan.is_featured?"#0071E3":"none", border: plan.is_featured?"none":"1px solid "+(isDark?"#2a2a32":"#d0d0d8"), borderRadius: 10, padding:"12px 0", fontSize: 14, fontWeight: 600, color: plan.is_featured?"#fff":(isDark?"#f0f0f2":"#1d1d1f"), cursor:"pointer", fontFamily:"'DM Sans',sans-serif", marginBottom: 24, opacity: paying===plan.id?0.6:1 }}>
+                {paying===plan.id ? "Redirecting..." : plan.is_featured ? "Get started" : "Choose plan"}
+              </button>
+
+              {/* Features */}
+              <div style={{ display:"flex", flexDirection:"column", gap: 8 }}>
+                {(Array.isArray(plan.feature_list) ? plan.feature_list : Array.isArray(plan.features) ? plan.features : []).filter(Boolean).map((f, i) => (
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap: 8, fontSize: 13, color: isDark?"#d0d0d8":"#1d1d1f" }}>
+                    <span style={{ color:"#3DD68C", flexShrink:0 }}>✓</span>
+                    {f}
+                  </div>
+                ))}
+              </div>
+            </div>
+          
+        })}
+      </div>
+
+      <div style={{ textAlign:"center", marginTop: 40, fontSize: 13, color: isDark?"#444":"#bbb" }}>
+        Payments processed securely via {gateway === "paystack" ? "Paystack" : gateway === "flutterwave" ? "Flutterwave" : "Paddle"}. All prices include applicable fees.
+        All transactions are secure and encrypted.
+      </div>
+    </div>
+  );
+}
+
+
+function App() {
+  const [page, setPage] = useState("jobs");
   const [applyJob, setApplyJob] = useState(null);
   const [toast, setToast] = useState("");
   const [theme, setTheme] = useState("light");
@@ -5655,14 +6222,40 @@ export default function App() {
     return params.get("jobid") || "";
   });
   // ?postjob=1 - open post job modal directly from new tab
-  const [autoPostJob, setAutoPostJob] = useState(() => {
+  const [autoPostJob, setAutoPostJob] = useState(false);
+  const [autoEditJobId, setAutoEditJobId] = useState("");
+
+  // Read URL params after mount - prevents pricing/stale page on load
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("postjob") === "1";
-  });
-  const [autoEditJobId, setAutoEditJobId] = useState(() => {
+    const p = params.get("page");
+    const validPages = ["employer", "admin", "profile", "saved", "myapps", "myalerts", "companies", "analytics"];
+    if (p && validPages.includes(p)) setPage(p);
+    if (params.get("postjob") === "1") setAutoPostJob(true);
+    const ej = params.get("editjob");
+    if (ej) setAutoEditJobId(ej);
+    // Clear URL
+    if (params.toString()) window.history.replaceState({}, "", "/");
+  }, []);
+  // Handle ?billing=success redirect from payment gateway
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("editjob") || "";
-  });
+    if (params.get("billing") === "success") {
+      const orderId = params.get("order");
+      showToast("Payment successful! Your subscription is now active.");
+      window.history.replaceState({}, "", "/");
+      if (orderId) {
+        api(`/billing/verify/${orderId}`).then(order => {
+          if (order.status === "paid") showToast(`Plan activated: ${order.plan_id}`);
+        }).catch(() => {});
+      }
+    }
+    if (params.get("billing") === "cancel") {
+      showToast("Payment cancelled.");
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
+
 
 
 
@@ -5710,7 +6303,7 @@ export default function App() {
     { id: "billing",      icon: "💳",  label: "Billing" },
     { id: "analytics",    icon: "📊",  label: "Analytics" },
     { id: "workspace",    icon: "📊",  label: "Workspace" },
-    { id: "admin",        icon: "*",  label: "Admin" },
+    { id: "admin",        icon: "A",  label: "Admin" },
     { id: "scraper",      icon: "🤖",  label: "Streamer" },
   ];
 
@@ -5728,7 +6321,9 @@ export default function App() {
                 "ai", "billing", "analytics", "workspace", "admin", "scraper"],
   };
 
-  const allowedIds = new Set(navSettings?.[navGroup] || DEFAULT_NAV[navGroup] || []);
+  const validNavIds = new Set(ALL_NAV.map(n => n.id));
+  const rawNav = (navSettings?.[navGroup] || DEFAULT_NAV[navGroup] || []).filter(id => validNavIds.has(id));
+  const allowedIds = new Set(rawNav);
   if (isAdmin) { allowedIds.add("admin"); allowedIds.add("scraper"); }
 
   const NAV = ALL_NAV.filter(item => allowedIds.has(item.id));
@@ -5902,6 +6497,7 @@ export default function App() {
             </div>
         )}
         {page === "workspace"  && <WorkspaceDashboardPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}
+        {page === "pricing"    && <PricingPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}
         {page === "admin"      && <AdminDashboardPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}
         {page === "applications" && <ApplicationsPage isDark={isDark} />}
       </main>
@@ -5970,4 +6566,7 @@ export default function App() {
       {toast && <Toast msg={toast} onClose={() => setToast("")} />}
     </div>
   );
+  
 }
+
+export default App;

@@ -29,10 +29,12 @@ class CompanyIn(BaseModel):
     name: str
     url: str
     industry: str = ""
+    logo_url: str = ""
 
 
 class CompanyUpdateIn(BaseModel):
     industry: str = ""
+    logo_url: str = ""
 
 
 class ApplicationIn(BaseModel):
@@ -57,7 +59,7 @@ def list_companies():
 @router.post("/companies", status_code=201)
 def create_company(body: CompanyIn):
     try:
-        return add_company(body.name, body.url, body.industry)
+        return add_company(body.name, body.url, body.industry, body.logo_url)
     except Exception as e:
         raise HTTPException(400, str(e))
 
@@ -635,6 +637,31 @@ async def create_manual_job(
     if not _is_admin:
         if not tenant_id:
             raise HTTPException(403, "You must create a workspace before posting jobs.")
+
+        # ── Quota enforcement ─────────────────────────────────────────────
+        try:
+            from services.identity.quota_router import check_job_quota, check_feature
+            quota_status = check_job_quota(str(tenant_id))
+            if not quota_status["can_post"]:
+                credits = quota_status.get("credits")
+                limit = quota_status.get("limit")
+                if credits is not None:
+                    raise HTTPException(403,
+                        f"You have used all {credits} job credits on your plan. "
+                        f"Please purchase more credits to continue posting jobs."
+                    )
+                else:
+                    raise HTTPException(403,
+                        f"You have reached your plan limit of {limit} active jobs. "
+                        f"Upgrade your plan or unpublish existing jobs to post new ones."
+                    )
+            if not check_feature(str(tenant_id), "post_jobs"):
+                raise HTTPException(403, "Your plan does not include job posting. Please upgrade.")
+        except HTTPException:
+            raise
+        except Exception as qe:
+            import logging as _log
+            _log.getLogger(__name__).warning(f"Quota check failed (non-blocking): {qe}")
         if body.organization_id:
             with get_conn() as _c:
                 _cur = _c.cursor()

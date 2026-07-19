@@ -1,11 +1,9 @@
 name: Deploy to Production
 
-# Only deploys when a PR from staging → main is merged
 on:
   push:
     branches:
       - main
-
   workflow_dispatch:
 
 jobs:
@@ -28,13 +26,13 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
         run: |
           cd scraper
-          railway up --service jobstream-backend --detach
+          railway up --service jobstream --detach
 
       - name: Deploy frontend to Railway (production)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
         run: |
-          railway up --service jobstream-frontend --detach
+          railway up --service practical-creativity --detach
 
       - name: Post deploy notification
         if: always()

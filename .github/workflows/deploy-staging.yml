@@ -1,19 +1,16 @@
 name: Deploy to Staging
 
-# Triggers on every push to the staging branch
 on:
   push:
     branches:
       - staging
-
-  # Allow manual trigger
   workflow_dispatch:
 
 jobs:
   deploy:
     name: Deploy staging → Railway
     runs-on: ubuntu-latest
-    environment: staging          # uses GitHub Environment secrets
+    environment: staging
 
     steps:
       - name: Checkout staging branch
@@ -29,17 +26,17 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
         run: |
           cd scraper
-          railway up --service jobstream-backend-staging --detach
+          railway up --service jobstream-staging --detach
 
       - name: Deploy frontend to Railway (staging)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
         run: |
-          railway up --service jobstream-frontend-staging --detach
+          railway up --service practical-creativity-staging --detach
 
-      - name: Post deploy comment
+      - name: Post deploy notification
         if: always()
         run: |
           echo "Staging deploy triggered at $(date -u)"
-          echo "Backend:  https://jobstream-staging-backend.up.railway.app"
-          echo "Frontend: https://jobstream-staging-frontend.up.railway.app"
+          echo "Backend:  https://jobstream-staging.up.railway.app"
+          echo "Frontend: https://practical-creativity-staging-9713.up.railway.app"

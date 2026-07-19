@@ -712,7 +712,7 @@ function ResetPasswordModal({ token, onClose, onSuccess }) {
         <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1d1d1f", marginBottom: 4, letterSpacing: -0.5 }}>Choose new password</h2>
         <p style={{ fontSize: 13, color: "#888", marginBottom: 24 }}>Enter and confirm your new password below.</p>
         {error && <div style={{ background: "#fff0f0", border: "1px solid #f5c6c6", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#c0392b" }}>{error}</div>}
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} onClick={() => setShowCompanyPicker(false)}>
           <div style={{ marginBottom: 14 }}>
             <label style={{ fontSize: 11, color: "#666", textTransform: "uppercase", letterSpacing: "0.4px", fontWeight: 500 }}>New password</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" required style={inp} />
@@ -1399,6 +1399,79 @@ function PostJobModal({ isDark = true, onClose, onSuccess, organizations: orgsPr
 
 // -- Employer Dashboard Page ---------------------------------------------------
 // -- Tenant Onboard Modal -----------------------------------------------------
+// ── Workspace Prompt Modal ────────────────────────────────────────────────────
+// Shown when a candidate (no workspace) clicks Post a Job
+function WorkspacePromptModal({ isDark, onClose, onCreateCompany, onBuyCredits }) {
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
+      backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center",
+      zIndex:2000, padding:16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:isDark?"#141416":"#fff",
+        border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:18,
+        padding:"32px 28px", maxWidth:440, width:"100%" }}>
+
+        {/* Icon + heading */}
+        <div style={{ textAlign:"center", marginBottom:24 }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>🏢</div>
+          <h2 style={{ fontSize:20, fontWeight:700, color:isDark?"#f0f0f2":"#1d1d1f",
+            margin:"0 0 8px" }}>Want to post a job?</h2>
+          <p style={{ fontSize:13, color:isDark?"#666":"#888", margin:0, lineHeight:1.6 }}>
+            Choose how you'd like to hire. You can do both — your job seeker profile stays active.
+          </p>
+        </div>
+
+        {/* Option A: Create company */}
+        <div onClick={onCreateCompany} style={{ cursor:"pointer", padding:"16px 18px",
+          borderRadius:12, border:"2px solid #0071E3", background:"rgba(0,113,227,0.04)",
+          marginBottom:12, transition:"all 0.15s" }}
+          onMouseEnter={e => e.currentTarget.style.background="rgba(0,113,227,0.09)"}
+          onMouseLeave={e => e.currentTarget.style.background="rgba(0,113,227,0.04)"}>
+          <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+            <span style={{ fontSize:22 }}>🏢</span>
+            <div>
+              <div style={{ fontSize:14, fontWeight:700, color:"#0071E3", marginBottom:3 }}>
+                Create a company profile
+              </div>
+              <div style={{ fontSize:12, color:isDark?"#888":"#666", lineHeight:1.5 }}>
+                Set up your company, post unlimited jobs (based on plan), manage applications,
+                and build your employer brand. Gets you a Starter Pack with 3 free posts.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Option B: Buy credits */}
+        <div onClick={onBuyCredits} style={{ cursor:"pointer", padding:"16px 18px",
+          borderRadius:12, border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8",
+          marginBottom:20, transition:"all 0.15s" }}
+          onMouseEnter={e => e.currentTarget.style.borderColor="#0071E3"}
+          onMouseLeave={e => e.currentTarget.style.borderColor=isDark?"#2a2a32":"#e0e0e8"}>
+          <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+            <span style={{ fontSize:22 }}>🎟</span>
+            <div>
+              <div style={{ fontSize:14, fontWeight:700, color:isDark?"#f0f0f2":"#1d1d1f", marginBottom:3 }}>
+                Buy job post credits
+              </div>
+              <div style={{ fontSize:12, color:isDark?"#888":"#666", lineHeight:1.5 }}>
+                Post as an individual — perfect for freelancers and consultants hiring one person.
+                No company profile needed.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button onClick={onClose} style={{ width:"100%", background:"none",
+          border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:10,
+          padding:"10px", fontSize:13, color:isDark?"#666":"#888",
+          cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 function TenantOnboardModal({ isDark = true, onClose, onSuccess }) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -1483,6 +1556,10 @@ function TenantOnboardModal({ isDark = true, onClose, onSuccess }) {
               {loading ? "Creating..." : "Create workspace"}
             </button>
           </div>
+          <div style={{ margin:"14px 0 0", padding:"12px 16px", borderRadius:9, background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)" }}>
+            <div style={{ fontSize:12, color:"#f59e0b", fontWeight:600, marginBottom:3 }}>⏳ Verification required</div>
+            <div style={{ fontSize:11, color:"#888", lineHeight:1.5 }}>Your company profile will be reviewed by our team within 24 hours. You can explore the platform while verification is in progress.</div>
+          </div>
         </form>
       </div>
     </div>
@@ -1514,13 +1591,14 @@ function UsageBar({ label, used, limit, color = "#0071E3", icon = "" }) {
 }
 
 
-function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => true, autoOpenPostJob = false, onAutoPostJobDone, autoEditJobId = "", onAutoEditDone }) {
+function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => true, autoOpenPostJob = false, onAutoPostJobDone, autoEditJobId = "", onAutoEditDone, onNavigate }) {
   const [jobs, setJobs] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPostJob, setShowPostJob] = useState(false);
   const [showOnboard, setShowOnboard] = useState(false);
   const [tenant, setTenant] = useState(null);
+  const [showWorkspacePrompt, setShowWorkspacePrompt] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [editingJob, setEditingJob] = useState(null);
   const [editFullscreen, setEditFullscreen] = useState(false);
@@ -1554,18 +1632,18 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
 
   useEffect(() => {
     if (!user) return;
+    const hasWorkspace = !!user?.tenant_id;
     Promise.all([
-      api("/jobs/mine"),
+      api("/jobs/mine").catch(() => ({ jobs: [] })),
       api("/organizations/all").catch(() => []),
-      api("/workspace/overview").catch(() => null),
-      api("/workspace/team").catch(() => []),
+      hasWorkspace ? api("/workspace/overview").catch(() => null) : Promise.resolve(null),
+      hasWorkspace ? api("/workspace/team").catch(() => [])    : Promise.resolve([]),
       api("/quota/my").catch(() => null),
     ]).then(([jobsData, orgs, _workspace, teamData, quotaData]) => {
       setJobs((jobsData.jobs || []));
       setOrganizations(Array.isArray(orgs) ? orgs : []);
       setTeam(Array.isArray(teamData) ? teamData : (teamData?.members || []));
       if (quotaData) setQuota(quotaData);
-      // tenant is populated separately via onboarding, not needed here
     }).catch(() => {})
     .finally(() => setLoading(false));
   }, [user]);
@@ -1662,8 +1740,29 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
             )}
           </div>
         </div>
-        {(can("job.create") || !user?.tenant_id) && (
-          <button onClick={() => setShowPostJob(true)} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+        {/* Post a Job button:
+             null/no-workspace → workspace prompt
+             can_post===false  → upgrade (plan exhausted)
+             can_post===true   → post form */}
+        {(!user?.tenant_id || quota?.can_post === null || quota?.has_plan === false) ? (
+          <button onClick={() => setShowWorkspacePrompt(true)}
+            style={{ background:"var(--btn-primary)", border:"none", borderRadius:10, padding:"10px 20px",
+              fontSize:13, fontWeight:600, color:"#fff", cursor:"pointer",
+              fontFamily:"'DM Sans',sans-serif" }}>
+            + Post a job
+          </button>
+        ) : quota?.can_post === false ? (
+          <button onClick={() => onNavigate ? onNavigate("billing") : null}
+            style={{ background:"#f87171", border:"none", borderRadius:10, padding:"10px 20px",
+              fontSize:13, fontWeight:600, color:"#fff", cursor:"pointer",
+              fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:6 }}>
+            🎟 Credits exhausted — Upgrade
+          </button>
+        ) : (
+          <button onClick={() => setShowPostJob(true)}
+            style={{ background:"var(--btn-primary)", border:"none", borderRadius:10, padding:"10px 20px",
+              fontSize:13, fontWeight:600, color:"#fff", cursor:"pointer",
+              fontFamily:"'DM Sans',sans-serif" }}>
             + Post a job
           </button>
         )}
@@ -1673,33 +1772,81 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
         {/* Jobs list */}
         <div>
           {/* Quota Usage Dashboard */}
-          {quota && (
-            <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 14, padding: "16px 18px", marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          {/* Get-started card when user has no plan yet */}
+          {quota && quota.has_plan === false && (
+            <div style={{ background:isDark?"#141416":"#fff", border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:14, padding:"20px", marginBottom:16, textAlign:"center" }}>
+              <div style={{ fontSize:28, marginBottom:8 }}>🏢</div>
+              <div style={{ fontSize:14, fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f", marginBottom:6 }}>Set up your employer profile</div>
+              <div style={{ fontSize:12, color:isDark?"#666":"#888", marginBottom:14, lineHeight:1.6 }}>Create your company workspace to post jobs and manage applications. You get 3 free posts to start.</div>
+              <button onClick={() => setShowOnboard(true)} style={{ background:"var(--btn-primary)", border:"none", borderRadius:9, padding:"9px 20px", fontSize:13, fontWeight:600, color:"#fff", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>+ Create company profile</button>
+            </div>
+          )}
+          {quota && quota.has_plan !== false && (
+            <div style={{ background:isDark?"#141416":"#fff", border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:14, padding:"16px 18px", marginBottom:16 }}>
+              {/* Plan header */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>
-                    {quota.plan_id === "free" ? "Free Plan" : quota.plan_id}
+                  <div style={{ fontSize:13, fontWeight:700, color:quota.plan_name?(isDark?"#f0f0f2":"#1d1d1f"):(isDark?"#555":"#aaa") }}>
+                    {quota.plan_name || (quota.has_plan === false ? "No plan yet" : "No Plan")}
                   </div>
+                  {/* Credit pack: show credits remaining prominently */}
+                  {quota.job_credits != null && (
+                    <div style={{ fontSize:11, marginTop:2,
+                      color: quota.jobs_remaining === 0 ? "#f87171" : quota.jobs_remaining <= 1 ? "#f59e0b" : "#3DD68C",
+                      fontWeight:600 }}>
+                      {quota.jobs_remaining === 0
+                        ? "⚠ Credits exhausted — upgrade to post more"
+                        : `${quota.jobs_remaining} post credit${quota.jobs_remaining !== 1 ? "s" : ""} remaining`}
+                    </div>
+                  )}
                   {quota.expires_at && (
-                    <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>
+                    <div style={{ fontSize:11, color:isDark?"#555":"#aaa", marginTop:2 }}>
                       Expires {new Date(quota.expires_at).toLocaleDateString("en-GB", {day:"numeric",month:"short",year:"numeric"})}
                     </div>
                   )}
                 </div>
-                <button onClick={() => setPage && setPage("pricing")}
-                  style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-                  Upgrade
+                <button onClick={() => onNavigate ? onNavigate("billing") : null}
+                  style={{ background: quota.can_post ? "none" : "var(--btn-primary)",
+                    border: quota.can_post ? (isDark?"1px solid #2a2a32":"1px solid #d0d0d8") : "none",
+                    borderRadius:8, padding:"6px 14px", fontSize:11, fontWeight:600,
+                    color: quota.can_post ? (isDark?"#888":"#555") : "#fff",
+                    cursor:"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap" }}>
+                  {quota.can_post ? "Upgrade" : "Upgrade Now"}
                 </button>
               </div>
+
+              {/* Usage bars */}
               <UsageBar label="Active jobs" used={quota.active_jobs} limit={quota.job_limit} icon="💼" color="#0071E3" />
-              {quota.job_credits !== null && quota.job_credits !== undefined && (
-                <UsageBar label="Job credits" used={quota.credits_used} limit={quota.job_credits} icon="🎟" color="#a855f7" />
+              {quota.job_credits != null && (
+                <UsageBar label="Post credits" used={(quota.job_credits - (quota.jobs_remaining || 0))} limit={quota.job_credits} icon="🎟" color="#f59e0b" />
               )}
               <UsageBar label="Featured slots" used={quota.active_featured || 0} limit={quota.featured_limit} icon="⭐" color="#f59e0b" />
               <UsageBar label="Team seats" used={quota.team_count || 0} limit={quota.team_limit} icon="👥" color="#3DD68C" />
-              {!quota.can_post && (
-                <div style={{ background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#f87171", marginTop: 8 }}>
-                  You have reached your job posting limit. Upgrade your plan to post more jobs.
+
+              {/* Hard block when credits exhausted */}
+              {quota.can_post === false && (
+                <div style={{ marginTop:12, padding:"12px 14px", borderRadius:10,
+                  background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.25)" }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:"#f87171", marginBottom:4 }}>
+                    {quota.has_plan === false
+                      ? "📋 You've reached your active job limit"
+                      : quota.job_credits != null
+                        ? "🎟 Your post credits are exhausted"
+                        : "📋 You've reached your active job limit"}
+                  </div>
+                  <div style={{ fontSize:12, color:isDark?"#888":"#666", marginBottom:10, lineHeight:1.5 }}>
+                    {quota.has_plan === false
+                      ? "You don't have an active plan. Choose a plan to start posting jobs."
+                      : quota.job_credits != null
+                        ? "Upgrade to a paid plan for unlimited job postings and more features."
+                        : "Archive some jobs or upgrade your plan to post more."}
+                  </div>
+                  <button onClick={() => onNavigate ? onNavigate("billing") : null}
+                    style={{ background:"var(--btn-primary)", border:"none", borderRadius:8,
+                      padding:"8px 18px", fontSize:12, fontWeight:600, color:"#fff",
+                      cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                    View Plans & Upgrade →
+                  </button>
                 </div>
               )}
             </div>
@@ -1769,7 +1916,7 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
                     style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", background: "none", color: isDark ? "#888" : "#555", cursor: "pointer" }}>
                     Duplicate
                   </button>
-                  <button onClick={e => { e.stopPropagation(); if (window.confirm("Delete \"" + job.title + "\"? This cannot be undone.")) { deleteJob(job); } }}
+                  <button onClick={e => { e.stopPropagation(); if (window.confirm("Delete job: " + job.title + "? This cannot be undone.")) { deleteJob(job); } }}
                     style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "none", background: "none", color: "#f87171", cursor: "pointer" }}>
                     &#128465; Delete
                   </button>
@@ -1981,7 +2128,22 @@ function EmployerPage({ isDark = true, user, onAuthRequired, toast, can = () => 
         <TenantOnboardModal
           isDark={isDark}
           onClose={() => setShowOnboard(false)}
-          onSuccess={(t) => { setTenant(t); setShowOnboard(false); toast("Workspace created!"); }}
+          onSuccess={(t) => { setTenant(t); setShowOnboard(false); toast("Workspace created! You can now post jobs."); }}
+        />
+      )}
+
+      {showWorkspacePrompt && (
+        <WorkspacePromptModal
+          isDark={isDark}
+          onClose={() => setShowWorkspacePrompt(false)}
+          onCreateCompany={() => {
+            setShowWorkspacePrompt(false);
+            setShowOnboard(true);
+          }}
+          onBuyCredits={() => {
+            setShowWorkspacePrompt(false);
+            if (onNavigate) onNavigate("billing");
+          }}
         />
       )}
 
@@ -2236,29 +2398,29 @@ function EmailTemplateEditor({ isDark, template, setTemplate, templateDirty,
 // -- Nav Settings Editor ------------------------------------------------------
 function NavSettingsEditor({ isDark, toast }) {
   const ALL_ITEMS = [
-    { id: "jobs",         label: "💼 Jobs" },
-    { id: "companies",    label: "🏢 Companies" },
-    { id: "postjob",      label: "+ Post a Job" },
-    { id: "myapps",       label: "📨 My Applications" },
-    { id: "saved",        label: "🔖 Saved Jobs" },
-    { id: "employer",     label: "🏢 Employer Dashboard" },
-    { id: "applications", label: "📋 Applications Pipeline" },
-    { id: "ai",           label: "* AI Tools" },
-    { id: "billing",      label: "💳 Billing" },
-    { id: "analytics",    label: "📊 Analytics" },
-    { id: "workspace",    label: "📊 Workspace" },
-    { id: "admin",        label: "* Admin" },
-    { id: "scraper",      label: "🤖 Streamer" },
+    { id: "jobs",         icon: "💼", defaultLabel: "Jobs" },
+    { id: "companies",    icon: "🏢", defaultLabel: "Companies" },
+    { id: "postjob",      icon: "✚",  defaultLabel: "Post a Job" },
+    { id: "myapps",       icon: "📨", defaultLabel: "My Applications" },
+    { id: "saved",        icon: "🔖", defaultLabel: "Saved Jobs" },
+    { id: "employer",     icon: "🏢", defaultLabel: "Employer Dashboard" },
+    { id: "applications", icon: "📋", defaultLabel: "Applications" },
+    { id: "ai",           icon: "✨", defaultLabel: "AI Tools" },
+    { id: "billing",      icon: "💳", defaultLabel: "Billing" },
+    { id: "analytics",    icon: "📊", defaultLabel: "Analytics" },
+    { id: "workspace",    icon: "📊", defaultLabel: "Workspace" },
+    { id: "admin",        icon: "🛠", defaultLabel: "Admin" },
+    { id: "scraper",      icon: "🤖", defaultLabel: "Streamer" },
   ];
 
   const GROUPS = [
-    { key: "guest",     label: "👤 Guests (not logged in)" },
+    { key: "guest",     label: "👤 Guests" },
     { key: "candidate", label: "🎓 Candidates" },
-    { key: "employer",  label: "🏢 Employers / HR" },
-    { key: "admin",     label: "* Admins" },
+    { key: "employer",  label: "🏢 Employers" },
+    { key: "admin",     label: "🛠 Admins" },
   ];
 
-  const DEFAULT = {
+  const DEFAULT_VISIBILITY = {
     guest:     ["jobs", "companies", "postjob"],
     candidate: ["jobs", "companies", "myapps", "saved", "ai", "billing"],
     employer:  ["jobs", "companies", "employer", "applications", "analytics", "billing"],
@@ -2266,72 +2428,147 @@ function NavSettingsEditor({ isDark, toast }) {
                 "ai", "billing", "analytics", "workspace", "admin", "scraper"],
   };
 
-  const [settings, setSettings] = useState(DEFAULT);
+  const [settings, setSettings] = useState(DEFAULT_VISIBILITY);
+  // Custom labels: { jobs: "Browse Jobs", scraper: "Data Feed", ... }
+  const [labels, setLabels] = useState({});
+  const [editingLabel, setEditingLabel] = useState(null); // item id being renamed
+  const [editLabelVal, setEditLabelVal] = useState("");
   const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
+  const [activeGroup, setActiveGroup] = useState("candidate");
 
   useEffect(() => {
-    api("/admin/settings/nav").then(d => {
-      setSettings({ ...DEFAULT, ...d });
-    }).catch(() => {}).finally(() => setLoading(false));
+    Promise.all([
+      api("/admin/settings/nav").catch(() => ({})),
+      api("/admin/settings/nav-labels").catch(() => ({})),
+    ]).then(([vis, lbl]) => {
+      setSettings({ ...DEFAULT_VISIBILITY, ...vis });
+      setLabels(lbl || {});
+    }).finally(() => setLoading(false));
   }, []);
 
   function toggle(group, id) {
     setSettings(prev => {
-      const current = prev[group] || [];
-      const next = current.includes(id)
-        ? current.filter(x => x !== id)
-        : [...current, id];
+      const cur = prev[group] || [];
+      const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
       return { ...prev, [group]: next };
     });
     setDirty(true);
   }
 
-  async function save() {
-    try {
-      await api("/admin/settings/nav", { method: "POST", body: JSON.stringify(settings) });
-      setDirty(false);
-      toast("Nav settings saved - users will see changes on next page load");
-    } catch(e) { toast(e.message || "Failed to save"); }
+  function startRename(id, current) {
+    setEditingLabel(id);
+    setEditLabelVal(current);
   }
 
-  async function resetToDefault() {
-    setSettings(DEFAULT);
-    setDirty(true);
+  async function saveLabel(id) {
+    const val = editLabelVal.trim();
+    if (!val) { setEditingLabel(null); return; }
+    const next = { ...labels, [id]: val };
+    setLabels(next);
+    setEditingLabel(null);
+    await api("/admin/settings/nav-labels", { method:"POST", body:JSON.stringify(next) }).catch(() => {});
+    toast("Label updated — sidebar refreshes on next page load");
+  }
+
+  function resetLabel(id) {
+    const next = { ...labels };
+    delete next[id];
+    setLabels(next);
+    api("/admin/settings/nav-labels", { method:"POST", body:JSON.stringify(next) }).catch(() => {});
+    toast("Label reset to default");
+  }
+
+  async function save() {
+    try {
+      await api("/admin/settings/nav", { method:"POST", body:JSON.stringify(settings) });
+      setDirty(false);
+      toast("Nav visibility saved");
+    } catch(e) { toast(e.message || "Failed"); }
   }
 
   if (loading) return <Spinner />;
 
+  const inp = { padding:"5px 8px", fontSize:12, borderRadius:6, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8",
+    background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none", width:140 };
+
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 16 }}>
-        {GROUPS.map(group => (
-          <div key={group.key} style={{ background: isDark ? "#1a1a1e" : "#f8f8fb", borderRadius: 10, padding: "14px 16px" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: isDark ? "#aaa" : "#555", marginBottom: 10 }}>{group.label}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {ALL_ITEMS.map(item => {
-                const checked = (settings[group.key] || []).includes(item.id);
-                const locked = group.key === "admin" && ["admin","scraper"].includes(item.id);
-                return <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, cursor: locked ? "default" : "pointer", opacity: locked ? 0.5 : 1 }}>
-
-                    <input type="checkbox" checked={checked} disabled={locked}
-                      onChange={() => !locked && toggle(group.key, item.id)}
-                      style={{ accentColor: "#0071E3", width: 14, height: 14 }} />
-                    <span style={{ fontSize: 12, color: isDark ? "#ccc" : "#333" }}>{item.label}</span>
-                    {locked && <span style={{ fontSize: 10, color: isDark ? "#444" : "#bbb" }}>always on</span>}
-                  </label>
-                
-              })}
-            </div>
-          </div>
+      {/* Group tabs */}
+      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
+        {GROUPS.map(g => (
+          <button key={g.key} onClick={() => setActiveGroup(g.key)} style={{
+            padding:"5px 12px", fontSize:12, borderRadius:7, cursor:"pointer",
+            background:activeGroup===g.key?"var(--btn-primary)":"none",
+            color:activeGroup===g.key?"#fff":isDark?"#888":"#555",
+            border:activeGroup===g.key?"none":isDark?"1px solid #2a2a32":"1px solid #d0d0d8",
+            fontWeight:activeGroup===g.key?600:400,
+          }}>{g.label}</button>
         ))}
       </div>
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button onClick={resetToDefault} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "7px 14px", fontSize: 12, color: isDark ? "#666" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Reset defaults</button>
-        <button onClick={save} disabled={!dirty}
-          style={{ background: dirty ? "#0071E3" : (isDark ? "#222" : "#ddd"), border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 600, color: dirty ? "#fff" : (isDark ? "#444" : "#aaa"), cursor: dirty ? "pointer" : "default", fontFamily: "'DM Sans', sans-serif" }}>
-          {dirty ? "Save nav settings" : "OK Saved"}
+
+      {/* Items table */}
+      <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+        {ALL_ITEMS.map(item => {
+          const isOn = (settings[activeGroup] || []).includes(item.id);
+          const customLabel = labels[item.id] || "";
+          const displayLabel = customLabel || item.defaultLabel;
+          const isEditing = editingLabel === item.id;
+          return (
+            <div key={item.id} style={{ display:"flex", alignItems:"center", gap:10,
+              padding:"8px 12px", borderRadius:9,
+              background:isOn?(isDark?"rgba(0,113,227,0.08)":"rgba(0,113,227,0.05)"):(isDark?"#0f0f12":"#f8f8fa"),
+              border:isDark?"1px solid #1e1e24":"1px solid #ebebef" }}>
+              {/* Toggle */}
+              <input type="checkbox" checked={isOn} onChange={() => toggle(activeGroup, item.id)}
+                style={{ width:15, height:15, cursor:"pointer", accentColor:"#0071E3" }} />
+              {/* Icon */}
+              <span style={{ fontSize:16, width:22, textAlign:"center" }}>{item.icon}</span>
+              {/* Label / rename */}
+              {isEditing ? (
+                <div style={{ display:"flex", gap:6, alignItems:"center", flex:1 }}>
+                  <input value={editLabelVal} onChange={e => setEditLabelVal(e.target.value)}
+                    onKeyDown={e => { if(e.key==="Enter") saveLabel(item.id); if(e.key==="Escape") setEditingLabel(null); }}
+                    autoFocus style={inp} />
+                  <button onClick={() => saveLabel(item.id)} style={{ fontSize:11, padding:"4px 9px", borderRadius:6, background:"var(--btn-primary)", color:"#fff", border:"none", cursor:"pointer" }}>Save</button>
+                  <button onClick={() => setEditingLabel(null)} style={{ fontSize:11, padding:"4px 9px", borderRadius:6, background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", cursor:"pointer", color:isDark?"#888":"#555" }}>Cancel</button>
+                </div>
+              ) : (
+                <div style={{ flex:1, display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:13, color:isDark?"#d0d0d8":"#1d1d1f", fontWeight:isOn?500:400 }}>
+                    {displayLabel}
+                    {customLabel && <span style={{ fontSize:10, color:"#0071E3", marginLeft:5 }}>(custom)</span>}
+                  </span>
+                  <span style={{ fontSize:10, color:isDark?"#444":"#bbb" }}>{item.id}</span>
+                </div>
+              )}
+              {/* Rename / reset buttons */}
+              {!isEditing && (
+                <div style={{ display:"flex", gap:4, marginLeft:"auto" }}>
+                  <button onClick={() => startRename(item.id, displayLabel)} title="Rename"
+                    style={{ fontSize:11, padding:"3px 8px", borderRadius:6, background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", cursor:"pointer", color:isDark?"#888":"#555" }}>✏ Rename</button>
+                  {customLabel && (
+                    <button onClick={() => resetLabel(item.id)} title="Reset to default"
+                      style={{ fontSize:11, padding:"3px 8px", borderRadius:6, background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", cursor:"pointer", color:"#f87171" }}>Reset</button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Publish / visibility toggle */}
+      <div style={{ display:"flex", gap:10, marginTop:14, alignItems:"center" }}>
+        <button onClick={save} disabled={!dirty} style={{ padding:"8px 18px", fontSize:13, fontWeight:600,
+          borderRadius:9, background:dirty?"var(--btn-primary)":"#555", color:"#fff", border:"none",
+          cursor:dirty?"pointer":"default" }}>Save Visibility</button>
+        <button onClick={() => { setSettings(DEFAULT_VISIBILITY); setDirty(true); }}
+          style={{ padding:"8px 14px", fontSize:12, borderRadius:9, background:"none",
+          border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", cursor:"pointer", color:isDark?"#888":"#555" }}>
+          Reset to Defaults
         </button>
+        {dirty && <span style={{ fontSize:11, color:"#f59e0b" }}>Unsaved changes</span>}
       </div>
     </div>
   );
@@ -2407,7 +2644,7 @@ function QuotaAdminPanel({ isDark, toast }) {
                     Save changes
                   </button>
                   <button onClick={async () => {
-                    if (!window.confirm("Reset job credits used to 0?")) return;
+                    if (!window.confirm("Reset job credits to 0? This will reset the usage counter.")) return;
                     await api(`/quota/admin/tenants/${editing.tenant_id}/reset`, { method:"POST" });
                     toast("Credits reset");
                   }} style={{ background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:7, padding:"7px 14px", fontSize:12, color:isDark?"#888":"#555", cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
@@ -2456,6 +2693,9 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
   const [addingUser, setAddingUser] = useState(false);
   const [newUser, setNewUser] = useState({ full_name: "", email: "", password: "", role: "candidate", send_confirmation: true });
   const [assigningRole, setAssigningRole] = useState(null); // user being role-assigned
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditResource, setAuditResource] = useState("");
+  const [auditAction, setAuditAction] = useState("");
 
   const ALL_ROLES = [
     "candidate", "premium_candidate",
@@ -2491,6 +2731,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
       }
       if (t === "tenants")    setTenants((await api("/admin/tenants?limit=100")).tenants || []);
       if (t === "alerts")     setAlerts((await api("/admin/alerts?limit=100")).alerts || []);
+      if (t === "audit")      setAuditLogs((await api("/audit/logs?limit=100")).logs || []);
       if (t === "billing") {
         try {
           const [stats, plans, orders, fx] = await Promise.all([
@@ -2506,14 +2747,16 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
         } catch (err) { setBillingStats({}); }
       }
       if (t === "settings") {
-        const [m, tmpl, theme, streamer, brand] = await Promise.all([
+        const [m, tmpl, theme, streamer, brand, depts] = await Promise.all([
           api("/admin/industries"),
           api("/admin/alert-template"),
           api("/admin/settings/theme"),
           api("/admin/settings/streamer"),
           api("/admin/settings/brand").catch(() => ({ name: "JobStream", logo_url: "" })),
+          api("/admin/global/departments").catch(() => ({ departments: [] })),
         ]);
         setIndustries(m.industries || []);
+        setGlobalDepts(depts.departments || []);
         setTemplate(tmpl.template || "");
         setTemplateDirty(false);
         setThemeSettings(theme || { accent_color: "#0071E3", btn_color_dark: "#0071E3", btn_color_light: "#000000", bg_dark: "#0a0a0c", bg_light: "#f5f5f7" });
@@ -2561,6 +2804,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
   }
 
   async function removeIndustry(name) {
+    if (!window.confirm(`Remove industry "${name}"? This won't affect existing jobs.`)) return;
     try {
       const res = await api(`/admin/industries/${encodeURIComponent(name)}`, { method: "DELETE" });
       setIndustries(res.industries || []);
@@ -2610,6 +2854,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
     { id: "billing",   label: "💳 Billing"   },
     { id: "analytics", label: "📈 Analytics" },
     { id: "settings",  label: "⚙️ Settings"  },
+    { id: "audit",     label: "🔍 Audit Log" },
   ];
 
   function tabStyle(t) {
@@ -2623,6 +2868,7 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
   }
 
   const [billingStats, setBillingStats] = useState(null);
+  const [editingTenant, setEditingTenant] = useState(null);
   const [billingPlans, setBillingPlans] = useState([]);
   const [billingOrders, setBillingOrders] = useState([]);
   const [fxRates, setFxRates] = useState([]);
@@ -2696,30 +2942,57 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
         </div>
       )}
 
-      {/* Tenants */}
       {tab === "tenants" && !loading && (
         <div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
             {tenants.map(t => (
-              <div key={t.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>{t.name}</div>
-                  <div style={{ fontSize: 12, color: isDark ? "#666" : "#888" }}>/{t.slug} · {t.country}</div>
+              <div key={t.id} style={{ background:isDark?"#141416":"#fff", border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:12, padding:"14px 16px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                  <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+                    {t.logo_url ? <img src={t.logo_url} alt={t.name} style={{ width:40, height:40, objectFit:"contain", borderRadius:8, background:isDark?"#1a1a1e":"#f0f0f4", padding:4 }} /> : <div style={{ width:40, height:40, borderRadius:8, background:"var(--btn-primary)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:700, color:"#fff" }}>{(t.name||"?")[0]}</div>}
+                    <div>
+                      <div style={{ fontSize:14, fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f" }}>{t.name}</div>
+                      <div style={{ fontSize:11, color:isDark?"#555":"#aaa" }}>/{t.slug} · {t.country || t.hq_location || "—"} · {t.industry || "No industry"}</div>
+                      {t.about && <div style={{ fontSize:11, color:isDark?"#444":"#bbb", marginTop:2, maxWidth:400, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.about}</div>}
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
+                    <span style={{ fontSize:11, background:"rgba(0,113,227,0.1)", color:"#0071E3", padding:"2px 8px", borderRadius:10 }}>{t.plan_id || t.plan || "free"}</span>
+                    <span style={{ fontSize:11, color:t.status==="active"?"#3DD68C":"#f87171", fontWeight:600 }}>{t.status}</span>
+                    {t.verification_status && (
+                      <span style={{ fontSize:10, padding:"2px 7px", borderRadius:8, fontWeight:600,
+                        background:t.verification_status==="verified"?"rgba(61,214,140,0.15)":t.verification_status==="rejected"?"rgba(248,113,113,0.15)":"rgba(245,158,11,0.15)",
+                        color:t.verification_status==="verified"?"#3DD68C":t.verification_status==="rejected"?"#f87171":"#f59e0b" }}>
+                        {t.verification_status==="verified"?"✓ Verified":t.verification_status==="rejected"?"✗ Rejected":"⏳ Pending"}
+                      </span>
+                    )}
+                    <button onClick={() => setEditingTenant(editingTenant?.id === t.id ? null : {...t})} style={{ fontSize:11, background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:7, padding:"4px 10px", cursor:"pointer", color:isDark?"#888":"#555" }}>Edit Profile</button>
+                    <button onClick={async () => { await api("/admin/tenants/" + t.id + "/status", {method:"PATCH"}); setTenants(prev => prev.map(x => x.id===t.id ? {...x, status:x.status==="active"?"suspended":"active"} : x)); toast("Status updated"); }} style={{ fontSize:11, background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:7, padding:"4px 10px", cursor:"pointer", color:t.status==="active"?"#f87171":"#3DD68C" }}>{t.status==="active"?"Suspend":"Activate"}</button>
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontSize: 11, background: "rgba(0,113,227,0.1)", color: "#0071E3", padding: "2px 10px", borderRadius: 20 }}>{t.plan}</span>
-                  <span style={{ fontSize: 11, color: t.status === "active" ? "#3DD68C" : "#f87171", fontWeight: 600 }}>{t.status}</span>
-                  <button
-                    onClick={async () => {
-                      await api(`/admin/tenants/${t.id}/status`, { method: "PATCH" });
-                      setTenants(prev => prev.map(x => x.id === t.id ? { ...x, status: x.status === "active" ? "suspended" : "active" } : x));
-                      toast("Status updated");
-                    }}
-                    style={{ fontSize: 11, background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 6, padding: "3px 10px", cursor: "pointer", color: isDark ? "#666" : "#555", fontFamily: "'DM Sans', sans-serif" }}
-                  >
-                    {t.status === "active" ? "Suspend" : "Activate"}
-                  </button>
-                </div>
+                {editingTenant?.id === t.id && (
+                  <div style={{ marginTop:16, paddingTop:16, borderTop:isDark?"1px solid #1e1e24":"1px solid #f0f0f8" }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+                      {[["name","Company Name"],["website","Website"],["industry","Industry"],["hq_location","HQ Location"],["company_size","Company Size"],["founded_year","Founded Year"],["contact_email","Contact Email"],["contact_phone","Contact Phone"],["linkedin_url","LinkedIn URL"],["twitter_url","Twitter / X URL"],["logo_url","Logo URL"],["cover_url","Cover Image URL"]].map(([f,lbl]) => (
+                        <div key={f}>
+                          <label style={{ fontSize:10, color:isDark?"#555":"#999", display:"block", marginBottom:3, fontWeight:500, textTransform:"uppercase" }}>{lbl}</label>
+                          <input value={editingTenant[f]||""} onChange={e => { var v=e.target.value; setEditingTenant(p => ({...p,[f]:v})); }} style={{ width:"100%", boxSizing:"border-box", padding:"7px 10px", fontSize:12, borderRadius:7, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none" }} />
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginBottom:12 }}>
+                      <label style={{ fontSize:10, color:isDark?"#555":"#999", display:"block", marginBottom:3, fontWeight:500, textTransform:"uppercase" }}>About / Company Description</label>
+                      <textarea value={editingTenant.about||""} onChange={e => { var v=e.target.value; setEditingTenant(p => ({...p,about:v})); }} rows={4} style={{ width:"100%", boxSizing:"border-box", padding:"7px 10px", fontSize:12, borderRadius:7, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#0f0f12":"#fff", color:isDark?"#f0f0f2":"#1d1d1f", outline:"none", resize:"vertical" }} placeholder="What does this company do? Culture, mission, values..." />
+                    </div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button onClick={async () => { await api("/admin/tenants/"+t.id+"/profile", {method:"PATCH", body:JSON.stringify(editingTenant)}); setTenants(prev => prev.map(x => x.id===t.id ? {...x,...editingTenant} : x)); setEditingTenant(null); toast("Profile saved"); }} style={{ background:"var(--btn-primary)", color:"#fff", border:"none", borderRadius:8, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>Save Profile</button>
+                      <button onClick={() => setEditingTenant(null)} style={{ background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", borderRadius:8, padding:"8px 14px", fontSize:13, cursor:"pointer", color:isDark?"#888":"#555" }}>Cancel</button>
+                      <div style={{ borderLeft:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", height:24, margin:"0 4px" }} />
+                      <button onClick={async () => { await api("/admin/tenants/"+t.id+"/verify", {method:"POST", body:JSON.stringify({status:"verified"})}); setTenants(prev => prev.map(x => x.id===t.id ? {...x, verification_status:"verified"} : x)); toast("✓ Company verified"); }} style={{ background:"#3DD68C", color:"#fff", border:"none", borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>✓ Verify</button>
+                      <button onClick={async () => { await api("/admin/tenants/"+t.id+"/verify", {method:"POST", body:JSON.stringify({status:"rejected"})}); setTenants(prev => prev.map(x => x.id===t.id ? {...x, verification_status:"rejected"} : x)); toast("✗ Company rejected"); }} style={{ background:"#f87171", color:"#fff", border:"none", borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>✗ Reject</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -3436,6 +3709,44 @@ function AdminDashboardPage({ isDark = true, user, onAuthRequired, toast }) {
         </div>
       )}
 
+      {tab === "audit" && (
+        <div>
+          <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
+            <select value={auditResource} onChange={e => setAuditResource(e.target.value)}
+              style={{ padding:"7px 12px", fontSize:12, borderRadius:8, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#141416":"#fff", color:isDark?"#f0f0f2":"#1d1d1f" }}>
+              <option value="">All resources</option>
+              {["tenant_profile","job","user","plan","company","billing","scraper"].map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <select value={auditAction} onChange={e => setAuditAction(e.target.value)}
+              style={{ padding:"7px 12px", fontSize:12, borderRadius:8, border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8", background:isDark?"#141416":"#fff", color:isDark?"#f0f0f2":"#1d1d1f" }}>
+              <option value="">All actions</option>
+              {["CREATE","UPDATE","DELETE","LOGIN","SCRAPE","PAYMENT"].map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <button onClick={async () => { var q = ""; if (auditResource) q += "&resource=" + auditResource; if (auditAction) q += "&action=" + auditAction; setAuditLogs((await api("/audit/logs?limit=200" + q)).logs || []); }} style={{ padding:"7px 14px", fontSize:12, borderRadius:8, background:"var(--btn-primary)", color:"#fff", border:"none", cursor:"pointer" }}>Filter</button>
+            <span style={{ fontSize:11, color:isDark?"#555":"#aaa" }}>{auditLogs.length} entries</span>
+          </div>
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead><tr style={{ background:isDark?"#1a1a1e":"#f5f5f7" }}>
+                {["Time","Action","Resource","ID","User","IP","Details"].map(h => <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontWeight:600, color:isDark?"#888":"#555", whiteSpace:"nowrap" }}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {auditLogs.map((log, i) => <tr key={log.id || i} style={{ borderBottom:isDark?"1px solid #1e1e24":"1px solid #f0f0f8" }}>
+                  <td style={{ padding:"7px 10px", color:isDark?"#666":"#999", whiteSpace:"nowrap", fontSize:11 }}>{new Date(log.created_at).toLocaleString()}</td>
+                  <td style={{ padding:"7px 10px" }}><span style={{ padding:"2px 7px", borderRadius:5, fontSize:10, fontWeight:700, background:log.action==="DELETE"?"rgba(248,113,113,0.15)":log.action==="CREATE"?"rgba(61,214,140,0.15)":"rgba(0,113,227,0.1)", color:log.action==="DELETE"?"#f87171":log.action==="CREATE"?"#3DD68C":"#0071E3" }}>{log.action}</span></td>
+                  <td style={{ padding:"7px 10px", color:isDark?"#d0d0d8":"#1d1d1f" }}>{log.resource}</td>
+                  <td style={{ padding:"7px 10px", color:isDark?"#666":"#999", maxWidth:100, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{log.resource_id}</td>
+                  <td style={{ padding:"7px 10px", color:isDark?"#666":"#999" }}>{log.user_id}</td>
+                  <td style={{ padding:"7px 10px", color:isDark?"#555":"#aaa", fontSize:11 }}>{log.ip_address}</td>
+                  <td style={{ padding:"7px 10px", color:isDark?"#555":"#aaa", maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontSize:11 }}>{typeof log.details === "object" ? JSON.stringify(log.details) : log.details}</td>
+                </tr>)}
+              </tbody>
+            </table>
+            {auditLogs.length === 0 && <div style={{ textAlign:"center", padding:40, color:isDark?"#444":"#bbb" }}>No audit logs yet.</div>}
+          </div>
+        </div>
+      )}
+
       {/* Job edit modal */}
       {editingJob && <AdminJobEditModal job={editingJob} isDark={isDark} onSave={saveJobEdit} onClose={() => setEditingJob(null)} jobTypes={JOB_TYPES} departments={DEPARTMENTS} industries={industries} />}
     </div>
@@ -3454,6 +3765,7 @@ function AdminJobEditModal({ job, isDark, onSave, onClose, jobTypes, departments
   const [description, setDescription] = useState(job.description || "");
   const [saving, setSaving] = useState(false);
   const [descChars, setDescChars] = useState((job.description || "").length);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const inp = { width: "100%", boxSizing: "border-box", padding: "9px 12px", fontSize: 13, border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, background: isDark ? "#1a1a1e" : "#ffffff", color: isDark ? "#f0f0f2" : "#1d1d1f", fontFamily: "'DM Sans', sans-serif", outline: "none" };
   const lbl = { fontSize: 11, fontWeight: 600, color: isDark ? "#888" : "#555", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 5 };
@@ -3465,23 +3777,30 @@ function AdminJobEditModal({ job, isDark, onSave, onClose, jobTypes, departments
   }
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "stretch", justifyContent: "center", zIndex: 9999, padding: "20px" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 16, width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-
-        {/* Header */}
-        <div style={{ padding: "20px 28px 16px", borderBottom: isDark ? "1px solid #1e1e24" : "1px solid #f0f0f4", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f" }}>&#9999;&#65039; Edit Job</div>
-            <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 2 }}>{job.company} &middot; ID {job.id}</div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={onClose} style={{ background: "none", border: isDark ? "1px solid #2a2a32" : "1px solid #d0d0d8", borderRadius: 8, padding: "8px 16px", fontSize: 13, color: isDark ? "#888" : "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-            <button onClick={handleSave} disabled={saving} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", opacity: saving ? 0.7 : 1 }}>
-              {saving ? "Saving..." : "Save changes"}
-            </button>
-          </div>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0,
+      background: fullscreen ? (isDark ? "#0D0D0F" : "#f4f4f6") : "rgba(0,0,0,0.7)",
+      backdropFilter: fullscreen ? "none" : "blur(4px)", display: "flex",
+      alignItems: fullscreen ? "flex-start" : "center", justifyContent: "center",
+      zIndex: 1000, padding: fullscreen ? 0 : 16, overflowY: fullscreen ? "auto" : "hidden" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#fff",
+        border: fullscreen ? "none" : (isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8"),
+        borderRadius: fullscreen ? 0 : 16, width: "100%",
+        maxWidth: fullscreen ? "100%" : 900, minHeight: fullscreen ? "100vh" : "auto",
+        maxHeight: fullscreen ? "none" : "92vh", overflowY: "auto",
+        display: "flex", flexDirection: "column" }}>
+        <ModalHeader
+          title={<>&#9999; Edit Job — {job.company}</>}
+          isDark={isDark}
+          onClose={onClose}
+          fullscreen={fullscreen}
+          setFullscreen={setFullscreen}
+          newTabUrl={job.apply_url || null}
+        />
+        <div style={{ padding: "12px 20px", display: "flex", justifyContent: "flex-end", gap: 8, borderBottom: isDark ? "1px solid #1e1e24" : "1px solid #f0f0f4" }}>
+          <button onClick={handleSave} disabled={saving} style={{ background: "var(--btn-primary)", border: "none", borderRadius: 8, padding: "8px 20px", fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer" }}>
+            {saving ? "Saving..." : "Save changes"}
+          </button>
         </div>
-
         {/* Body - split: metadata left, description right */}
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", flex: 1, overflow: "hidden" }}>
 
@@ -3824,7 +4143,7 @@ function OrgSlugHandler({ slug, isDark, onBack, onApply, user, onAuthRequired, t
 
 
 // -- Job Alerts Modal ----------------------------------------------------------
-function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = null }) {
+function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = null, prefilledCompany = null }) {
   const isEdit = !!existingAlert;
   const [email, setEmail] = useState(user?.email || "");
   const [keywords, setKeywords] = useState(existingAlert?.keywords || "");
@@ -3836,7 +4155,18 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
-  const [meta, setMeta] = useState({ industries: [], send_times: ["06:00","08:00","12:00","17:00","20:00"] });
+  const [fullscreen, setFullscreen] = useState(false);
+  const [meta, setMeta] = useState({ industries: [], companies: [], send_times: ["06:00","08:00","12:00","17:00","20:00"] });
+  // Selected companies for this alert (array of names)
+  const [companies, setCompanies] = useState(() => {
+    if (existingAlert?.companies) {
+      return existingAlert.companies.split(",").map(c => c.trim()).filter(Boolean);
+    }
+    if (prefilledCompany) return [prefilledCompany];
+    return [];
+  });
+  const [companySearch, setCompanySearch] = useState("");
+  const [showCompanyPicker, setShowCompanyPicker] = useState(false);
 
   // Simple math captcha for guests
   const [captchaA, setCaptchaA] = useState(() => Math.floor(Math.random() * 8) + 1);
@@ -3870,6 +4200,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
     try {
       const payload = {
         email, keywords, location, industry, frequency, send_time: sendTime, timezone,
+        companies,
         ...(!user ? { captcha_answer: Number(captchaAnswer), captcha_expected: captchaA + captchaB } : {}),
       };
       if (isEdit) {
@@ -3887,10 +4218,26 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
   }
 
   return (
-    <div onClick={() => onClose(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 20, width: "100%", maxWidth: 440, padding: "32px 28px", maxHeight: "90vh", overflowY: "auto" }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 6 }}>🔔 {isEdit ? "Edit Job Alert" : "Job Alerts"}</h2>
-        <p style={{ fontSize: 13, color: isDark ? "#666" : "#888", marginBottom: 24 }}>Get notified by email when new matching jobs are posted.</p>
+    <div onClick={() => onClose(false)} style={{ position:"fixed", inset:0,
+      background: fullscreen ? (isDark?"#0D0D0F":"#f4f4f6") : "rgba(0,0,0,0.5)",
+      backdropFilter: fullscreen ? "none" : "blur(4px)",
+      display:"flex", alignItems: fullscreen ? "flex-start" : "center",
+      justifyContent:"center", zIndex:9000,
+      padding: fullscreen ? 0 : 20, overflowY: fullscreen ? "auto" : "hidden" }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: isDark ? "#141416" : "#ffffff",
+        border: fullscreen ? "none" : (isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8"),
+        borderRadius: fullscreen ? 0 : 20, width:"100%",
+        maxWidth: fullscreen ? "100%" : 480,
+        minHeight: fullscreen ? "100vh" : "auto",
+        maxHeight: fullscreen ? "none" : "90vh", overflowY:"auto" }}>
+        <ModalHeader
+          title={"🔔 " + (isEdit ? "Edit Job Alert" : "Job Alerts")}
+          isDark={isDark} onClose={() => onClose(false)}
+          fullscreen={fullscreen} setFullscreen={setFullscreen}
+        />
+        <div style={{ padding: fullscreen ? "20px 28px" : "0 28px 28px" }}>
+        <p style={{ fontSize: 13, color: isDark ? "#666" : "#888", marginBottom: 20, marginTop: fullscreen ? 0 : 16 }}>Get notified by email when new matching jobs are posted.</p>
 
         {error && (
           <div style={{ background: "rgba(245,101,101,0.1)", border: "1px solid rgba(245,101,101,0.3)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#f87171" }}>{error}</div>
@@ -3932,9 +4279,71 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
               <label style={lbl}>Industry (optional)</label>
               <select value={industry} onChange={e => setIndustry(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
                 <option value="">Any industry</option>
-                {(meta.industries || []).map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                {[...(meta.industries || [])].sort((a,b) => a.localeCompare(b)).map(ind => <option key={ind} value={ind}>{ind}</option>)}
               </select>
               <div style={{ fontSize: 11, color: isDark ? "#555" : "#aaa", marginTop: 4 }}>e.g. Telecommunications, Banking &amp; Finance</div>
+            </div>
+
+            {/* Company filter */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={lbl}>Specific companies (optional)</label>
+              {/* Selected chips */}
+              {companies.length > 0 && (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
+                  {companies.map(c => (
+                    <span key={c} style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 10px",
+                      borderRadius:20, fontSize:12, background:isDark?"rgba(0,113,227,0.15)":"#e8f0fe",
+                      color:"#0071E3", border:"1px solid rgba(0,113,227,0.3)" }}>
+                      {c}
+                      <button onClick={() => setCompanies(prev => prev.filter(x => x !== c))}
+                        style={{ background:"none", border:"none", cursor:"pointer", fontSize:14,
+                        color:"#0071E3", lineHeight:1, padding:0 }}>×</button>
+                    </span>
+                  ))}
+                  <button onClick={() => setCompanies([])}
+                    style={{ fontSize:11, color:isDark?"#555":"#aaa", background:"none", border:"none",
+                    cursor:"pointer", padding:"3px 6px" }}>Clear all</button>
+                </div>
+              )}
+              {/* Search + dropdown */}
+              <div style={{ position:"relative" }}>
+                <input
+                  value={companySearch}
+                  onChange={e => { setCompanySearch(e.target.value); setShowCompanyPicker(true); }}
+                  onFocus={() => setShowCompanyPicker(true)}
+                  placeholder={companies.length === 0 ? "Search companies… leave empty for all" : "Add another company…"}
+                  style={{ ...inp }}
+                />
+                {showCompanyPicker && companySearch && (
+                  <div style={{ position:"absolute", top:"100%", left:0, right:0, zIndex:200,
+                    background:isDark?"#141416":"#fff", border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8",
+                    borderRadius:10, boxShadow:"0 8px 24px rgba(0,0,0,0.2)", maxHeight:200, overflowY:"auto" }}>
+                    {(meta.companies || [])
+                      .filter(c => c.toLowerCase().includes(companySearch.toLowerCase()) && !companies.includes(c))
+                      .slice(0, 12)
+                      .map(c => (
+                        <button key={c} onClick={() => {
+                          setCompanies(prev => prev.includes(c) ? prev : [...prev, c]);
+                          setCompanySearch("");
+                          setShowCompanyPicker(false);
+                        }} style={{ display:"block", width:"100%", textAlign:"left", padding:"9px 14px",
+                          background:"none", border:"none", cursor:"pointer", fontSize:13,
+                          color:isDark?"#d0d0d8":"#1d1d1f",
+                          borderBottom:isDark?"1px solid #1e1e24":"1px solid #f0f0f8" }}
+                          onMouseEnter={e => e.target.style.background=isDark?"#1a1a1e":"#f5f5f7"}
+                          onMouseLeave={e => e.target.style.background="none"}>
+                          {c}
+                        </button>
+                      ))}
+                    {(meta.companies || []).filter(c => c.toLowerCase().includes(companySearch.toLowerCase()) && !companies.includes(c)).length === 0 && (
+                      <div style={{ padding:"12px 14px", fontSize:12, color:isDark?"#555":"#aaa" }}>No companies found matching "{companySearch}"</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize:11, color:isDark?"#555":"#aaa", marginTop:4 }}>
+                Only get alerts from specific companies — leave empty for all companies
+              </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
@@ -4010,6 +4419,7 @@ function JobAlertsModal({ isDark = true, onClose, toast, user, existingAlert = n
             </div>
           </form>
         )}
+        </div>
       </div>
     </div>
   );
@@ -4345,8 +4755,11 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
   const [paying, setPaying] = useState(null);
   const [tab, setTab] = useState("plans");
 
-  const planType = user?.role?.includes("candidate") || !user?.tenant_id
-    ? "candidate" : "employer";
+  // Plan type: anyone with a workspace sees employer plans
+  // Anyone without sees candidate plans
+  // User can always switch via tabs
+  const defaultPlanType = user?.tenant_id ? "employer" : "candidate";
+  const [planType, setPlanType] = useState(defaultPlanType);
 
   useEffect(() => {
     if (!user) return;
@@ -4403,7 +4816,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
     </div>
   );
 
-  const currentPlanId = subscription?.plan_id || `${planType}_free`;
+  const currentPlanId = subscription?.plan_id || null;  // null = no active plan
 
   const planColors = {
     Free:       { badge: "rgba(136,136,136,0.15)", text: "#888" },
@@ -4420,7 +4833,7 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
         {subscription && (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 13, color: isDark ? "#666" : "#888" }}>Current plan:</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#0071E3" }}>{subscription.plan_name || "Free"}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: subscription.plan_name ? "#0071E3" : isDark?"#555":"#aaa" }}>{subscription.plan_name || "No active plan"}</span>
             {!subscription.is_free && subscription.expires_at && (
               <span style={{ fontSize: 11, color: isDark ? "#555" : "#aaa" }}>
                 &middot; renews {new Date(subscription.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
@@ -4441,9 +4854,20 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
 
       {/* Plans */}
       {tab === "plans" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
+        <div>
+          <div style={{ display:"flex", gap:6, marginBottom:20, padding:"4px", borderRadius:10, background:isDark?"#1a1a1e":"#f0f0f4", width:"fit-content" }}>
+            {[{id:"candidate",label:"👤 Job Seeker Plans"},{id:"employer",label:"🏢 Employer Plans"}].map(t => (
+              <button key={t.id} onClick={() => setPlanType(t.id)} style={{ padding:"7px 16px", fontSize:12, fontWeight:600, borderRadius:7, border:"none", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", background:planType===t.id?(isDark?"#141416":"#fff"):"none", color:planType===t.id?(isDark?"#f0f0f2":"#1d1d1f"):(isDark?"#666":"#888"), boxShadow:planType===t.id?"0 1px 4px rgba(0,0,0,0.12)":"none" }}>{t.label}</button>
+            ))}
+          </div>
+          {planType === "employer" && !user?.tenant_id && (
+            <div style={{ padding:"12px 16px", borderRadius:10, marginBottom:16, background:"rgba(0,113,227,0.06)", border:"1px solid rgba(0,113,227,0.2)" }}>
+              <span style={{ fontSize:12, color:"#0071E3" }}>💡 Employer plans require a company profile. Click <strong>Post a Job</strong> to create one first.</span>
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
           {loading ? <Spinner /> : plans.map(plan => {
-            const isCurrentPlan = plan.id === currentPlanId;
+            const isCurrentPlan = currentPlanId && plan.id === currentPlanId;
             const colors = planColors[plan.name] || planColors.Free;
             return <div key={plan.id} style={{ background: isDark ? "#141416" : "#ffffff", border: isCurrentPlan ? "2px solid #0071E3" : isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 16, padding: "22px 20px", position: "relative" }}>
 
@@ -4486,9 +4910,9 @@ function BillingPage({ isDark = true, user, onAuthRequired, toast }) {
               </div>
             
           })}
+          </div>
         </div>
       )}
-
       {/* History */}
       {tab === "history" && (
         <div>
@@ -5207,6 +5631,7 @@ function ScraperPage({ toast, isDark = true }) {
   }
 
   async function removeCompany(id, name) {
+    if (!window.confirm(`Remove ${name} from the scraper? Their scraped jobs will remain.`)) return;
     await api(`/companies/${id}`, { method: "DELETE" });
     load();
     toast(`Removed ${name}`);
@@ -5555,6 +5980,61 @@ function CompaniesPage({ isDark = true, user, onSelectCompany }) {
 
 
 // -- Company Profile Page ------------------------------------------------------
+// ── Confirmation Dialog (replaces window.confirm) ────────────────────────────
+function ConfirmDialog({ isDark, message, detail, confirmLabel = "Delete", cancelLabel = "Cancel",
+                         confirmStyle = "danger", onConfirm, onCancel }) {
+  const btnBase = { border:"none", borderRadius:9, padding:"9px 22px", fontSize:13,
+    fontWeight:600, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" };
+  const danger  = { ...btnBase, background:"#ef4444", color:"#fff" };
+  const primary = { ...btnBase, background:"var(--btn-primary)", color:"#fff" };
+  const cancel  = { ...btnBase, background:"none", border:isDark?"1px solid #2a2a32":"1px solid #d0d0d8",
+    color:isDark?"#888":"#555" };
+  return (
+    <div onClick={onCancel} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)",
+      backdropFilter:"blur(3px)", display:"flex", alignItems:"center", justifyContent:"center",
+      zIndex:2000, padding:16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:isDark?"#141416":"#fff",
+        border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:14,
+        padding:"28px 28px 24px", maxWidth:420, width:"100%", textAlign:"center" }}>
+        <div style={{ fontSize:32, marginBottom:12 }}>
+          {confirmStyle === "danger" ? "🗑️" : "⚠️"}
+        </div>
+        <div style={{ fontSize:15, fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f",
+          marginBottom:8 }}>{message}</div>
+        {detail && <div style={{ fontSize:12, color:isDark?"#666":"#888",
+          marginBottom:20, lineHeight:1.6 }}>{detail}</div>}
+        <div style={{ display:"flex", gap:10, justifyContent:"center", marginTop:20 }}>
+          <button style={cancel} onClick={onCancel}>{cancelLabel}</button>
+          <button style={confirmStyle === "danger" ? danger : primary} onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── Reusable Modal components with fullscreen + new tab ──────────────────────
+function ModalHeader({ title, isDark, onClose, fullscreen, setFullscreen, newTabUrl }) {
+  const btnStyle = { background:"none", border:"none", cursor:"pointer", padding:"4px 8px",
+    fontSize:13, color:isDark?"#666":"#aaa", borderRadius:6, display:"flex", alignItems:"center", gap:4 };
+  return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+      padding:"14px 20px", position:fullscreen?"sticky":"relative", top:fullscreen?0:"auto",
+      background:isDark?"#141416":"#fff", zIndex:10,
+      borderBottom:isDark?"1px solid #1e1e24":"1px solid #f0f0f4" }}>
+      <span style={{ fontSize:15, fontWeight:700, color:isDark?"#f0f0f2":"#1d1d1f" }}>{title}</span>
+      <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+        {newTabUrl && <button style={btnStyle} title="Open in new tab" onClick={() => window.open(newTabUrl,"_blank")}>↗ New Tab</button>}
+        {setFullscreen && <button style={btnStyle} title={fullscreen?"Exit fullscreen":"Fullscreen"} onClick={() => setFullscreen(f => !f)}>{fullscreen?"⊠ Exit Fullscreen":"⊞ Fullscreen"}</button>}
+        <button style={{ ...btnStyle, fontSize:18 }} title="Close" onClick={onClose}>×</button>
+      </div>
+    </div>
+  );
+}
+
+
 function CompanyProfilePage({ isDark = true, companyId, onApply, user, onAuthRequired, onBack, toast }) {
   const [company, setCompany] = useState(null);
   const [jobs, setJobs] = useState([]);
@@ -5612,7 +6092,10 @@ function CompanyProfilePage({ isDark = true, companyId, onApply, user, onAuthReq
       {/* Company header */}
       <div style={{ background: isDark ? "#141416" : "#ffffff", border: isDark ? "1px solid #2a2a32" : "1px solid #e0e0e8", borderRadius: 16, padding: "28px 32px", marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 20 }}>
-          <CompanyLogo name={company.name} sourceUrl={company.website} size={64} />
+          {company.logo_url
+            ? <img src={company.logo_url} alt={company.name} style={{ width:64,height:64,objectFit:"contain",borderRadius:12,background:isDark?"#1a1a1e":"#f4f4f6",padding:6,flexShrink:0 }} onError={e => { e.target.style.display="none"; }} />
+            : <CompanyLogo name={company.name} sourceUrl={company.website} size={64} />
+          }
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: isDark ? "#f0f0f2" : "#1d1d1f", letterSpacing: -0.5, marginBottom: 4 }}>{company.name}</h1>
             {prevNames.length > 0 && (
@@ -5620,10 +6103,17 @@ function CompanyProfilePage({ isDark = true, companyId, onApply, user, onAuthReq
                 Formerly: {prevNames.map(p => p.name || p).join(", ")}
               </p>
             )}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
               {company.industry && <Chip isDark={isDark}>{company.industry}</Chip>}
-              {company.size && <Chip isDark={isDark}>👥 {company.size}</Chip>}
-              {company.country && <Chip isDark={isDark}>📍 {company.country}</Chip>}
+              {(company.company_size || company.size) && <Chip isDark={isDark}>👥 {company.company_size || company.size}</Chip>}
+              {(company.hq_location || company.country) && <Chip isDark={isDark}>📍 {company.hq_location || company.country}</Chip>}
+              {company.founded_year && <Chip isDark={isDark}>🗓 Founded {company.founded_year}</Chip>}
+            </div>
+            <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+              {company.contact_email && <a href={"mailto:"+company.contact_email} style={{ fontSize:12, color:"#0071E3", textDecoration:"none" }}>✉ {company.contact_email}</a>}
+              {company.contact_phone && <span style={{ fontSize:12, color:isDark?"#888":"#555" }}>📞 {company.contact_phone}</span>}
+              {company.linkedin_url && <a href={company.linkedin_url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:"#0071E3", textDecoration:"none" }}>LinkedIn</a>}
+              {company.twitter_url && <a href={company.twitter_url} target="_blank" rel="noreferrer" style={{ fontSize:12, color:"#0071E3", textDecoration:"none" }}>Twitter / X</a>}
             </div>
           </div>
           {company.website && (
@@ -5640,6 +6130,26 @@ function CompanyProfilePage({ isDark = true, companyId, onApply, user, onAuthReq
             {company.description}
           </p>
         )}
+      </div>
+
+      {company.about && (
+        <div style={{ background:isDark?"#141416":"#fff", border:isDark?"1px solid #2a2a32":"1px solid #e0e0e8", borderRadius:12, padding:"20px 24px", marginBottom:16 }}>
+          <h2 style={{ fontSize:15, fontWeight:600, color:isDark?"#f0f0f2":"#1d1d1f", marginBottom:10 }}>About {company.name}</h2>
+          <p style={{ fontSize:13, color:isDark?"#888":"#555", lineHeight:1.7, margin:0, whiteSpace:"pre-wrap" }}>{company.about}</p>
+        </div>
+      )}
+
+      {/* Get alerts button */}
+      <div style={{ marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
+        <button onClick={() => setShowJobAlerts({ company: company.name })}
+          style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"9px 18px",
+          borderRadius:9, fontSize:13, fontWeight:600, cursor:"pointer", border:"none",
+          background:"var(--btn-primary)", color:"#fff", fontFamily:"'DM Sans',sans-serif" }}>
+          🔔 Get alerts from {company.name}
+        </button>
+        <span style={{ fontSize:12, color:isDark?"#555":"#aaa" }}>
+          Get emailed when {company.name} posts new jobs
+        </span>
       </div>
 
       {/* Jobs section */}
@@ -6156,6 +6666,14 @@ function App() {
   const [toast, setToast] = useState("");
   const [theme, setTheme] = useState("light");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  // Usage: setConfirmDialog({ message, detail, confirmLabel, onConfirm })
+  function showConfirm(opts) { return new Promise(resolve => {
+    setConfirmDialog({ ...opts,
+      onConfirm: () => { setConfirmDialog(null); resolve(true); },
+      onCancel:  () => { setConfirmDialog(null); resolve(false); },
+    });
+  }); }
   const [sidebarHovered, setSidebarHovered] = useState(false);
   // Only use hover expand on non-touch devices
   const isTouchDevice = typeof window !== "undefined" && window.matchMedia("(hover: none)").matches;
@@ -6175,8 +6693,9 @@ function App() {
       fetch(`${API}/admin/settings/nav`).then(r => r.ok ? r.json() : null).catch(() => null),
       fetch(`${API}/admin/settings/theme`).then(r => r.ok ? r.json() : null).catch(() => null),
       fetch(`${API}/admin/settings/brand`).then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([nav, thm, brand]) => {
-      if (nav) setNavSettings(nav);
+      fetch(`${API}/admin/settings/nav-labels`).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([nav, thm, brand, navLabels]) => {
+      if (nav) setNavSettings({ ...nav, _labels: navLabels || {} });
       if (thm) {
         const root = document.documentElement;
         if (thm.accent_color)    root.style.setProperty("--accent",      thm.accent_color);
@@ -6290,21 +6809,22 @@ function App() {
     showToast("Signed out successfully");
   }
 
-  // All possible nav items with labels
+  // All possible nav items — labels overrideable by admin via Settings → Nav
+  const _NL = (navSettings && navSettings._labels) || {};
   const ALL_NAV = [
-    { id: "jobs",         icon: "💼", label: "Jobs" },
-    { id: "companies",    icon: "🏢", label: "Companies" },
-    { id: "postjob",      icon: "+",  label: "Post a Job" },
-    { id: "myapps",       icon: "📨", label: "My Applications" },
-    { id: "saved",        icon: "🔖", label: "Saved Jobs" },
-    { id: "employer",     icon: "🏢", label: "Employer" },
-    { id: "applications", icon: "📋", label: "Applications" },
-    { id: "ai",           icon: "*",  label: "AI Tools" },
-    { id: "billing",      icon: "💳",  label: "Billing" },
-    { id: "analytics",    icon: "📊",  label: "Analytics" },
-    { id: "workspace",    icon: "📊",  label: "Workspace" },
-    { id: "admin",        icon: "A",  label: "Admin" },
-    { id: "scraper",      icon: "🤖",  label: "Streamer" },
+    { id: "jobs",         icon: "💼", label: _NL.jobs         || "Jobs" },
+    { id: "companies",    icon: "🏢", label: _NL.companies    || "Companies" },
+    { id: "postjob",      icon: "✚",  label: _NL.postjob      || "Post a Job" },
+    { id: "myapps",       icon: "📨", label: _NL.myapps       || "My Applications" },
+    { id: "saved",        icon: "🔖", label: _NL.saved        || "Saved Jobs" },
+    { id: "employer",     icon: "🏢", label: _NL.employer     || "Employer" },
+    { id: "applications", icon: "📋", label: _NL.applications || "Applications" },
+    { id: "ai",           icon: "✨", label: _NL.ai           || "AI Tools" },
+    { id: "billing",      icon: "💳", label: _NL.billing      || "Billing" },
+    { id: "analytics",    icon: "📊", label: _NL.analytics    || "Analytics" },
+    { id: "workspace",    icon: "📊", label: _NL.workspace    || "Workspace" },
+    { id: "admin",        icon: "🛠", label: _NL.admin        || "Admin" },
+    { id: "scraper",      icon: "🤖", label: _NL.scraper      || "Streamer" },
   ];
 
   // Determine user group
@@ -6330,7 +6850,7 @@ function App() {
 
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: sidebarExpanded ? "220px 1fr" : "52px 1fr", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", background: isDark ? "#0D0D0F" : "#f4f4f6", color: isDark ? "#f0f0f2" : "#1a1a1a", transition: "all 0.25s ease" }}>
+    <div className="js-layout" style={{ display: "grid", gridTemplateColumns: sidebarExpanded ? "220px 1fr" : "52px 1fr", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif", background: isDark ? "#0D0D0F" : "#f4f4f6", color: isDark ? "#f0f0f2" : "#1a1a1a", transition: "all 0.25s ease" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
         :root {
@@ -6369,10 +6889,72 @@ function App() {
         @media (max-width: 640px) {
           main { padding: 12px 12px 24px !important; }
         }
+      
+        /* ── Mobile responsiveness ─────────────────────────────────────── */
+
+        /* Sidebar collapses to bottom bar on mobile */
+        @media (max-width: 640px) {
+          .js-layout {
+            grid-template-columns: 1fr !important;
+            grid-template-rows: 1fr 52px;
+            min-height: 100svh;
+          }
+          .js-sidebar {
+            position: fixed !important;
+            bottom: 0; left: 0; right: 0;
+            width: 100% !important; min-width: 100% !important;
+            height: 52px !important; min-height: 52px !important;
+            flex-direction: row !important;
+            overflow-x: auto; overflow-y: hidden;
+            border-right: none !important;
+            border-top: 1px solid #2a2a32;
+            z-index: 100;
+            padding: 0 8px !important;
+            gap: 0 !important;
+          }
+          .js-sidebar button { flex-direction: column; gap: 2px; min-width: 52px; padding: 6px 4px; font-size: 9px; }
+          .js-sidebar .js-sidebar-label { display: block !important; font-size: 9px; }
+          .js-main { padding: 12px 10px 72px !important; }
+          .js-header { flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+          .hide-on-xs { display: none !important; }
+        }
+
+        /* Tablet adjustments */
+        @media (max-width: 900px) {
+          .js-grid-2 { grid-template-columns: 1fr !important; }
+          .js-grid-3 { grid-template-columns: 1fr 1fr !important; }
+          .js-stat-row { flex-wrap: wrap; }
+        }
+
+        /* Card grids */
+        .js-job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+        @media (max-width: 640px) {
+          .js-job-grid { grid-template-columns: 1fr; gap: 10px; }
+        }
+
+        /* Tables scroll on mobile */
+        .js-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+        /* Modals full-screen on mobile */
+        @media (max-width: 640px) {
+          .js-modal-wrap { padding: 0 !important; align-items: flex-end !important; }
+          .js-modal-box { border-radius: 16px 16px 0 0 !important; max-height: 92svh !important; max-width: 100% !important; }
+        }
+
+        /* Form inputs full width on mobile */
+        @media (max-width: 640px) {
+          .js-form-row { flex-direction: column !important; }
+          .js-form-row input, .js-form-row select { width: 100% !important; }
+        }
+
+        /* Admin table responsive */
+        @media (max-width: 640px) {
+          .js-admin-table th:nth-child(n+4), .js-admin-table td:nth-child(n+4) { display: none; }
+        }
       `}</style>
 
       {/* Sidebar */}
-      <aside
+      <aside className="js-sidebar"
         onMouseEnter={() => { if (!isTouchDevice) setSidebarHovered(true); }}
         onMouseLeave={() => setSidebarHovered(false)}
         onTouchStart={() => setSidebarHovered(false)}
@@ -6425,7 +7007,7 @@ function App() {
       </aside>
 
       {/* Main */}
-      <main style={{ padding: "16px 16px 28px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s", position: "relative" }}>
+      <main className="js-main" style={{ padding: "16px 16px 28px", overflowY: "auto", maxHeight: "100vh", background: isDark ? "#0D0D0F" : "#f4f4f6", transition: "background 0.2s", position: "relative" }}>
 
         {/* Header row - brand left, auth controls right. Wraps on mobile instead of overlapping. */}
         <div style={{
@@ -6486,9 +7068,9 @@ function App() {
         {page === "analytics" && <AnalyticsPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}
         {page === "privacy"   && <PrivacyPage isDark={isDark} />}
         {page === "terms"     && <TermsPage isDark={isDark} />}
-        {(page === "employer" || autoPostJob || autoEditJobId) && <EmployerPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} can={can} autoOpenPostJob={autoPostJob} onAutoPostJobDone={() => { setAutoPostJob(false); window.history.replaceState({}, "", "/"); }} autoEditJobId={autoEditJobId} onAutoEditDone={() => { setAutoEditJobId(""); window.history.replaceState({}, "", "/"); }} />}
+        {(page === "employer" || autoPostJob || autoEditJobId) && <EmployerPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} can={can} autoOpenPostJob={autoPostJob} onAutoPostJobDone={() => { setAutoPostJob(false); window.history.replaceState({}, "", "/"); }} autoEditJobId={autoEditJobId} onAutoEditDone={() => { setAutoEditJobId(""); window.history.replaceState({}, "", "/"); }} onNavigate={(navPage) => setPage(navPage)} />}
         {page === "postjob"   && (user
-          ? <EmployerPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} can={can} autoOpenPostJob={autoPostJob} onAutoPostJobDone={() => { setAutoPostJob(false); window.history.replaceState({}, "", "/"); }} autoEditJobId={autoEditJobId} onAutoEditDone={() => { setAutoEditJobId(""); window.history.replaceState({}, "", "/"); }} />
+          ? <EmployerPage isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} can={can} autoOpenPostJob={autoPostJob} onAutoPostJobDone={() => { setAutoPostJob(false); window.history.replaceState({}, "", "/"); }} autoEditJobId={autoEditJobId} onAutoEditDone={() => { setAutoEditJobId(""); window.history.replaceState({}, "", "/"); }}  onNavigate={(navPage) => setPage(navPage)} />
           : <div style={{ textAlign: "center", padding: 60 }}>
               <div style={{ fontSize: 36, marginBottom: 16 }}>+</div>
               <div style={{ fontSize: 18, fontWeight: 600, color: isDark ? "#f0f0f2" : "#1d1d1f", marginBottom: 8 }}>Post a Job</div>
@@ -6546,7 +7128,7 @@ function App() {
       {urlJobSlug && !urlJobId && <JobSlugHandler slug={urlJobSlug} isDark={isDark} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} onClose={() => { setUrlJobSlug(""); window.history.replaceState({}, "", "/"); }} />}
       {urlOrgSlug && <OrgSlugHandler slug={urlOrgSlug} isDark={isDark} onBack={() => { setUrlOrgSlug(""); window.history.replaceState({}, "", "/companies"); setPage("companies"); }} onApply={setApplyJob} user={user} onAuthRequired={() => setShowAuth(true)} toast={showToast} />}
 
-      {showJobAlerts && <JobAlertsModal isDark={isDark} user={user} onClose={() => setShowJobAlerts(false)} toast={showToast} />}
+      {showJobAlerts && <JobAlertsModal isDark={isDark} user={user} onClose={() => setShowJobAlerts(false)} toast={toast} prefilledCompany={typeof showJobAlerts === "object" ? showJobAlerts.company : null} />}
       {resetToken && <ResetPasswordModal token={resetToken} onClose={() => { setResetToken(""); window.history.replaceState({}, "", "/"); }} onSuccess={() => { setResetToken(""); window.history.replaceState({}, "", "/"); showToast("Password reset! Please sign in."); setShowAuth(true); }} />}
       {/* Footer */}
       <div style={{ marginTop: 40, paddingTop: 20, borderTop: isDark ? "1px solid #1e1e24" : "1px solid #e8e8f0", display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -6563,6 +7145,13 @@ function App() {
         </span>
       </div>
 
+      {confirmDialog && (
+        <ConfirmDialog isDark={isDark}
+          message={confirmDialog.message} detail={confirmDialog.detail}
+          confirmLabel={confirmDialog.confirmLabel || "Confirm"}
+          confirmStyle={confirmDialog.confirmStyle || "danger"}
+          onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel} />
+      )}
       {toast && <Toast msg={toast} onClose={() => setToast("")} />}
     </div>
   );

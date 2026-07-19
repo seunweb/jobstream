@@ -45,6 +45,30 @@ DEFAULT_FREE_FEATURES = {
     "draft_jobs": True,
 }
 
+def _get_plan_defaults(plan_id: str) -> dict:
+    """Get limit/feature defaults from billing_plans DB for a given plan_id."""
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            if USE_POSTGRES:
+                cur.execute("SELECT limits, features FROM billing_plans WHERE id=%s", (plan_id,))
+            else:
+                cur.execute("SELECT limits, features FROM billing_plans WHERE id=?", (plan_id,))
+            row = cur.fetchone()
+            if row:
+                limits   = json.loads(row[0] or "{}") if isinstance(row[0], str) else (row[0] or {})
+                features = json.loads(row[1] or "{}") if isinstance(row[1], str) else (row[1] or {})
+                return {**limits, "features": features}
+    except Exception:
+        pass
+    return {
+        "active_jobs":    5,
+        "featured_slots": 0,
+        "team_seats":     1,
+        "job_credits":    None,
+        "features":       DEFAULT_FREE_FEATURES,
+    }
+
 # Candidate plan feature defaults
 DEFAULT_CANDIDATE_FREE_FEATURES = {
     "apply_jobs": True,
@@ -84,7 +108,7 @@ def _ensure_quota_tables():
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS tenant_quotas (
                         tenant_id       TEXT PRIMARY KEY,
-                        plan_id         TEXT DEFAULT 'free',
+                        plan_id         TEXT DEFAULT '',
                         plan_type       TEXT DEFAULT 'free',
                         -- Limits (None = unlimited)
                         active_jobs     INTEGER DEFAULT 2,
@@ -120,7 +144,7 @@ def _ensure_quota_tables():
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS tenant_quotas (
                         tenant_id TEXT PRIMARY KEY,
-                        plan_id TEXT DEFAULT 'free', plan_type TEXT DEFAULT 'free',
+                        plan_id TEXT DEFAULT '', plan_type TEXT DEFAULT '',
                         active_jobs INTEGER DEFAULT 2, featured_slots INTEGER DEFAULT 0,
                         team_seats INTEGER DEFAULT 1, job_credits INTEGER,
                         credits_used INTEGER DEFAULT 0, applications_per_job INTEGER DEFAULT 50,
@@ -190,7 +214,7 @@ def get_tenant_quota(tenant_id: str) -> dict:
 
     return {
         "tenant_id": str(tenant_id),
-        "plan_id": "free", "plan_type": "free",
+        "plan_id": "", "plan_type": "",
         "active_jobs": 2, "featured_slots": 0,
         "team_seats": 1, "job_credits": None, "credits_used": 0,
         "applications_per_job": 50,
@@ -299,25 +323,34 @@ def check_job_quota(tenant_id: str) -> dict:
     credits_used = quota.get("credits_used", 0)
     remaining = None
 
-    if credits is not None:
-        # Credit-based plan
+    plan_id = quota.get("plan_id", "")
+    has_plan = bool(plan_id and plan_id not in ("", "free"))
+
+    if not has_plan:
+        # No plan assigned yet — don't block, let UI guide them to onboarding/billing
+        can_post = None  # None = "not determined" — frontend shows workspace prompt
+        remaining = None
+    elif credits is not None:
+        # Credit-based plan (credit pack)
         remaining = credits - credits_used
         can_post = remaining > 0
-    elif limit is not None:
+    elif limit is not None and limit > 0:
         # Subscription with active job limit
         remaining = limit - active_jobs
         can_post = active_jobs < limit
     else:
         can_post = True
+        remaining = None
 
     return {
-        "can_post": can_post,
-        "active_jobs": active_jobs,
-        "limit": limit,
-        "credits": credits,
-        "credits_used": credits_used,
-        "remaining": remaining,
-        "plan_id": quota.get("plan_id","free"),
+        "can_post":      can_post,
+        "has_plan":      has_plan,
+        "active_jobs":   active_jobs,
+        "job_limit":     limit,
+        "job_credits":   credits,
+        "credits_used":  credits_used,
+        "jobs_remaining": remaining,
+        "plan_id":       plan_id,
     }
 
 
@@ -350,15 +383,23 @@ def use_job_credit(tenant_id: str, user_id: str, job_id: int):
 @router.get("/my")
 async def my_quota(current_user: dict = Depends(get_current_user)):
     """Get current user's quota and usage."""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
+    # user.tenant_id = real employer workspace ID (set during onboarding)
+    # This is DIFFERENT from the candidate quota row where tenant_id=user_id
+    workspace_tenant_id = current_user.get("tenant_id")
+    user_id = str(current_user.get("id", ""))
+
+    # If user has no real workspace, show "no employer plan" regardless of candidate quota
+    if not workspace_tenant_id:
         return {
-            "plan_id": "free", "plan_type": "free",
-            "active_jobs": 0, "limit": 2, "credits": None,
-            "featured_slots": 0, "team_seats": 1,
-            "features": DEFAULT_FREE_FEATURES,
-            "can_post": True, "remaining": 2,
+            "plan_id": None, "plan_name": None, "plan_type": None,
+            "active_jobs": 0, "job_limit": None, "job_credits": None,
+            "credits_used": 0,
+            "featured_limit": None, "active_featured": 0, "featured_remaining": None,
+            "team_limit": 1, "team_count": 0, "team_remaining": 1,
+            "features": {}, "has_plan": False,
+            "can_post": None, "jobs_remaining": None,
         }
+    tenant_id = workspace_tenant_id
 
     quota = get_tenant_quota(str(tenant_id))
     job_status = check_job_quota(str(tenant_id))
@@ -382,9 +423,25 @@ async def my_quota(current_user: dict = Depends(get_current_user)):
         )
         team_count = int(list(dict(cur.fetchone()).values())[0] or 0)
 
+    # Look up human-readable plan name from billing_plans table
+    plan_id = quota.get("plan_id", "")
+    plan_name = quota.get("plan_type", "")  # fallback
+    if plan_id:
+        try:
+            with get_conn() as _pc:
+                _cur = _pc.cursor()
+                ph2 = "%s" if USE_POSTGRES else "?"
+                _cur.execute(f"SELECT name FROM billing_plans WHERE id={ph2}", (plan_id,))
+                _row = _cur.fetchone()
+                if _row:
+                    plan_name = list(_row)[0] if not isinstance(_row, dict) else list(_row.values())[0]
+        except Exception:
+            pass
+
     return {
-        "plan_id": quota.get("plan_id", "free"),
-        "plan_type": quota.get("plan_type", "free"),
+        "plan_id":   plan_id,
+        "plan_name": plan_name or None,
+        "plan_type": quota.get("plan_type", ""),
         "expires_at": str(quota.get("expires_at","")) if quota.get("expires_at") else None,
         "features": quota.get("features", DEFAULT_FREE_FEATURES),
         # Jobs
@@ -427,31 +484,74 @@ class QuotaOverride(BaseModel):
 
 @router.get("/admin/tenants")
 async def list_tenant_quotas(current_user: dict = Depends(require_platform_admin)):
-    """List all tenant quotas for admin overview."""
+    """
+    List all tenants with their quota info.
+    Starts from the tenants table (not tenant_quotas) so ALL workspaces appear,
+    even those without an explicit quota row — they show plan defaults.
+    """
     _ensure_quota_tables()
     with get_conn() as conn:
         cur = conn.cursor()
+        # Query all tenants, left-join quotas so unset ones show defaults
         cur.execute("""
-            SELECT tq.*, t.name as tenant_name,
-                   COUNT(j.id) as jobs_posted
-            FROM tenant_quotas tq
-            LEFT JOIN tenants t ON t.id::text = tq.tenant_id
-            LEFT JOIN jobs j ON j.tenant_id::text = tq.tenant_id AND j.source='manual'
-            GROUP BY tq.tenant_id, t.name
-            ORDER BY tq.updated_at DESC
+            SELECT
+                t.id::text  AS tenant_id,
+                t.name      AS tenant_name,
+                t.plan_id   AS tenant_plan,
+                tq.active_jobs,
+                tq.featured_slots,
+                tq.team_seats,
+                tq.job_credits,
+                tq.features,
+                tq.is_overridden,
+                tq.override_note,
+                tq.updated_at,
+                COUNT(j.id) AS jobs_posted
+            FROM tenants t
+            LEFT JOIN tenant_quotas tq ON tq.tenant_id = t.id::text
+            LEFT JOIN jobs j ON j.tenant_id = t.id::text AND j.source = 'manual'
+            GROUP BY t.id, t.name, t.plan_id,
+                     tq.active_jobs, tq.featured_slots, tq.team_seats,
+                     tq.job_credits, tq.features, tq.is_overridden,
+                     tq.override_note, tq.updated_at
+            ORDER BY t.name ASC
         """ if USE_POSTGRES else """
-            SELECT tq.*, t.name as tenant_name,
-                   COUNT(j.id) as jobs_posted
-            FROM tenant_quotas tq
-            LEFT JOIN tenants t ON t.id = tq.tenant_id
-            LEFT JOIN jobs j ON j.tenant_id = tq.tenant_id AND j.source='manual'
-            GROUP BY tq.tenant_id, t.name
-            ORDER BY tq.updated_at DESC
+            SELECT
+                t.id        AS tenant_id,
+                t.name      AS tenant_name,
+                t.plan_id   AS tenant_plan,
+                tq.active_jobs,
+                tq.featured_slots,
+                tq.team_seats,
+                tq.job_credits,
+                tq.features,
+                tq.is_overridden,
+                tq.override_note,
+                tq.updated_at,
+                COUNT(j.id) AS jobs_posted
+            FROM tenants t
+            LEFT JOIN tenant_quotas tq ON tq.tenant_id = t.id
+            LEFT JOIN jobs j ON j.tenant_id = t.id AND j.source = 'manual'
+            GROUP BY t.id, t.name, t.plan_id,
+                     tq.active_jobs, tq.featured_slots, tq.team_seats,
+                     tq.job_credits, tq.features, tq.is_overridden,
+                     tq.override_note, tq.updated_at
+            ORDER BY t.name ASC
         """)
+        col_names = [d[0] for d in cur.description] if cur.description else []
         rows = []
         for r in cur.fetchall():
-            row = dict(r)
-            row["features"] = _j(row.get("features"), DEFAULT_FREE_FEATURES)
+            row = dict(zip(col_names, r)) if not isinstance(r, dict) else dict(r)
+            # For tenants without a quota row, fill in plan defaults
+            plan_id = row.get("tenant_plan") or "employer_free"
+            plan = _get_plan_defaults(plan_id)
+            row["plan_id"]        = plan_id
+            row["active_jobs"]    = row.get("active_jobs")    if row.get("active_jobs")    is not None else plan.get("active_jobs", 5)
+            row["featured_slots"] = row.get("featured_slots") if row.get("featured_slots") is not None else plan.get("featured_slots", 0)
+            row["team_seats"]     = row.get("team_seats")     if row.get("team_seats")     is not None else plan.get("team_seats", 1)
+            row["job_credits"]    = row.get("job_credits")    if row.get("job_credits")    is not None else plan.get("job_credits")
+            row["features"]       = _j(row.get("features"), plan.get("features", DEFAULT_FREE_FEATURES))
+            row["is_overridden"]  = bool(row.get("is_overridden"))
             rows.append(row)
     return rows
 
@@ -478,6 +578,12 @@ async def override_tenant_quota(
         updates["features"] = json.dumps(existing)
     updates["is_overridden"] = True
     updates["override_note"] = body.override_note
+
+    ALLOWED_QUOTA_FIELDS = {
+        "active_jobs", "featured_slots", "team_seats", "job_credits",
+        "features", "expires_at", "is_overridden", "override_note",
+    }
+    updates = {k: v for k, v in updates.items() if k in ALLOWED_QUOTA_FIELDS}
 
     with get_conn() as conn:
         cur = conn.cursor()

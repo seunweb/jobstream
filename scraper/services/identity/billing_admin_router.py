@@ -160,7 +160,15 @@ def _convert(usd_amount, currency, rates):
 
 
 def _first_val(row):
-    return list(dict(row).values())[0] if row else 0
+    """Extract first value from a DB row regardless of tuple/dict type."""
+    if not row:
+        return 0
+    if isinstance(row, dict):
+        return list(row.values())[0]
+    try:
+        return list(row)[0]  # tuple or sqlite3.Row
+    except Exception:
+        return 0
 
 
 # ── Revenue stats ─────────────────────────────────────────────────────────────
@@ -171,13 +179,26 @@ async def billing_stats(current_user: dict = Depends(require_platform_admin)):
     with get_conn() as conn:
         cur = conn.cursor()
 
-        # Support both amount_usd (new) and amount_ngn (legacy) column names
+        # amt_col is a hardcoded internal constant — never user-supplied
+        # Only two possible values: "amount_usd" (default) or "amount_ngn" (legacy)
         amt_col = "amount_usd"
         try:
             cur.execute(f"SELECT COALESCE(SUM({amt_col}),0) FROM billing_orders WHERE status='paid'")
             cur.fetchone()
         except Exception:
-            amt_col = "amount_ngn"  # fallback to legacy column
+            try:
+                amt_col = "amount_ngn"  # safe: hardcoded fallback to legacy column
+                cur.execute(f"SELECT COALESCE(SUM({amt_col}),0) FROM billing_orders WHERE status='paid'")
+                cur.fetchone()
+            except Exception:
+                # billing_orders table doesn't exist yet — return empty stats
+                return {
+                    "total_revenue_usd": 0, "revenue_this_month_usd": 0,
+                    "revenue_last_month_usd": 0, "mrr_usd": 0, "arr_usd": 0,
+                    "growth_pct": 0, "active_subscriptions": 0,
+                    "orders_this_month": 0, "by_plan": [], "by_currency": [],
+                    "recent_orders": [], "note": "No billing data yet",
+                }
 
         cur.execute(f"SELECT COALESCE(SUM({amt_col}),0) FROM billing_orders WHERE status='paid'")
         total = float(_first_val(cur.fetchone()))
@@ -204,16 +225,19 @@ async def billing_stats(current_user: dict = Depends(require_platform_admin)):
         orders_month = int(_first_val(cur.fetchone()))
 
         cur.execute("SELECT plan_id, COUNT(*) as count, COALESCE(SUM(amount_usd),0) as revenue FROM billing_orders WHERE status='paid' GROUP BY plan_id ORDER BY revenue DESC")
-        by_plan = [dict(r) for r in cur.fetchall()]
+        _cols_p = [d[0] for d in cur.description]
+        by_plan = [dict(zip(_cols_p, r)) if not isinstance(r, dict) else dict(r) for r in cur.fetchall()]
 
         cur.execute("SELECT currency, COUNT(*) as count, COALESCE(SUM(amount),0) as revenue FROM billing_orders WHERE status='paid' GROUP BY currency ORDER BY count DESC")
-        by_currency = [dict(r) for r in cur.fetchall()]
+        _cols_c = [d[0] for d in cur.description]
+        by_currency = [dict(zip(_cols_c, r)) if not isinstance(r, dict) else dict(r) for r in cur.fetchall()]
 
         if USE_POSTGRES:
             cur.execute("SELECT o.*, u.email FROM billing_orders o LEFT JOIN users u ON u.id::text=o.user_id WHERE o.status='paid' ORDER BY o.paid_at DESC LIMIT 10")
         else:
             cur.execute("SELECT o.*, u.email FROM billing_orders o LEFT JOIN users u ON u.id=o.user_id WHERE o.status='paid' ORDER BY o.paid_at DESC LIMIT 10")
-        recent = [dict(r) for r in cur.fetchall()]
+        _cols_r = [d[0] for d in cur.description]
+        recent = [dict(zip(_cols_r, r)) if not isinstance(r, dict) else dict(r) for r in cur.fetchall()]
 
     growth = round((this_month - last_month) / last_month * 100, 1) if last_month > 0 else 0
     return {

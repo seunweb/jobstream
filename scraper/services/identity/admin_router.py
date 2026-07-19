@@ -27,6 +27,28 @@ from core.rbac import require_permission, has_permission
 from core.audit import get_audit_logs
 from services.identity.dependencies import get_current_user
 
+
+def log_audit(action: str, resource: str, resource_id: str = "",
+              user_id: str = "", details: dict = None, request=None):
+    """Write an audit log entry. Non-fatal — never raises."""
+    try:
+        import json as _json
+        from core.database import get_conn, USE_POSTGRES
+        ip = ""
+        if request:
+            ip = request.client.host if hasattr(request, "client") else ""
+        ph = "%s" if USE_POSTGRES else "?"
+        with get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"INSERT INTO audit_logs (action, resource, resource_id, user_id, ip_address, details) "
+                f"VALUES ({ph},{ph},{ph},{ph},{ph},{ph})",
+                (action, resource, str(resource_id), str(user_id), ip,
+                 _json.dumps(details or {}))
+            )
+    except Exception:
+        pass  # audit failures must never break the main flow
+
 log = logging.getLogger(__name__)
 
 platform_router = APIRouter(prefix="/admin", tags=["admin"])
@@ -261,13 +283,23 @@ async def list_tenants(
             f"SELECT * FROM tenants {where} ORDER BY created_at DESC LIMIT {ph} OFFSET {ph}",
             params
         )
-        tenants = [dict(r) for r in cur.fetchall()]
+        cols = [d[0] for d in cur.description]
+        tenants = []
+        for r in cur.fetchall():
+            row = dict(zip(cols, r)) if not isinstance(r, dict) else dict(r)
+            # Fill missing profile columns with defaults (older DBs before migration)
+            for col in ["logo_url","cover_url","about","website","industry",
+                        "company_size","founded_year","hq_location","linkedin_url",
+                        "twitter_url","contact_email","contact_phone",
+                        "verification_status","verification_note"]:
+                row.setdefault(col, "" if col != "founded_year" else None)
+            tenants.append(row)
 
         # Count
         count_params = params[:-2]
         cur.execute(f"SELECT COUNT(*) FROM tenants {where}", count_params)
         row = cur.fetchone()
-        total = int(list(dict(row).values())[0])
+        total = int(row[0] if not isinstance(row, dict) else list(row.values())[0])
 
     return {"tenants": tenants, "total": total}
 
@@ -313,6 +345,42 @@ async def update_tenant_status(
         module="admin",
     )
     return {"message": f"Tenant {new_status}", "status": new_status}
+
+
+@platform_router.patch("/tenants/{tenant_id}/profile")
+async def update_tenant_profile(
+    tenant_id: str,
+    body: dict,
+    current_user: dict = Depends(require_platform_admin),
+):
+    """Update a tenant's company profile details."""
+    allowed = [
+        "name", "logo_url", "cover_url", "about", "website",
+        "industry", "company_size", "founded_year", "hq_location",
+        "linkedin_url", "twitter_url", "contact_email", "contact_phone",
+    ]
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if not updates:
+        raise HTTPException(400, "No valid fields provided")
+
+    ph = "%s" if USE_POSTGRES else "?"
+    set_clause = ", ".join(f"{k} = {ph}" for k in updates)
+    params = list(updates.values()) + [tenant_id]
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE tenants SET {set_clause} WHERE id = {ph}",
+            params
+        )
+        if USE_POSTGRES:
+            cur.execute("SELECT * FROM tenants WHERE id = %s", (tenant_id,))
+        else:
+            cur.execute("SELECT * FROM tenants WHERE id = ?", (tenant_id,))
+        row = cur.fetchone()
+        result = dict(row) if row else {}
+    log_audit("UPDATE", "tenant_profile", tenant_id, str(current_user.get("id","")), updates)
+    return result
 
 
 @platform_router.patch("/tenants/{tenant_id}/plan")
@@ -375,7 +443,7 @@ async def list_all_users(
         count_params = params[:-2]
         cur.execute(f"SELECT COUNT(*) FROM users {where}", count_params)
         row = cur.fetchone()
-        total = int(list(dict(row).values())[0])
+        total = int(row[0] if not isinstance(row, dict) else list(row.values())[0])
 
     return {"users": users, "total": total}
 
@@ -452,7 +520,7 @@ async def list_all_jobs(
         count_params = params[:-2]
         cur.execute(f"SELECT COUNT(*) FROM jobs {where}", count_params)
         row = cur.fetchone()
-        total = int(list(dict(row).values())[0])
+        total = int(row[0] if not isinstance(row, dict) else list(row.values())[0])
 
     return {"jobs": jobs, "total": total}
 
@@ -671,20 +739,38 @@ async def workspace_overview(
 
 @tenant_router.get("/team")
 async def list_team(
+    tenant_id: str = "",
     current_user: dict = Depends(require_org_admin),
 ):
-    """List all team members in the workspace."""
-    tenant_id = current_user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(400, "No workspace found")
+    """
+    List all team members in the workspace.
+    Platform admins can pass ?tenant_id= to query any workspace.
+    Returns empty list (not 400) when user has no workspace yet.
+    """
+    role = current_user.get("role", "")
+    # Platform admins can query any tenant; others can only see their own
+    effective_tenant = (
+        (tenant_id or current_user.get("tenant_id"))
+        if role in ("super_admin", "platform_admin")
+        else current_user.get("tenant_id")
+    )
+    if not effective_tenant:
+        # No workspace yet — return empty team rather than 400
+        return []
     with get_conn() as conn:
         cur = conn.cursor()
+        ph = "%s" if USE_POSTGRES else "?"
         cur.execute(
-            "SELECT id, email, full_name, role, status, created_at FROM users WHERE tenant_id = %s ORDER BY created_at" if USE_POSTGRES
-            else "SELECT id, email, full_name, role, status, created_at FROM users WHERE tenant_id = ? ORDER BY created_at",
-            (tenant_id,)
+            f"SELECT id, email, full_name, role, status, created_at "
+            f"FROM users WHERE tenant_id = {ph} ORDER BY created_at",
+            (str(effective_tenant),)
         )
-        return [dict(r) for r in cur.fetchall()]
+        cols = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+        return [
+            dict(r) if isinstance(r, dict) else dict(zip(cols, r))
+            for r in rows
+        ]
 
 
 class InviteTeamIn(BaseModel):

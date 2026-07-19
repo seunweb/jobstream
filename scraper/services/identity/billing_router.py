@@ -68,18 +68,39 @@ def _get_plan_from_db(plan_id: str):
 
 
 def _get_free_plan_from_db(plan_type: str = "candidate"):
-    """Get the cheapest/free plan for a given type from DB."""
+    """
+    Get the free plan for a given type from DB.
+    Looks for a plan with price_usd=0 (or price_ngn=0) first,
+    then falls back to the lowest sort_order plan.
+    """
     try:
         with get_conn() as conn:
             cur = conn.cursor()
             if USE_POSTGRES:
                 import psycopg2.extras
                 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-                cur.execute("SELECT * FROM billing_plans WHERE type=%s AND is_active=true ORDER BY sort_order ASC LIMIT 1", (plan_type,))
+                # Try to find an explicitly free plan first
+                cur.execute(
+                    "SELECT * FROM billing_plans WHERE type=%s AND is_active=true "
+                    "AND (price_usd=0 OR price_ngn=0 OR id LIKE '%%_free') "
+                    "ORDER BY sort_order ASC LIMIT 1",
+                    (plan_type,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    # No free plan exists — return None so UI shows no current plan
+                    return None
             else:
-                cur.execute("SELECT * FROM billing_plans WHERE type=? AND is_active=1 ORDER BY sort_order ASC LIMIT 1", (plan_type,))
+                cur.execute(
+                    "SELECT * FROM billing_plans WHERE type=? AND is_active=1 "
+                    "AND (price_usd=0 OR price_ngn=0 OR id LIKE ?)"
+                    " ORDER BY sort_order ASC LIMIT 1",
+                    (plan_type, f"%_free")
+                )
                 cols = [d[0] for d in cur.description]
-            row = cur.fetchone()
+                row = cur.fetchone()
+                if not row:
+                    return None
             if not row:
                 return None
             if not USE_POSTGRES:
@@ -228,14 +249,24 @@ async def get_my_subscription(current_user: dict = Depends(get_current_user)):
             default = "candidate_free" if role == "candidate" else "employer_free"
             role = current_user.get("role", "candidate")
             plan_type = "candidate" if "candidate" in role else "employer"
-            free_plan = _get_free_plan_from_db(plan_type) or {}
+            free_plan = _get_free_plan_from_db(plan_type)
+            if free_plan:
+                return {
+                    "plan_id":   free_plan.get("id", plan_type + "_free"),
+                    "plan_name": free_plan.get("name", "Free"),
+                    "status":    "active",
+                    "is_free":   True,
+                    "features":  free_plan.get("features", {}),
+                    "limits":    free_plan.get("limits", {}),
+                }
+            # No plan at all — return empty subscription so UI shows "Choose a plan"
             return {
-                "plan_id": free_plan.get("id", plan_type + "_free"),
-                "plan_name": free_plan.get("name", "Free"),
-                "status": "active",
-                "is_free": True,
-                "features": free_plan.get("features", {}),
-                "limits": free_plan.get("limits", {}),
+                "plan_id":   None,
+                "plan_name": None,
+                "status":    "none",
+                "is_free":   False,
+                "features":  {},
+                "limits":    {},
             }
         sub = dict(row)
         plan_key = sub.get("plan_id", "")

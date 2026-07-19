@@ -308,13 +308,14 @@ def _map_employment_type(job_type: str) -> str:
 # ── Job Alerts ────────────────────────────────────────────────────────────────
 
 # Industries available for job alerts — used by frontend dropdown too
-ALERT_INDUSTRIES = [
-    "Telecommunications", "Banking & Finance", "Oil & Gas", "Information Technology",
-    "Healthcare", "Education", "Manufacturing", "FMCG", "Retail & E-commerce",
-    "Real Estate & Construction", "Logistics & Supply Chain", "Agriculture",
-    "Media & Entertainment", "Hospitality & Tourism", "Government & NGO",
-    "Legal", "Consulting", "Insurance", "Energy & Utilities", "Other",
-]
+ALERT_INDUSTRIES = sorted([
+    "Agriculture", "Banking & Finance", "Consulting", "Education",
+    "Energy & Utilities", "FMCG", "Government & NGO", "Healthcare",
+    "Hospitality & Tourism", "Information Technology", "Insurance",
+    "Legal", "Logistics & Supply Chain", "Manufacturing",
+    "Media & Entertainment", "Oil & Gas", "Real Estate & Construction",
+    "Retail & E-commerce", "Telecommunications", "Other",
+])
 
 # Valid send times (24h, Africa/Lagos)
 ALERT_SEND_TIMES = ["06:00", "08:00", "12:00", "17:00", "20:00"]
@@ -362,8 +363,37 @@ def _get_optional_user(request):
 
 @router.get("/job-alerts/meta")
 def job_alerts_meta():
-    """Return industry list and send-time options for the alert form."""
-    return {"industries": ALERT_INDUSTRIES, "send_times": ALERT_SEND_TIMES}
+    """
+    Return industry list, company list, and send-time options for the alert form.
+    Companies include BOTH:
+    - Scraped companies (from Greenhouse, Workday, etc.) stored in the companies table
+    - Registered employers (tenants) who have posted jobs directly on the platform
+    """
+    companies = []
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            # Scraped ATS companies
+            cur.execute("SELECT name FROM companies WHERE active=1 ORDER BY name")
+            scraped = [r[0] for r in cur.fetchall()]
+            # Registered employer tenants
+            # Include all tenants regardless of status (some may have null/different status)
+            cur.execute("SELECT name FROM tenants ORDER BY name")
+            tenants = [r[0] for r in cur.fetchall()]
+            # Merge and deduplicate, sorted
+            seen = set()
+            for name in scraped + tenants:
+                if name and name.lower() not in seen:
+                    seen.add(name.lower())
+                    companies.append(name)
+            companies.sort()
+    except Exception as e:
+        log.warning(f"job_alerts_meta companies: {e}")
+    return {
+        "industries": ALERT_INDUSTRIES,
+        "companies":  companies,
+        "send_times": ALERT_SEND_TIMES,
+    }
 
 
 @router.post("/job-alerts", status_code=201)
@@ -393,8 +423,8 @@ async def create_job_alert(body: JobAlertIn, request: Request):
             cur.execute("""
                 INSERT INTO job_alerts
                     (id, user_id, email, keywords, location, industry, job_type,
-                     frequency, send_time, timezone, unsubscribe_token, is_active, created_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,NOW())
+                     frequency, send_time, timezone, companies, unsubscribe_token, is_active, created_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,NOW())
                 ON CONFLICT (email, keywords, location) DO UPDATE SET
                     is_active = TRUE, industry = EXCLUDED.industry,
                     job_type = EXCLUDED.job_type, frequency = EXCLUDED.frequency,
@@ -856,14 +886,16 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
         # even if no new jobs were scraped in the last 24h
         frequency = alert.get("frequency") or "daily"
         hours = 168 if frequency == "weekly" else 168  # always 7 days for cron
-        matching_jobs = _find_matching_jobs(
+        matching_alert_companies = [c.strip() for c in (alert.get("companies","") or "").split(",") if c.strip()]
+        jobs = _find_matching_jobs(
             keywords,
             alert.get("location", "") or "",
             alert.get("industry", "") or "",
             hours,
+            companies=matching_alert_companies if matching_alert_companies else None,
         )
 
-        if not matching_jobs:
+        if not jobs:
             continue
 
         try:
@@ -871,7 +903,7 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
                 app_url=app_url,
                 to_email=alert["email"],
                 keywords=keywords,
-                jobs=matching_jobs,
+                jobs=jobs,
                 token=alert.get("unsubscribe_token") or str(uuid.uuid4()),
                 alert_id=str(alert["id"]),
                 location=alert.get("location", "") or "",
@@ -892,7 +924,7 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
                         f"(id, alert_id, email, keywords, jobs_count) "
                         f"VALUES ({ph},{ph},{ph},{ph},{ph})",
                         (log_id, str(alert["id"]), alert["email"],
-                         ", ".join(keywords), len(matching_jobs))
+                         ", ".join(keywords), len(jobs))
                     )
                     cur.execute(
                         ("UPDATE job_alerts SET last_sent_at = NOW() WHERE id = %s"
@@ -907,7 +939,7 @@ async def _dispatch_job_alerts(respect_send_time: bool = False):
     return sent
 
 
-def _find_matching_jobs(keywords: list, location: str, industry: str, hours: int) -> list:
+def _find_matching_jobs(keywords: list, location: str, industry: str, hours: int, companies: list = None) -> list:
     """
     Find active jobs matching ANY of the keywords.
 
@@ -935,6 +967,12 @@ def _find_matching_jobs(keywords: list, location: str, industry: str, hours: int
             # is_active is SMALLINT — use 1 for both PG and SQLite
             extra_conditions = ["is_active = 1"]
             extra_params = []
+
+            # Company filter — if specific companies requested, restrict to those
+            if companies:
+                ph_list = ",".join([ph] * len(companies))
+                extra_conditions.append(f"company IN ({ph_list})")
+                extra_params.extend(companies)
             # Note: no source filter — includes BOTH scraped and manually posted jobs
 
             loc = (location or "").strip()

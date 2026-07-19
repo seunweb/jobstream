@@ -121,6 +121,31 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
 CREATE INDEX IF NOT EXISTS idx_jobs_company  ON jobs(company);
 CREATE INDEX IF NOT EXISTS idx_jobs_active   ON jobs(is_active);
 CREATE INDEX IF NOT EXISTS idx_apps_job      ON applications(job_id);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id          SERIAL PRIMARY KEY,
+    action      TEXT NOT NULL,
+    resource    TEXT NOT NULL,
+    resource_id TEXT DEFAULT '',
+    user_id     TEXT DEFAULT '',
+    ip_address  TEXT DEFAULT '',
+    details     JSONB DEFAULT '{}',
+    created_at  TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS global_industries (
+    id         SERIAL PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS global_departments (
+    id         SERIAL PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
 """
 
 SQLITE_TABLES = """
@@ -178,6 +203,31 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
 CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company);
 CREATE INDEX IF NOT EXISTS idx_jobs_active  ON jobs(is_active);
 CREATE INDEX IF NOT EXISTS idx_apps_job     ON applications(job_id);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    action      TEXT NOT NULL,
+    resource    TEXT NOT NULL,
+    resource_id TEXT DEFAULT '',
+    user_id     TEXT DEFAULT '',
+    ip_address  TEXT DEFAULT '',
+    details     TEXT DEFAULT '{}',
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS global_industries (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS global_departments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 
@@ -196,6 +246,7 @@ def init_db():
     _migrate_alert_timezone_column()
     _migrate_schema()          # adds logo_url to companies
     _seed_companies()
+    _seed_global_data()
     logger.info("Database ready")
 
 
@@ -232,13 +283,16 @@ def _migrate_featured_column():
 
 
 def _migrate_alert_timezone_column():
-    """Add timezone column to job_alerts if missing."""
+    """Add timezone and companies columns to job_alerts if missing."""
     with get_conn() as conn:
         cur = conn.cursor()
         if USE_POSTGRES:
             try:
                 cur.execute(
                     "ALTER TABLE job_alerts ADD COLUMN IF NOT EXISTS timezone VARCHAR(60) DEFAULT 'Africa/Lagos'"
+                )
+                cur.execute(
+                    "ALTER TABLE job_alerts ADD COLUMN IF NOT EXISTS companies TEXT DEFAULT ''"
                 )
             except Exception as e:
                 logger.warning(f"Migration skipped: {e}")
@@ -303,10 +357,57 @@ def _migrate_schema():
             if USE_POSTGRES:
                 cur.execute("ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT ''")
                 cur.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT ''")
+                # Fix scraped_at type mismatch — stored as TEXT but COALESCE needs TIMESTAMP
+                # Convert to TIMESTAMP if it's still TEXT (safe — isoformat strings parse correctly)
+                cur.execute("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_name='jobs' AND column_name='scraped_at'
+                            AND data_type='text'
+                        ) THEN
+                            ALTER TABLE jobs ALTER COLUMN scraped_at TYPE TIMESTAMP
+                            USING scraped_at::timestamp;
+                        END IF;
+                    END $$;
+                """)
+                # Company profile fields on tenants
+                for col in [
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'pending'",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS verification_note TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS verified_by TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cover_url TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS about TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS website TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS industry TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS company_size TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS founded_year INTEGER",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS hq_location TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS linkedin_url TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS twitter_url TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contact_email TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contact_phone TEXT DEFAULT ''",
+                ]:
+                    cur.execute(col)
             else:
                 for sql in [
                     "ALTER TABLE companies ADD COLUMN logo_url TEXT DEFAULT ''",
                     "ALTER TABLE jobs ADD COLUMN logo_url TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN logo_url TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN cover_url TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN about TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN website TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN industry TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN company_size TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN founded_year INTEGER",
+                    "ALTER TABLE tenants ADD COLUMN hq_location TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN linkedin_url TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN twitter_url TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN contact_email TEXT DEFAULT ''",
+                    "ALTER TABLE tenants ADD COLUMN contact_phone TEXT DEFAULT ''",
                 ]:
                     try:
                         cur.execute(sql)
@@ -319,6 +420,55 @@ def _migrate_schema():
 def _seed_companies():
     """No default companies — all companies are managed via the admin UI."""
     pass
+
+
+def _seed_global_data():
+    """Seed default industries and departments if tables are empty."""
+    DEFAULT_INDUSTRIES = [
+        "Banking & Finance", "Telecommunications", "Oil & Gas", "Information Technology",
+        "Healthcare", "Education", "Manufacturing", "Retail & Consumer Goods",
+        "Media & Entertainment", "Transportation & Logistics", "Agriculture",
+        "Construction & Real Estate", "Energy", "Government & Public Sector",
+        "Non-Profit & NGO", "Professional Services", "Hospitality & Tourism",
+        "Legal", "Insurance", "E-Commerce",
+    ]
+    DEFAULT_DEPARTMENTS = [
+        "General", "Engineering & IT", "Sales & Business Development",
+        "Marketing & Communications", "Finance & Accounting", "Human Resources",
+        "Operations", "Customer Success", "Product Management", "Design & UX",
+        "Legal & Compliance", "Supply Chain & Logistics", "Research & Development",
+        "Strategy & Analytics", "Executive & Leadership",
+    ]
+    ph = "%s" if USE_POSTGRES else "?"
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM global_industries")
+            row = cur.fetchone()
+            count = list(row)[0] if row else 0
+            if count == 0:
+                for i, name in enumerate(DEFAULT_INDUSTRIES):
+                    try:
+                        cur.execute(
+                            f"INSERT INTO global_industries (name, sort_order) VALUES ({ph},{ph})",
+                            (name, i)
+                        )
+                    except Exception:
+                        pass
+            cur.execute("SELECT COUNT(*) FROM global_departments")
+            row = cur.fetchone()
+            count = list(row)[0] if row else 0
+            if count == 0:
+                for i, name in enumerate(DEFAULT_DEPARTMENTS):
+                    try:
+                        cur.execute(
+                            f"INSERT INTO global_departments (name, sort_order) VALUES ({ph},{ph})",
+                            (name, i)
+                        )
+                    except Exception:
+                        pass
+    except Exception as e:
+        log.warning(f"_seed_global_data: {e}")
 
 
 
@@ -431,50 +581,108 @@ def _get_company_industry(cur, company_name: str) -> str:
 
 
 def upsert_jobs(scraped) -> tuple[int, int]:
+    """
+    Insert or update scraped jobs in the DB.
+
+    Each job is wrapped in its own savepoint (PostgreSQL) so a single
+    failure — e.g. a missing column, bad value, or constraint violation —
+    does NOT abort the entire batch. Failed jobs are logged and skipped.
+    """
     from core.classify import classify_job
+    import logging as _log
+    log = _log.getLogger(__name__)
 
     new_count = 0
+    err_count = 0
+
     with get_conn() as conn:
         cur = conn.cursor()
-        for job in scraped:
-            # Infer a more specific job_type/department when the scraper
-            # only provided the generic defaults (Full-time / General).
-            job_type, department = classify_job(
-                job.title, job.description,
-                getattr(job, "job_type", "Full-time"),
-                getattr(job, "department", "General"),
-            )
 
-            # Industry: use the one from the ScrapedJob if set,
-            # otherwise look up from the companies table by company name.
-            industry = (getattr(job, "industry", "") or "").strip()
-            if not industry:
-                industry = _get_company_industry(cur, job.company)
+        # Ensure logo_url column exists (may be missing on older Railway DBs)
+        if USE_POSTGRES:
+            try:
+                cur.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS logo_url TEXT DEFAULT ''")
+            except Exception:
+                conn.rollback()
 
-            cur.execute(q("SELECT id FROM jobs WHERE fingerprint = ?"), (job.fingerprint,))
-            existing = cur.fetchone()
-            if existing:
-                job_logo = getattr(job, "logo_url", "") or _get_company_logo(cur, job.company)
-                cur.execute(
-                    q("UPDATE jobs SET scraped_at = ?, is_active = 1, "
-                      "job_type = ?, department = ?, industry = ?, logo_url = COALESCE(NULLIF(?, ''), logo_url) WHERE fingerprint = ?"),
-                    (job.scraped_at.isoformat(), job_type, department, industry, job_logo, job.fingerprint)
+        for i, job in enumerate(scraped):
+            sp = f"sp_{i}"
+            try:
+                if USE_POSTGRES:
+                    cur.execute(f"SAVEPOINT {sp}")
+
+                job_type, department = classify_job(
+                    job.title, job.description,
+                    getattr(job, "job_type", "Full-time"),
+                    getattr(job, "department", "General"),
                 )
-            else:
-                # Get logo_url from ScrapedJob or look up from companies table
-                job_logo = getattr(job, "logo_url", "") or _get_company_logo(cur, job.company)
-                cur.execute(q("""
-                    INSERT INTO jobs
-                      (fingerprint, title, company, source_url, location,
-                       job_type, department, industry, salary, description, apply_url, logo_url, is_active, scraped_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-                """), (
-                    job.fingerprint, job.title, job.company, job.source_url,
-                    job.location, job_type, department, industry,
-                    job.salary, job.description, job.apply_url, job_logo,
-                    job.scraped_at.isoformat()
-                ))
-                new_count += 1
+                industry = (getattr(job, "industry", "") or "").strip()
+                if not industry:
+                    industry = _get_company_industry(cur, job.company)
+
+                cur.execute(q("SELECT id FROM jobs WHERE fingerprint = ?"), (job.fingerprint,))
+                existing = cur.fetchone()
+
+                if existing:
+                    job_logo = getattr(job, "logo_url", "") or _get_company_logo(cur, job.company)
+                    try:
+                        cur.execute(
+                            q("UPDATE jobs SET scraped_at=?, is_active=1, job_type=?, department=?, "
+                              "industry=?, logo_url=COALESCE(NULLIF(?,''),logo_url) WHERE fingerprint=?"),
+                            (job.scraped_at.isoformat(), job_type, department, industry, job_logo, job.fingerprint)
+                        )
+                    except Exception:
+                        # logo_url column may not exist — retry without it
+                        if USE_POSTGRES: cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                        cur.execute(
+                            q("UPDATE jobs SET scraped_at=?, is_active=1, job_type=?, department=?, industry=? WHERE fingerprint=?"),
+                            (job.scraped_at.isoformat(), job_type, department, industry, job.fingerprint)
+                        )
+                else:
+                    job_logo = getattr(job, "logo_url", "") or _get_company_logo(cur, job.company)
+                    try:
+                        cur.execute(q("""
+                            INSERT INTO jobs
+                              (fingerprint, title, company, source_url, location,
+                               job_type, department, industry, salary, description,
+                               apply_url, logo_url, is_active, scraped_at)
+                            VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,1,?)
+                        """), (
+                            job.fingerprint, job.title, job.company, job.source_url, job.location,
+                            job_type, department, industry, job.salary, job.description,
+                            job.apply_url, job_logo, job.scraped_at.isoformat()
+                        ))
+                    except Exception:
+                        # Retry without logo_url in case column missing
+                        if USE_POSTGRES: cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                        cur.execute(q("""
+                            INSERT INTO jobs
+                              (fingerprint, title, company, source_url, location,
+                               job_type, department, industry, salary, description,
+                               apply_url, is_active, scraped_at)
+                            VALUES (?,?,?,?,?, ?,?,?,?,?, ?,1,?)
+                        """), (
+                            job.fingerprint, job.title, job.company, job.source_url, job.location,
+                            job_type, department, industry, job.salary, job.description,
+                            job.apply_url, job.scraped_at.isoformat()
+                        ))
+                    new_count += 1
+
+                if USE_POSTGRES:
+                    cur.execute(f"RELEASE SAVEPOINT {sp}")
+
+            except Exception as e:
+                err_count += 1
+                log.error(f"upsert_jobs: failed to save '{job.title}' ({job.company}): {e}")
+                if USE_POSTGRES:
+                    try:
+                        cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                    except Exception:
+                        pass
+
+    if err_count:
+        log.warning(f"upsert_jobs: {err_count}/{len(scraped)} jobs failed to save")
+
     return len(scraped), new_count
 
 

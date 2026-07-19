@@ -590,6 +590,9 @@ def _q(cur, sql):
 
 
 def _count_since(cur, table, col, days) -> int:
+    # table and col are internal constants, never user input
+    # days is cast to int to prevent injection via INTERVAL
+    days = int(days)
     if USE_POSTGRES:
         cur.execute(
             f"SELECT COUNT(*) FROM {table} WHERE {col} > NOW() - INTERVAL '{days} days'"
@@ -607,6 +610,7 @@ def _count_where(cur, table, condition) -> int:
 
 
 def _daily_counts(cur, table, col, days) -> list:
+    days = int(days)  # cast to int — prevents injection via INTERVAL
     if USE_POSTGRES:
         cur.execute(f"""
             SELECT DATE({col}) as date, COUNT(*) as count

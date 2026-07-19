@@ -28,11 +28,9 @@ class ScrapedJob:
     location: str = "Not specified"
     job_type: str = "Full-time"
     department: str = "General"
-    industry: str = ""
     salary: str = ""
     description: str = ""
     apply_url: str = ""
-    logo_url: str = ""
     scraped_at: datetime = field(default_factory=datetime.utcnow)
 
     @property
@@ -189,738 +187,317 @@ async def scrape_oracle_hcm(url: str, company: str) -> list[ScrapedJob]:
 # Workday (REST API)
 # ---------------------------------------------------------------------------
 
-# Known wd_server numbers for common companies — prevents wrong server assumption
-_KNOWN_WD_SERVERS = {
-    "shell": "wd3", "mtn": "wd3", "airtel": "wd3", "kainos": "wd3",
-    "unilever": "wd3", "microsoft": "wd3", "google": "wd3",
-    "meta": "wd5", "amazon": "wd1", "oracle": "wd1",
-}
-
+# Workday
+# ---------------------------------------------------------------------------
+# Uses the CXS (Candidate Experience Service) JSON API — no browser needed.
+# POST /wday/cxs/{tenant}/{site}/jobs for listings
+# GET  /wday/cxs/{tenant}/{site}/jobs/{externalPath} for description
+#
+# URL format:  https://{tenant}.{wd_server}.myworkdayjobs.com/en-US/{site}/jobs
+# OR:          https://{tenant}.{wd_server}.myworkdayjobs.com/{site}
+# Examples:    https://airtel.wd3.myworkdayjobs.com/Airtel_Nigeria
+#              https://kainos.wd3.myworkdayjobs.com/Careers
 
 def _parse_workday_url(url: str) -> dict:
     """
-    Extract tenant, site, wd_server from any Workday URL format.
-
-    Handles:
-    - https://{tenant}.wd{N}.myworkdayjobs.com/{locale}/{site}   (standard)
-    - https://{tenant}.wd{N}.myworkdayjobs.com/{site}             (no locale)
-    - https://jobs.myworkdaysite.com/recruiting/{tenant}/{site}   (alt format)
-
-    Issue from guide: do NOT assume wd3 — always read from URL.
-    Fallback only when URL doesn't contain wd server info.
+    Parse a Workday career page URL into its components.
+    Returns: {tenant, wd_server, site, base_url, api_base}
     """
-    import re as _re
-
-    # Standard: https://{tenant}.wd{N}.myworkdayjobs.com/...
-    m = _re.match(
-        r'https://([^.]+)\.(wd\d+)\.myworkdayjobs\.com'
-        r'(?:/(?:[a-z]{2}-[A-Z]{2}/)?([^/?#]+))?',
-        url
-    )
-    if m:
-        tenant = m.group(1)
-        wd_server = m.group(2)           # exact wd server from URL — never assume
-        site = m.group(3) or tenant      # fall back to tenant name if path is empty
-        return {"tenant": tenant, "wd_server": wd_server, "site": site}
-
-    # Alternative: https://jobs.myworkdaysite.com/recruiting/{tenant}/{site}
-    m = _re.match(
-        r'https://(?:jobs\.)?myworkdaysite\.com/recruiting/([^/]+)/([^/?#]+)',
-        url
-    )
-    if m:
-        tenant = m.group(1)
-        site = m.group(2)
-        # Look up known wd_server or default to wd3
-        wd_server = _KNOWN_WD_SERVERS.get(tenant.lower(), "wd3")
-        return {"tenant": tenant, "wd_server": wd_server, "site": site}
-
-    # Last-resort manual parse (rare edge cases)
-    parsed = urlparse(url)
-    netloc_parts = parsed.netloc.split(".")
-    tenant = netloc_parts[0]
-    # Find wd server in netloc e.g. shell.wd3.myworkdayjobs.com
-    wd_server = next(
-        (p for p in netloc_parts if p.startswith("wd") and p[2:].isdigit()),
-        _KNOWN_WD_SERVERS.get(tenant.lower(), "wd3")
-    )
-    path_parts = [
-        p for p in parsed.path.strip("/").split("/")
-        if p and not _re.match(r'^[a-z]{2}-[A-Z]{2}$', p)
-    ]
+    from urllib.parse import urlparse as _up
+    p = _up(url)
+    host_parts = p.netloc.split('.')
+    tenant    = host_parts[0]
+    wd_server = host_parts[1] if len(host_parts) > 1 else 'wd3'
+    # Site is the first meaningful path segment (skip en-US, jobs, etc.)
+    path_parts = [x for x in p.path.strip('/').split('/') if x and x not in ('en-US', 'jobs', 'en-GB', 'fr-FR')]
     site = path_parts[0] if path_parts else tenant
-    return {"tenant": tenant, "wd_server": wd_server, "site": site}
+    base_url  = f"{p.scheme}://{p.netloc}"
+    api_base  = f"{base_url}/wday/cxs/{tenant}/{site}"
+    return {"tenant": tenant, "wd_server": wd_server, "site": site, "base_url": base_url, "api_base": api_base}
 
 
-def _workday_html_to_text(html_str: str) -> str:
-    """Convert Workday HTML description to readable plain text."""
-    if not html_str:
-        return ""
-    import html as _html_mod
+async def _workday_fetch_listings(client, api_base: str, referer: str, limit: int = 20, offset: int = 0) -> dict:
+    """POST to Workday CXS jobs endpoint — returns paginated listing."""
+    url = f"{api_base}/jobs"
+    headers = {
+        "Accept":           "application/json",
+        "Content-Type":     "application/json",
+        "Accept-Language":  "en-US",
+        "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer":          referer,
+        "Origin":           referer.split('/en-US')[0].split('/wday')[0],
+    }
+    payload = {"appliedFacets": {}, "limit": limit, "offset": offset, "searchText": ""}
+    resp = await client.post(url, json=payload, headers=headers, timeout=20)
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def _workday_fetch_detail(
+    client,
+    api_base: str,
+    external_path: str,
+    referer: str,
+    base_url: str = "",
+) -> dict:
+    """
+    GET individual Workday job detail.
+
+    Correct URL pattern per Workday CXS API docs:
+      https://{tenant}.{wd_server}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/job/{externalPath}
+
+    The externalPath from the listing response is the full path including
+    locale and site, e.g. /en-US/Airtel_Nigeria/job/Lagos/Engineer_JR-001
+    We use it as-is — the CXS endpoint handles the path segments.
+
+    Returns keys: title, location, additionalLocations, timeType, jobReqId,
+                  startDate, jobDescription (HTML string), jobPostingDescription
+    """
+    # Build detail URL
+    # externalPath from listing can be in two formats:
+    #   Format A (locale prefix): /en-US/ShellCareers/job/London/Engineer_R123
+    #   Format B (job prefix):    /job/London/Engineer_R123
+    #   Format C (slug only):     /London/Engineer_R123
+    #
+    # Correct CXS detail URL: {api_base}/job/{location}/{slug}
+    # api_base already ends with /wday/cxs/{tenant}/{site}
+    # So we must NOT prepend /job/ if externalPath already contains /job/
+
     import re as _re
-    NL = chr(10)
-    text = _html_mod.unescape(html_str)
-    text = _re.sub(r"<br\s*/?>", NL, text, flags=_re.IGNORECASE)
-    text = _re.sub(r"</p>", NL + NL, text, flags=_re.IGNORECASE)
-    text = _re.sub(r"</li>", NL, text, flags=_re.IGNORECASE)
-    text = _re.sub(r"<li[^>]*>", "\u2022 ", text, flags=_re.IGNORECASE)
-    text = _re.sub(r"</ul>|</ol>", NL, text, flags=_re.IGNORECASE)
-    for tag in ["h1", "h2", "h3", "h4"]:
-        text = _re.sub(f"<{tag}[^>]*>", NL + NL + "**", text, flags=_re.IGNORECASE)
-        text = _re.sub(f"</{tag}>", "**" + NL, text, flags=_re.IGNORECASE)
-    text = _re.sub(r"<strong[^>]*>|<b[^>]*>", "**", text, flags=_re.IGNORECASE)
-    text = _re.sub(r"</strong>|</b>", "**", text, flags=_re.IGNORECASE)
-    text = _re.sub(r"<[^>]+>", "", text)
-    result, blanks = [], 0
-    for ln in text.split(NL):
-        ln = _re.sub(r" {2,}", " ", ln.strip())
-        if ln == "":
-            blanks += 1
-            if blanks <= 1:
-                result.append(ln)
-        else:
-            blanks = 0
-            result.append(ln)
-    return NL.join(result).strip()
 
-async def scrape_workday(url: str, company: str, page=None) -> list[ScrapedJob]:
-    """
-    Scrape all jobs from a Workday career site using the CXS API.
-    Fetches full descriptions for each job via API.
-    If API returns 406 (blocked), falls back to Playwright browser rendering.
-    Reference: https://jobo.world/ats/workday
-    """
-    import requests as _requests
-    import time as _time
+    path = external_path.strip('/')
 
-    jobs = []
+    # Strip locale prefix like en-US/SiteName/ if present
+    path = _re.sub(r'^[a-z]{2}-[A-Z]{2}/[^/]+/', '', path)
+
+    # Now path is either:
+    #   job/London/Engineer_R123   (already has /job/)
+    #   London/Engineer_R123       (no /job/ prefix)
+    if path.startswith('job/'):
+        url = f"{api_base}/{path}"
+    else:
+        url = f"{api_base}/job/{path}"
+
+    # Workday detail endpoint requires these exact headers
+    # 406 Not Acceptable means Accept header is wrong
+    # Try multiple header combinations — Workday instances vary in what they accept
+    header_variants = [
+        # Variant 1: clean JSON headers (no Content-Type on GET)
+        {
+            "Accept":          "application/json",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer":         referer,
+        },
+        # Variant 2: with X-Workday-Client
+        {
+            "Accept":           "application/json",
+            "Accept-Language":  "en-US,en;q=0.9",
+            "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer":          referer,
+            "X-Workday-Client": "WD-careers",
+        },
+        # Variant 3: with Content-Type
+        {
+            "Accept":        "application/json",
+            "Content-Type":  "application/json",
+            "User-Agent":    "Mozilla/5.0",
+            "Referer":       referer,
+        },
+    ]
+
     try:
-        cfg = _parse_workday_url(url)
-        tenant = cfg["tenant"]
-        site = cfg["site"]
-        wd_server = cfg["wd_server"]
-        base = f"https://{tenant}.{wd_server}.myworkdayjobs.com"
-
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Accept-Language": "en-US",
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Referer": f"{base}/en-US/{site}",
-        }
-
-        list_url = f"{base}/wday/cxs/{tenant}/{site}/jobs"
-        batch = 20
-        offset = 0
-        total = None
-        all_postings = []
-        sitemap_urls = {}  # path → full URL, from sitemap discovery
-
-        # ── Step 0 (optional): discover job URLs via sitemap ─────────────────
-        # Per jobo.world Step 6: siteMap.xml (capital S) lists all job URLs.
-        # We use this to get the externalUrl for each job when available,
-        # and as a fallback source of job paths if the listing API fails.
-        try:
-            from xml.etree import ElementTree as _ET
-            sitemap_url = f"{base}/en-US/{site}/siteMap.xml"
-            sm_resp = _requests.get(sitemap_url, headers={
-                "Accept": "application/xml",
-                "User-Agent": headers["User-Agent"],
-            }, timeout=15)
-            if sm_resp.status_code == 200:
-                root = _ET.fromstring(sm_resp.content)
-                ns = {"ns": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-                for loc_el in root.findall(".//ns:url/ns:loc", ns):
-                    loc = loc_el.text or ""
-                    if "/job/" in loc:
-                        # Extract path portion after the base
-                        job_path = loc.replace(f"{base}/", "").lstrip("/")
-                        sitemap_urls[job_path] = loc
-                logger.info(
-                    f"Workday {company}: sitemap found {len(sitemap_urls)} job URLs"
-                )
-        except Exception as e_sm:
-            logger.debug(f"Workday sitemap not available: {e_sm}")
-
-        # ── Step 1: fetch all job listings with pagination ───────────────────
-        while True:
-            payload = {
-                "appliedFacets": {},
-                "limit": batch,
-                "offset": offset,
-                "searchText": "",
-            }
-            try:
-                resp = _requests.post(list_url, json=payload, headers=headers, timeout=20)
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception as e:
-                logger.error(f"Workday list API failed at offset {offset}: {e}")
-                break
-
-            postings = data.get("jobPostings", [])
-            if total is None:
-                total = data.get("total", 0)
-            if not postings:
-                break
-
-            all_postings.extend(postings)
-            logger.info(f"Workday {company}: fetched {len(all_postings)} / {total} jobs")
-
-            # Per guide: stop when empty OR offset + limit >= total
-            if len(postings) < batch:
-                # Got fewer than requested — we're at the end
-                break
-            if total and offset + batch >= total:
-                break
-            offset += batch
-            _time.sleep(1.5)  # 1.5s between pages — per best practices
-
-        logger.info(f"Workday {company}: {len(all_postings)} total listings found")
-
-        # ── Step 2: fetch full details for each job ───────────────────────────
-        # Workday requires specific Accept/Content-Type headers or returns 406.
-        # We try 3 header strategies to handle different Workday tenant configs.
-        detail_header_variants = [
-            # Variant 1: standard JSON (works for most tenants)
-            {
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Referer": f"{base}/en-US/{site}",
-                "User-Agent": headers["User-Agent"],
-            },
-            # Variant 2: Workday vendor MIME type (required by some tenants like Shell)
-            {
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Content-Type": "application/json",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Accept-Language": "en-US,en;q=0.9",
-                "X-Requested-With": "XMLHttpRequest",
-                "Referer": f"{base}/en-US/{site}",
-                "User-Agent": headers["User-Agent"],
-            },
-            # Variant 3: browser-like full Accept (most permissive)
-            {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Referer": f"{base}/en-US/{site}",
-                "User-Agent": headers["User-Agent"],
-            },
-        ]
-
-        import re as _re
-
-        async def _fetch_workday_detail(path_for_api: str, full_page_url: str = "") -> dict:
-            """
-            Fetch full job detail per jobo.world guide Step 5.
-            URL: GET /wday/cxs/{tenant}/{site}/job/{externalPath}
-            where externalPath is used AS-IS from the listing response.
-
-            Falls back to Playwright browser if API returns 406 (blocked tenant).
-            """
-            # Per guide: pass externalPath directly — no stripping
-            # Try both the raw path and without locale prefix as safety net
-            alt_path = _re.sub(r"^[a-z]{2}-[A-Z]{2}/", "", path_for_api)
-            candidate_urls = [
-                f"{base}/wday/cxs/{tenant}/{site}/job/{path_for_api}",
-                f"{base}/wday/cxs/{tenant}/{site}/job/{alt_path}",
-            ]
-            for det_url in candidate_urls:
-                for hdrs in detail_header_variants:
-                    try:
-                        r = _requests.get(det_url, headers=hdrs, timeout=30)
-                        if r.status_code == 200:
-                            logger.debug(f"    Detail API OK: {det_url[:70]}")
-                            return r.json()
-                    except Exception:
-                        continue
-
-                # Strategy 3: Playwright browser rendering
-                # Required for Shell and other tenants that block server-side requests.
-                # Workday SPAs render job descriptions client-side after JS executes.
-                if page is not None:
-                    page_url = full_page_url or f"{base}/en-US/{site}/job/{path_for_api}"
-                    try:
-                        logger.info(f"    Playwright: loading {page_url[:70]}")
-
-                        # Use networkidle — Workday SPAs need JS to fully execute
-                        await page.goto(page_url, wait_until="networkidle", timeout=35000)
-
-                        # Wait specifically for the description container
-                        selectors_to_try = [
-                            "[data-automation-id='jobPostingDescription']",
-                            "[data-automation-id='job-posting-description']",
-                            ".job-description",
-                            "[class*='description']",
-                        ]
-                        found_selector = None
-                        for sel in selectors_to_try:
-                            try:
-                                await page.wait_for_selector(sel, timeout=6000)
-                                found_selector = sel
-                                break
-                            except Exception:
-                                continue
-
-                        if found_selector:
-                            el = await page.query_selector(found_selector)
-                            if el:
-                                inner = await el.inner_html()
-                                if len(inner) > 100:
-                                    logger.info(
-                                        f"    Playwright selector '{found_selector}': "
-                                        f"{len(inner)} chars"
-                                    )
-                                    return {"jobDescription": inner,
-                                            "_source": "playwright_selector"}
-
-                        # Try JavaScript evaluation to extract innerText directly
-                        # This works even if the selector approach misses due to shadow DOM
-                        body_text = await page.evaluate("""() => {
-                            // Try Workday automation IDs first
-                            const selectors = [
-                                '[data-automation-id="jobPostingDescription"]',
-                                '[data-automation-id="job-posting-description"]',
-                                '.job-description',
-                                '[class*="description"]',
-                                'section[class*="job"]',
-                                'article',
-                                'main',
-                            ];
-                            for (const sel of selectors) {
-                                const el = document.querySelector(sel);
-                                if (el && el.innerText && el.innerText.length > 200) {
-                                    return el.innerText;
-                                }
-                            }
-                            // Last resort: all visible body text
-                            return document.body ? document.body.innerText : '';
-                        }""")
-
-                        if body_text and len(body_text) > 200:
-                            # Filter out nav/header noise — description should be
-                            # the longest contiguous paragraph block
-                            lines = [l.strip() for l in body_text.split(chr(10)) if l.strip()]
-                            # Find the start of the actual job content
-                            # (skip short lines that are nav items)
-                            content_lines = []
-                            in_content = False
-                            for line in lines:
-                                if len(line) > 80:
-                                    in_content = True
-                                if in_content:
-                                    content_lines.append(line)
-                            result = chr(10).join(content_lines).strip()
-                            if len(result) > 200:
-                                logger.info(
-                                    f"    Playwright JS eval: {len(result)} chars"
-                                )
-                                return {"jobDescription": result,
-                                        "_source": "playwright_text"}
-
-                    except Exception as e_pw:
-                        logger.warning(
-                            f"    Playwright failed for '{title[:30]}': {e_pw}"
-                        )
-
-                return {}
-
-        for i, posting in enumerate(all_postings):
-            title = (posting.get("title") or "").strip()
-            if not title:
-                continue
-
-            external_path = posting.get("externalPath", "")
-            external_url = posting.get("externalUrl", "")
-            location = posting.get("locationsText") or "Not specified"
-            # Prefer externalUrl from listing, then sitemap, then construct from path
-            path_key = external_path.lstrip("/")
-            apply_url = (
-                external_url
-                or sitemap_urls.get(path_key)
-                or (f"{base}{external_path}" if external_path else url)
-            )
-
-            # Extract requisition ID from bulletFields (per jobo.world guide)
-            # Formats vary: JR_12345, JR_12345-1, REQ12345, R-00066362, WD-12345
-            import re as _re_req
-            req_id = None
-            for field in posting.get("bulletFields", []):
-                if isinstance(field, str) and _re_req.match(
-                    r'^(JR_|REQ|R-|WD-|WD\d|IND-|P-|HF-|GL-)\S+',
-                    field, _re_req.IGNORECASE
-                ):
-                    req_id = field
-                    break
-            # Also accept any purely numeric or alphanum-dash ID in bulletFields
-            if not req_id:
-                for field in posting.get("bulletFields", []):
-                    if isinstance(field, str) and _re_req.match(r'^[\w][\w\-]{3,}$', field):
-                        req_id = field
-                        break
-
-            # Posted date
-            posted_on = posting.get("postedOn", "")
-
-            description = ""
-            department = ""
-            job_type = "Full-time"
-
-            if external_path:
+        for headers in header_variants:
+            resp = await client.get(url, headers=headers, timeout=15)
+            if resp.status_code == 200:
                 try:
-                    path_for_api = external_path.lstrip("/")
-                    det = await _fetch_workday_detail(path_for_api, apply_url)
+                    data = resp.json()
+                    # Shell (and many Workday tenants) nest everything under
+                    # 'jobPostingInfo' — unwrap it so parsers get a flat dict
+                    if isinstance(data, dict) and 'jobPostingInfo' in data:
+                        posting_info = data['jobPostingInfo'] or {}
+                        # Merge top-level keys into posting_info so we keep
+                        # hiringOrganization etc. too
+                        merged = dict(posting_info)
+                        for k, v in data.items():
+                            if k != 'jobPostingInfo':
+                                merged.setdefault(k, v)
+                        return merged
+                    return data
+                except Exception:
+                    pass  # not JSON, try next variant
+            if resp.status_code not in (406, 415, 400):
+                # Only retry on header-related errors
+                break
+        logger.debug(f"Workday detail: all header variants failed for {url}, last status={resp.status_code}")
 
-                    if det:
-                        raw_desc = det.get("jobDescription", "") or ""
-                        description = _workday_html_to_text(raw_desc)
+        if resp.status_code == 404:
+            # Try stripping down to just the slug portion after /job/
+            m = _re.search(r'/job/(.+)$', path)
+            if m:
+                alt_url = f"{api_base}/job/{m.group(1)}"
+                alt = await client.get(alt_url, headers=headers, timeout=12)
+                if alt.status_code == 200:
+                    return alt.json()
 
-                        # Time type → job_type (per guide Step 5)
-                        time_type = (det.get("timeType") or "").lower()
-                        if "part" in time_type:
-                            job_type = "Part-time"
-                        elif "contract" in time_type or "temp" in time_type:
-                            job_type = "Contract"
-                        elif "intern" in time_type:
-                            job_type = "Internship"
-
-                        # Department from category (per guide Step 5)
-                        department = (
-                            det.get("jobPostingCategory", {}).get("descriptor", "")
-                            or det.get("jobFamily", {}).get("descriptor", "")
-                            or ""
-                        )
-
-                        # Additional locations — merge into location string
-                        add_locs = det.get("additionalLocations", [])
-                        if add_locs and isinstance(add_locs, list):
-                            extra = ", ".join(
-                                l.get("descriptor", "") if isinstance(l, dict) else str(l)
-                                for l in add_locs if l
-                            )
-                            if extra and extra not in location:
-                                location = f"{location}, {extra}"
-
-                        # Req ID from detail if not found in bulletFields
-                        if not req_id:
-                            req_id = det.get("jobReqId") or det.get("jobId") or req_id
-
-                        logger.info(
-                            f"  Workday {i+1}/{len(all_postings)}: "
-                            f"'{title[:40]}' — {len(description)} chars"
-                        )
-                    else:
-                        logger.warning(
-                            f"  Workday detail: all strategies failed for '{title[:35]}'"
-                        )
-                except Exception as e:
-                    logger.warning(f"  Workday detail error for '{title[:30]}': {e}")
-
-                _time.sleep(1.0)  # 1s between detail fetches
-
-            # Use requisition ID in fingerprint if available for better dedup
-            fingerprint_title = f"{req_id}:{title}" if req_id else title
-
-            jobs.append(ScrapedJob(
-                title=title,
-                company=company,
-                source_url=url,
-                location=location,
-                job_type=job_type,
-                department=department,
-                description=description,
-                apply_url=apply_url,
-            ))
-
-        logger.info(f"Workday {company}: scraped {len(jobs)} jobs with descriptions")
-
+        logger.debug(f"Workday detail {resp.status_code} for {url}")
+        return {}
     except Exception as e:
-        logger.error(f"Workday scrape failed for {url}: {e}")
+        logger.debug(f"Workday detail error for {url}: {e}")
+        return {}
 
-    return jobs
 
-
-# ---------------------------------------------------------------------------
-# Greenhouse
-# ---------------------------------------------------------------------------
-
-def _extract_greenhouse_token(url: str) -> str:
-    """Extract company token from Greenhouse URL.
-    Handles all regional and legacy formats:
-      https://job-boards.greenhouse.io/{token}
-      https://job-boards.eu.greenhouse.io/{token}
-      https://boards.greenhouse.io/{token}
-      https://boards.eu.greenhouse.io/{token}
-      https://job-boards.greenhouse.io/{token}/jobs
+def _parse_workday_job(posting: dict, company: str, source_url: str, detail: dict = None) -> "ScrapedJob | None":
     """
-    from urllib.parse import urlparse
-    parsed = urlparse(url)
-    path = parsed.path.strip("/")
-    # path is like "anthropic" or "anthropic/jobs"
-    token = path.split("/")[0]
-    return token
+    Parse a Workday job posting + detail into a ScrapedJob.
 
+    posting fields (from listing):
+      title, locationsText, postedOn, externalPath, bulletFields, category
 
-def _greenhouse_base_url(url: str) -> tuple[str, str]:
+    detail fields (from /job/{path}):
+      title, location, additionalLocations, timeType, jobReqId,
+      startDate, jobDescription (HTML string), jobPostingDescription
     """
-    Return (api_base, board_base) for the correct Greenhouse region.
-    EU: job-boards.eu.greenhouse.io  -> boards-api.eu.greenhouse.io
-    US: job-boards.greenhouse.io     -> boards-api.greenhouse.io
-    """
-    from urllib.parse import urlparse
-    host = urlparse(url).netloc.lower()
-    if ".eu." in host or host.startswith("eu."):
-        return (
-            "https://boards-api.eu.greenhouse.io",
-            "https://boards.eu.greenhouse.io",
-            "https://job-boards.eu.greenhouse.io",
-        )
-    return (
-        "https://boards-api.greenhouse.io",
-        "https://boards.greenhouse.io",
-        "https://job-boards.greenhouse.io",
-    )
+    import html as _h
+    detail = detail or {}
 
-
-async def _greenhouse_get(client: httpx.AsyncClient, url: str, retries: int = 3) -> httpx.Response:
-    """
-    GET with exponential backoff for Greenhouse API calls.
-    Handles 429 Too Many Requests and transient 5xx errors.
-    """
-    delay = 0.3
-    last_exc = None
-    for attempt in range(retries):
-        try:
-            resp = await client.get(url, headers={
-                "Accept": "application/json",
-                "User-Agent": "JobStream/1.0",
-            })
-            if resp.status_code == 429:
-                wait = delay * (2 ** attempt)
-                logger.warning(f"Greenhouse 429 on {url}, backing off {wait:.1f}s")
-                await asyncio.sleep(wait)
-                continue
-            if resp.status_code >= 500:
-                wait = delay * (2 ** attempt)
-                logger.warning(f"Greenhouse {resp.status_code} on {url}, retry in {wait:.1f}s")
-                await asyncio.sleep(wait)
-                continue
-            return resp
-        except (httpx.TimeoutException, httpx.ConnectError) as e:
-            last_exc = e
-            wait = delay * (2 ** attempt)
-            logger.warning(f"Greenhouse request error ({e}), retry in {wait:.1f}s")
-            await asyncio.sleep(wait)
-    raise httpx.HTTPError(f"Greenhouse: all {retries} retries failed for {url}") from last_exc
-
-
-# ── Greenhouse result cache ───────────────────────────────────────────────────
-# Caches scraped job IDs per token for CACHE_TTL seconds (default 24h).
-# Jobs already in the DB (by fingerprint) are skipped on repeat runs.
-# The cache is in-process (dict) — survives between scrape cycles in the same
-# worker process but resets on restart. DB-level deduplication via fingerprint
-# is the authoritative guard.
-
-import time as _time
-_GH_CACHE: dict[str, tuple[float, list]] = {}   # token -> (timestamp, [ScrapedJob])
-CACHE_TTL = 60 * 60 * 24   # 24 hours in seconds
-
-
-def _cache_get(token: str) -> list | None:
-    """Return cached jobs for token if fresh, else None."""
-    entry = _GH_CACHE.get(token)
-    if entry and (_time.time() - entry[0]) < CACHE_TTL:
-        age_h = (_time.time() - entry[0]) / 3600
-        logger.info(f"Greenhouse cache HIT for {token} ({age_h:.1f}h old, {len(entry[1])} jobs)")
-        return entry[1]
-    return None
-
-
-def _cache_set(token: str, jobs: list) -> None:
-    """Store jobs in cache with current timestamp."""
-    _GH_CACHE[token] = (_time.time(), jobs)
-    logger.info(f"Greenhouse cache SET for {token}: {len(jobs)} jobs, TTL {CACHE_TTL//3600}h")
-
-
-def _cache_invalidate(token: str) -> None:
-    """Force-expire cache for a token (e.g. after admin manual refresh)."""
-    _GH_CACHE.pop(token, None)
-    logger.info(f"Greenhouse cache INVALIDATED for {token}")
-
-
-def parse_locations(location_str: str) -> list[str]:
-    """Parse semicolon-separated Greenhouse location string into a list."""
-    if not location_str:
-        return []
-    return [loc.strip() for loc in location_str.split(";") if loc.strip()]
-
-
-def _infer_job_type(title: str) -> str:
-    """Infer job type from title keywords."""
-    t = title.lower()
-    if any(k in t for k in ("part-time", "part time")):
-        return "Part-time"
-    if any(k in t for k in ("contract", "freelance", "contractor")):
-        return "Contract"
-    if any(k in t for k in ("intern", "internship", "graduate")):
-        return "Internship"
-    if any(k in t for k in ("temporary", "temp ")):
-        return "Temporary"
-    return "Full-time"
-
-
-def _clean_html(html_str: str) -> str:
-    """Strip HTML tags from description, decode entities, return clean text."""
-    import html as html_mod
-    if not html_str:
-        return ""
-    # Decode HTML entities first (e.g. &amp; &lt; &#39; etc.)
-    decoded = html_mod.unescape(html_str)
-    soup = BeautifulSoup(decoded, "html.parser")
-    # Replace block elements with newlines for readability
-    for tag in soup.find_all(["br", "p", "li", "h1", "h2", "h3", "h4", "div"]):
-        tag.insert_before("\n")
-    text = soup.get_text(separator=" ", strip=True)
-    # Clean up whitespace
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    return "\n".join(lines)[:5000]
-
-
-def _parse_greenhouse_job(job: dict, token: str, company: str, source_url: str) -> "ScrapedJob | None":
-    """
-    Parse a single Greenhouse job dict (from any API endpoint) into a ScrapedJob.
-    Handles both Remix loader format and boards-api format.
-    """
-    import html as html_mod
-
-    title = (job.get("title") or "").strip()
+    # Title — prefer detail (more complete), fall back to listing
+    title = (detail.get('title') or posting.get('title') or '').strip()
     if not title:
         return None
 
-    job_id = job.get("id", "")
+    # External path for apply URL
+    ext_path = posting.get('externalPath', '') or ''
+
+    # Apply URL — build from source_url base + externalPath
+    from urllib.parse import urlparse as _up
+    parsed = _up(source_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    apply_url = f"{base}{ext_path}" if ext_path else source_url
 
     # ── Location ──────────────────────────────────────────────────────────────
-    loc = job.get("location") or {}
-    if isinstance(loc, dict):
-        raw_location = loc.get("name") or loc.get("city") or ""
-    elif isinstance(loc, str):
-        raw_location = loc
-    else:
-        raw_location = ""
+    # Primary location from detail
+    loc_from_detail = ''
+    # Location may be at top level or inside jobPostingInfo (Shell pattern)
+    _loc_source = detail.get('location') or detail.get('primaryLocation') or {}
+    if _loc_source:
+        loc_from_detail = _loc_source.get('descriptor', '') if isinstance(_loc_source, dict) else str(_loc_source)
 
-    # Fallback to offices list if location string is empty
-    if not raw_location:
-        offices = job.get("offices") or []
-        if offices and isinstance(offices[0], dict):
-            raw_location = "; ".join(o.get("name", "") for o in offices if o.get("name"))
+    # Additional locations from detail
+    add_locs = []
+    for al in (detail.get('additionalLocations') or []):
+        name = al.get('descriptor', '') if isinstance(al, dict) else str(al)
+        if name:
+            add_locs.append(name)
 
-    # Also check job_post_location (from Remix detail endpoint)
-    if not raw_location:
-        raw_location = job.get("job_post_location") or ""
+    # Fall back to listing locationsText
+    loc_from_listing = posting.get('locationsText', '') or ''
+    if not loc_from_listing:
+        loc_list = posting.get('locations') or []
+        loc_from_listing = '; '.join(
+            l.get('descriptor', '') for l in loc_list
+            if isinstance(l, dict) and l.get('descriptor')
+        )
 
-    # Parse semicolon-separated locations; store primary for DB, keep all for display
-    locations = parse_locations(raw_location) or ["Remote"]
-    location = locations[0]  # primary location stored in DB
-    # Attach all locations as metadata for potential multi-location display
-    all_locations = "; ".join(locations)
+    # Combine: primary + additional + listing
+    all_locs = [l for l in [loc_from_detail] + add_locs if l]
+    if not all_locs and loc_from_listing:
+        all_locs = parse_locations(loc_from_listing)
+    location = '; '.join(all_locs) if all_locs else 'Remote'
+
+    # ── Job type ──────────────────────────────────────────────────────────────
+    job_type = _infer_job_type(title)
+    # timeType from detail: "Full_time", "Part_time", "Temporary"
+    time_type = detail.get('timeType', '') or ''
+    if time_type:
+        tt = time_type.lower().replace('_', ' ')
+        if 'part' in tt:      job_type = 'Part-time'
+        elif 'full' in tt:    job_type = 'Full-time'
+        elif 'temp' in tt:    job_type = 'Temporary'
+        elif 'intern' in tt:  job_type = 'Internship'
+    # Also check job category
+    cat = detail.get('jobCategory') or posting.get('category') or {}
+    if isinstance(cat, dict) and cat.get('descriptor'):
+        job_type = _infer_job_type(cat['descriptor']) or job_type
 
     # ── Department ────────────────────────────────────────────────────────────
-    depts = job.get("departments") or job.get("department") or []
-    if isinstance(depts, list) and depts:
-        dept = depts[0].get("name", "General") if isinstance(depts[0], dict) else str(depts[0])
-    elif isinstance(depts, str):
-        dept = depts
-    else:
-        dept = "General"
-
-    # ── Apply URL ─────────────────────────────────────────────────────────────
-    # Derive correct regional base from source_url
-    src_host = source_url.split("/")[2] if source_url.startswith("http") else "job-boards.greenhouse.io"
-    _rmx = "https://job-boards.eu.greenhouse.io" if ".eu." in src_host else "https://job-boards.greenhouse.io"
-    apply_url = (
-        job.get("absolute_url") or
-        job.get("url") or
-        (f"{_rmx}/{token}/jobs/{job_id}" if job_id else "")
-    )
+    dept_obj = detail.get('jobFamily') or posting.get('category') or {}
+    dept = dept_obj.get('descriptor', 'General') if isinstance(dept_obj, dict) else 'General'
 
     # ── Description ───────────────────────────────────────────────────────────
-    # content field contains full HTML description with entities
-    raw_desc = job.get("content") or job.get("description") or ""
-    description = _clean_html(raw_desc)
+    # Workday uses different field names across tenants. Try all known variants.
+    description = ''
+    raw_desc = ''
 
-    # ── Pay range (may be empty — not all companies publish salaries) ──────────
-    salary = ""
-    # Prefer pay_ranges list (from Remix detail endpoint)
-    pay_ranges = job.get("pay_ranges") or []
-    if pay_ranges and isinstance(pay_ranges, list):
-        parts = []
-        for pr in pay_ranges:
-            currency = pr.get("currency", "USD")
-            mn = pr.get("min")
-            mx = pr.get("max")
-            label = pr.get("title", "")
-            if mn and mx:
-                chunk = f"{currency} {int(mn):,} – {int(mx):,}"
-            elif mn:
-                chunk = f"{currency} {int(mn):,}+"
-            elif mx:
-                chunk = f"up to {currency} {int(mx):,}"
-            else:
+    # All known Workday description field names (vary by tenant/version):
+    for field in [
+        'jobDescription',            # most common — plain HTML string
+        'jobPostingDescription',     # alternate name
+        'description',               # simplified tenants
+        'jobSummary',                # some Oracle-integrated Workday instances
+    ]:
+        val = detail.get(field, '')
+        if not val:
+            continue
+        # Value may be a plain string or a dict with a 'content' key
+        if isinstance(val, dict):
+            val = (val.get('content') or val.get('description')
+                   or val.get('text') or val.get('value') or '')
+        if val and str(val).strip():
+            raw_desc = str(val)
+            break
+
+    # Also check inside nested 'jobPostingInfo' block (Shell and many Workday tenants)
+    # This is the most common nesting pattern — jobPostingInfo.jobDescription
+    if not raw_desc:
+        for info_key in ('jobPostingInfo', 'postingInfo', 'jobPosting'):
+            info_block = detail.get(info_key) or {}
+            if not isinstance(info_block, dict):
                 continue
-            if label:
-                chunk += f" ({label})"
-            parts.append(chunk)
-        salary = " | ".join(parts)
-    # Fall back to legacy pay_range / salary_range single object
-    if not salary:
-        pay = job.get("pay_range") or job.get("salary_range") or {}
-        if pay and isinstance(pay, dict):
-            min_pay = pay.get("min_amount") or pay.get("min")
-            max_pay = pay.get("max_amount") or pay.get("max")
-            currency = pay.get("currency_type") or pay.get("currency", "USD")
-            unit = pay.get("pay_period") or pay.get("unit", "")
-            if min_pay and max_pay:
-                salary = f"{currency} {int(min_pay):,} – {int(max_pay):,}"
-                if unit:
-                    salary += f" / {unit.lower()}"
-            elif min_pay:
-                salary = f"{currency} {int(min_pay):,}+"
+            candidate = (info_block.get('jobDescription') or
+                         info_block.get('description') or
+                         info_block.get('jobSummary') or '')
+            if isinstance(candidate, dict):
+                candidate = (candidate.get('content') or
+                             candidate.get('text') or '')
+            if candidate and str(candidate).strip():
+                raw_desc = str(candidate)
+                break
 
-    # ── Job type heuristic ────────────────────────────────────────────────────
-    job_type = _infer_job_type(title)
-    # Also check employment_type field if present (from detail endpoint)
-    emp_type = job.get("employment_type") or job.get("job_type") or ""
-    if not emp_type:
-        emp_obj = job.get("employment") or {}
-        emp_type = emp_obj.get("name", "") if isinstance(emp_obj, dict) else str(emp_obj)
-    if emp_type:
-        emp_lower = emp_type.lower()
-        if "part" in emp_lower:
-            job_type = "Part-time"
-        elif "contract" in emp_lower or "freelance" in emp_lower:
-            job_type = "Contract"
-        elif "intern" in emp_lower:
-            job_type = "Internship"
-        elif "full" in emp_lower:
-            job_type = "Full-time"
+    if raw_desc:
+        description = _clean_html(_h.unescape(str(raw_desc)))
 
-    # Prepend all locations to description if job is multi-location
-    if len(locations) > 1:
-        location_note = f"Locations: {all_locations}\n\n"
-        description = location_note + description if description else location_note
+    # ── Salary ────────────────────────────────────────────────────────────────
+    salary = ''
+    comp = detail.get('compensation') or detail.get('salaryRange') or {}
+    if isinstance(comp, dict):
+        mn = comp.get('minimum') or comp.get('min')
+        mx = comp.get('maximum') or comp.get('max')
+        cur = comp.get('currency', 'USD')
+        period = comp.get('period', '') or comp.get('frequency', '')
+        if mn and mx:
+            salary = f"{cur} {int(float(mn)):,} – {int(float(mx)):,}"
+            if period: salary += f" / {period.lower()}"
+        elif mn:
+            salary = f"{cur} {int(float(mn)):,}+"
 
+    # ── Extra metadata in description prefix ──────────────────────────────────
+    meta_parts = []
+    req_id = detail.get('jobReqId') or (posting.get('bulletFields') or [''])[0]
+    if req_id:       meta_parts.append(f"Req ID: {req_id}")
+    if time_type:    meta_parts.append(f"Time type: {time_type.replace('_',' ')}")
+    start = detail.get('startDate', '')
+    if start:        meta_parts.append(f"Start date: {start}")
+    if meta_parts and description:
+        description = "\n".join(meta_parts) + "\n\n" + description
+    elif meta_parts:
+        description = "\n".join(meta_parts)
     return ScrapedJob(
         title=title,
         company=company,
         source_url=source_url,
-        location=all_locations,   # store all locations joined for searchability
+        location=location,
         department=dept,
         job_type=job_type,
         description=description,
@@ -929,160 +506,517 @@ def _parse_greenhouse_job(job: dict, token: str, company: str, source_url: str) 
     )
 
 
-async def _fetch_greenhouse_job_details(client: "httpx.AsyncClient", token: str, job_id: int, api_base: str = "https://boards-api.greenhouse.io", remix_base: str = "https://job-boards.greenhouse.io") -> dict:
+async def scrape_workday(url: str, company: str, page: "Page | None" = None) -> list[ScrapedJob]:
     """
-    Fetch individual job details using the Remix ?_data= pattern.
-    Primary:  https://job-boards.greenhouse.io/{token}/jobs/{id}?_data=
-    Fallback: https://boards-api.greenhouse.io/v1/boards/{token}/jobs/{id}
-    Returns a normalised dict with keys: title, location, description,
-    employment_type, pay_ranges, department, published_at, apply_url.
+    Scrape Workday jobs via the CXS JSON API (no browser/Playwright needed).
+
+    Strategy:
+    1. POST /wday/cxs/{tenant}/{site}/jobs — paginated listings
+    2. GET  /wday/cxs/{tenant}/{site}/jobs/{externalPath} — per-job description
+    3. HTML fallback via Playwright if API fails
+
+    The listing response does NOT include job descriptions.
+    Descriptions require a per-job GET request to the detail endpoint.
+    Capped at 50 detail requests per scrape run (rate limiting).
     """
-    # ── Strategy 1: Remix detail loader ──────────────────────────────────────
+    jobs = []
+    info = _parse_workday_url(url)
+    tenant   = info['tenant']
+    site     = info['site']
+    api_base = info['api_base']
+    base_url = info['base_url']
+    referer  = f"{base_url}/en-US/{site}/jobs"
+
+    logger.info(f"Workday CXS API: tenant={tenant}, site={site}, api={api_base}")
+
+    # ── Strategy 1: CXS JSON API ─────────────────────────────────────────────
     try:
-        remix_url = f"{remix_base}/{token}/jobs/{job_id}?_data="
-        resp = await _greenhouse_get(client, remix_url)
-        if resp.status_code == 200:
-            data = resp.json()
-            job_post = data.get("jobPost") or {}
+        all_postings = []
+        offset = 0
+        limit  = 20
+        total  = None
 
-            # Pay ranges — list of {min, max, currency, title}
-            pay_ranges = [
-                {
-                    "min":      pr.get("min"),
-                    "max":      pr.get("max"),
-                    "currency": pr.get("currency", "USD"),
-                    "title":    pr.get("title", ""),
-                }
-                for pr in (data.get("pay_ranges") or [])
-                if pr.get("min") or pr.get("max")
-            ]
+        async with httpx.AsyncClient(timeout=25, follow_redirects=True) as client:
+            while True:
+                data = await _workday_fetch_listings(client, api_base, referer, limit=limit, offset=offset)
+                postings = data.get('jobPostings', [])
+                if total is None:
+                    total = data.get('total', 0)
+                    logger.info(f"Workday: {total} total jobs for {tenant}/{site}")
+                if not postings:
+                    break
+                all_postings.extend(postings)
+                offset += len(postings)
+                if offset >= total or offset >= 200:  # cap at 200 jobs
+                    break
+                await asyncio.sleep(0.3)
 
-            # Employment type
-            emp = data.get("employment") or {}
-            employment_type = emp.get("name", "") if isinstance(emp, dict) else str(emp)
+        if not all_postings:
+            logger.warning(f"Workday: no listings returned for {tenant}/{site}")
+        else:
+            # Fetch descriptions for each job (cap at 50)
+            logger.info(f"Workday: fetching descriptions for {min(len(all_postings), 50)} jobs")
+            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+                for posting in all_postings[:50]:
+                    ext_path = posting.get('externalPath', '')
+                    detail   = {}
+                    if ext_path:
+                        try:
+                            detail = await _workday_fetch_detail(client, api_base, ext_path, referer)
+                        except Exception as e:
+                            logger.debug(f"Workday detail failed for {ext_path}: {e}")
+                    parsed = _parse_workday_job(posting, company, url, detail)
+                    if parsed:
+                        jobs.append(parsed)
+                    await asyncio.sleep(0.2)
 
-            # Department
-            depts = data.get("departments") or []
-            department = depts[0].get("name", "") if depts and isinstance(depts[0], dict) else ""
+            # Jobs beyond cap 50 — add without description
+            for posting in all_postings[50:]:
+                parsed = _parse_workday_job(posting, company, url, {})
+                if parsed:
+                    jobs.append(parsed)
 
-            # Location
-            location = (
-                data.get("job_post_location") or
-                (job_post.get("location") or {}).get("name") or
-                ""
-            )
+            logger.info(f"Workday CXS API: {len(jobs)} jobs from {tenant}/{site}")
+            return jobs
 
-            return {
-                "id":              data.get("jobPostId") or job_id,
-                "title":           job_post.get("title", ""),
-                "location":        location,
-                "description":     job_post.get("content", ""),
-                "employment_type": employment_type,
-                "pay_ranges":      pay_ranges,
-                "department":      department,
-                "published_at":    data.get("published_at", ""),
-                "apply_url":       f"https://job-boards.greenhouse.io/{token}/jobs/{job_id}#app",
-                "_source":         "remix",
-            }
     except Exception as e:
-        logger.debug(f"Greenhouse Remix detail failed for {job_id}: {e}")
+        logger.warning(f"Workday CXS API failed for {url}: {e}")
 
-    # ── Strategy 2: boards-api fallback ──────────────────────────────────────
+    # ── Strategy 2: HTML fallback via Playwright ──────────────────────────────
+    if page is None:
+        logger.warning(f"Workday: CXS API failed and no Playwright page available for {url}")
+        return jobs
     try:
-        resp = await _greenhouse_get(
-            client,
-            f"{api_base}/v1/boards/{token}/jobs/{job_id}",
-        )
+        logger.info(f"Workday: falling back to Playwright for {url}")
+        await page.goto(url, wait_until="networkidle", timeout=30000)
+        await asyncio.sleep(2)
+        soup = BeautifulSoup(await page.content(), "html.parser")
+        for item in soup.select('[data-automation-id="jobTitle"], .css-19uc56f, .gwt-Label'):
+            title = item.get_text(strip=True)
+            if not title or len(title) < 3:
+                continue
+            parent = item.find_parent('li') or item.find_parent('article') or item.find_parent('div')
+            loc_el = parent.select_one('[data-automation-id="jobLocation"], .css-bmklzm') if parent else None
+            location = loc_el.get_text(strip=True) if loc_el else 'Remote'
+            link_el = parent.select_one('a[href]') if parent else item.find_parent('a')
+            apply_url = base_url + link_el['href'] if link_el and link_el.get('href', '').startswith('/') else (link_el['href'] if link_el else url)
+            jobs.append(ScrapedJob(
+                title=title, company=company, source_url=url,
+                location=location, department='General',
+                job_type=_infer_job_type(title), apply_url=apply_url,
+            ))
+        logger.info(f"Workday HTML fallback: {len(jobs)} jobs from {url}")
+    except Exception as e:
+        logger.error(f"Workday HTML fallback failed for {url}: {e}")
+
+    return jobs
+
+
+# ── User-agent rotation ───────────────────────────────────────────────────────
+_UA_LIST = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+]
+
+# ── Cache (24h TTL) ───────────────────────────────────────────────────────────
+import time as _time
+_GH_CACHE: dict = {}
+CACHE_TTL = 60 * 60 * 24
+
+def _cache_get(token: str):
+    e = _GH_CACHE.get(token)
+    if e and (_time.time() - e[0]) < CACHE_TTL:
+        logger.info(f"Greenhouse cache HIT for {token} ({(_time.time()-e[0])/3600:.1f}h old, {len(e[1])} jobs)")
+        return e[1]
+    return None
+
+def _cache_set(token: str, jobs: list):
+    _GH_CACHE[token] = (_time.time(), jobs)
+    logger.info(f"Greenhouse cache SET for {token}: {len(jobs)} jobs")
+
+def _cache_invalidate(token: str):
+    _GH_CACHE.pop(token, None)
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def _extract_greenhouse_token(url: str) -> str:
+    from urllib.parse import urlparse
+    return urlparse(url).path.strip("/").split("/")[0]
+
+def _greenhouse_base_url(url: str):
+    host = __import__("urllib.parse", fromlist=["urlparse"]).urlparse(url).netloc.lower()
+    eu = ".eu." in host
+    return (
+        "https://boards-api.eu.greenhouse.io"  if eu else "https://boards-api.greenhouse.io",
+        "https://boards.eu.greenhouse.io"       if eu else "https://boards.greenhouse.io",
+        "https://job-boards.eu.greenhouse.io"   if eu else "https://job-boards.greenhouse.io",
+    )
+
+def _infer_job_type(title: str) -> str:
+    t = title.lower()
+    if any(k in t for k in ("part-time", "part time")): return "Part-time"
+    if any(k in t for k in ("contract", "freelance")): return "Contract"
+    if any(k in t for k in ("intern", "internship")): return "Internship"
+    return "Full-time"
+
+def _clean_html(html_str: str, max_chars: int = 8000) -> str:
+    """
+    Convert job description HTML to structured, readable plain text.
+
+    Handles the Shell/Workday pattern where metadata labels are <p><b>Label:</b></p>
+    followed by the value as a bare text node or next <p>, and body text uses
+    <p>, <ul>/<li>, and <h*> tags.
+    """
+    import html as _h
+    from bs4 import NavigableString
+    if not html_str:
+        return ""
+    decoded = _h.unescape(html_str)
+    soup = BeautifulSoup(decoded, "html.parser")
+    for tag in soup.find_all(["script", "style", "noscript"]):
+        tag.decompose()
+
+    def node_text(node):
+        return node.get_text(separator=" ", strip=True) if hasattr(node, "get_text") else str(node).strip()
+
+    def is_label_p(p):
+        """<p> whose only non-whitespace child is a <b> or <strong> = a label."""
+        kids = [c for c in p.children
+                if not (isinstance(c, NavigableString) and not c.strip())]
+        return (len(kids) == 1
+                and hasattr(kids[0], "name")
+                and kids[0].name in ("b", "strong"))
+
+    # ── Tokenise the DOM into typed tokens ────────────────────────────────────
+    tokens = []
+
+    def walk(node):
+        if isinstance(node, NavigableString):
+            t = str(node).replace("\xa0", " ").strip()
+            if t:
+                tokens.append(("text", t))
+            return
+        if not hasattr(node, "name") or not node.name:
+            return
+        tag = node.name.lower()
+
+        if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            t = node_text(node)
+            if t:
+                tokens.append(("heading", t))
+
+        elif tag == "p":
+            if is_label_p(node):
+                tokens.append(("label", node_text(node).rstrip(": ")))
+            else:
+                t = node_text(node).replace("\xa0", "").strip()
+                if t:
+                    tokens.append(("para", t))
+
+        elif tag in ("ul", "ol"):
+            items = [node_text(li)
+                     for li in node.find_all("li", recursive=False)
+                     if node_text(li)]
+            if items:
+                tokens.append(("list", items, tag))
+
+        elif tag in ("strong", "b"):
+            t = node_text(node)
+            if t:
+                tokens.append(("bold", t))
+
+        elif tag == "br":
+            pass  # ignore bare <br>
+
+        else:  # div, span, section, body, html …
+            for child in node.children:
+                walk(child)
+
+    for child in soup.children:
+        walk(child)
+
+    # ── Render tokens → lines ─────────────────────────────────────────────────
+    out = []
+    i = 0
+    while i < len(tokens):
+        kind = tokens[i][0]
+
+        if kind == "heading":
+            label = tokens[i][1]
+            out += ["", label.upper(), "-" * min(len(label), 50)]
+
+        elif kind == "label":
+            label = tokens[i][1].rstrip(":")
+            # Consume next token if it's the inline value
+            if i + 1 < len(tokens) and tokens[i + 1][0] in ("text", "para"):
+                out.append(f"\n{label}: {tokens[i + 1][1]}")
+                i += 1
+            elif i + 1 < len(tokens) and tokens[i + 1][0] == "list":
+                out.append(f"\n{label}:")
+                for item in tokens[i + 1][1]:
+                    out.append(f"  • {item}")
+                i += 1
+            else:
+                out.append(f"\n{label}:")
+
+        elif kind == "bold":
+            t = tokens[i][1].rstrip(":")
+            out.append(f"\n{t}:")
+
+        elif kind == "para":
+            out += ["", tokens[i][1]]
+
+        elif kind == "text":
+            out.append(tokens[i][1])
+
+        elif kind == "list":
+            out.append("")
+            for item in tokens[i][1]:
+                out.append(f"  • {item}")
+
+        i += 1
+
+    text = "\n".join(out)
+    # Collapse 3+ blank lines to 2
+    import re as _re
+    text = _re.sub(r"\n{3,}", "\n\n", text).strip()
+
+    # ── Convert to frontend markdown-like format ───────────────────────────
+    # The job detail renderer understands:
+    #   **TEXT**  → bold section heading
+    #   - item    → bullet point
+    # Convert our plain-text tokens to this format:
+    output_lines = []
+    for line in text.splitlines():
+        # All-caps lines or "Label:" lines → **heading**
+        stripped = line.strip()
+        if _re.match(r'^[A-Z][A-Z\s\&\/\-]{3,}:?\s*$', stripped) and len(stripped) < 60:
+            output_lines.append(f"**{stripped.rstrip(':')}**")
+        # "Label: value" metadata lines → bold label + value
+        elif _re.match(r'^[A-Z][^\n]{2,40}:\s+\S', stripped) and len(stripped) < 80:
+            output_lines.append(f"**{stripped}**")
+        # Bullet points (  • item or  - item)
+        elif stripped.startswith("•"):
+            output_lines.append(f"- {stripped[1:].strip()}")
+        # Dashes that are section dividers → skip
+        elif _re.match(r'^-{3,}$', stripped):
+            output_lines.append("")
+        else:
+            output_lines.append(line)
+
+    final = "\n".join(output_lines)
+    final = _re.sub(r"\n{3,}", "\n\n", final).strip()
+    return final[:max_chars]
+
+def parse_locations(location_str: str) -> list:
+    if not location_str: return []
+    return [l.strip() for l in location_str.split(";") if l.strip()]
+
+def _parse_greenhouse_job(job: dict, token: str, company: str, source_url: str):
+    import html as _h
+    title = (job.get("title") or "").strip()
+    if not title: return None
+    job_id = job.get("id", "")
+    loc = job.get("location") or {}
+    raw_location = loc.get("name") or loc.get("city") or "" if isinstance(loc, dict) else str(loc or "")
+    if not raw_location:
+        offices = job.get("offices") or []
+        raw_location = "; ".join(o.get("name","") for o in offices if isinstance(o,dict) and o.get("name"))
+    if not raw_location:
+        raw_location = job.get("job_post_location") or ""
+    locations = parse_locations(raw_location) or ["Remote"]
+    location = locations[0]
+    all_locations = "; ".join(locations)
+    depts = job.get("departments") or job.get("department") or []
+    if isinstance(depts, list) and depts:
+        dept = depts[0].get("name","General") if isinstance(depts[0], dict) else str(depts[0])
+    elif isinstance(depts, str):
+        dept = depts
+    else:
+        dept = "General"
+    host = source_url.split("/")[2] if source_url.startswith("http") else ""
+    rmx = "https://job-boards.eu.greenhouse.io" if ".eu." in host else "https://job-boards.greenhouse.io"
+    apply_url = job.get("absolute_url") or job.get("url") or (f"{rmx}/{token}/jobs/{job_id}" if job_id else "")
+    raw_desc = _h.unescape(job.get("content") or job.get("description") or "")
+    description = _clean_html(raw_desc)
+    salary = ""
+    pay_ranges = job.get("pay_ranges") or []
+    if pay_ranges:
+        parts = []
+        for pr in pay_ranges:
+            mn, mx, cur = pr.get("min"), pr.get("max"), pr.get("currency","USD")
+            if mn and mx: parts.append(f"{cur} {int(mn):,} – {int(mx):,}")
+            elif mn: parts.append(f"{cur} {int(mn):,}+")
+        salary = " | ".join(parts)
+    if not salary:
+        pay = job.get("pay_range") or job.get("salary_range") or {}
+        if isinstance(pay, dict):
+            mn = pay.get("min_amount") or pay.get("min")
+            mx = pay.get("max_amount") or pay.get("max")
+            cur = pay.get("currency_type") or pay.get("currency","USD")
+            if mn and mx: salary = f"{cur} {int(mn):,} – {int(mx):,}"
+            elif mn: salary = f"{cur} {int(mn):,}+"
+    job_type = _infer_job_type(title)
+    emp = job.get("employment_type") or (job.get("employment") or {}).get("name","")
+    if emp:
+        el = emp.lower()
+        if "part" in el: job_type = "Part-time"
+        elif "contract" in el: job_type = "Contract"
+        elif "intern" in el: job_type = "Internship"
+    if len(locations) > 1:
+        description = f"Locations: {all_locations}\n\n" + description if description else f"Locations: {all_locations}"
+    return ScrapedJob(
+        title=title, company=company, source_url=source_url,
+        location=all_locations, department=dept, job_type=job_type,
+        description=description, apply_url=apply_url, salary=salary,
+    )
+
+async def _gh_get(client, url: str, retries: int = 3):
+    """GET with proxy routing + exponential backoff."""
+    proxied = url
+    delay = 0.3
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            resp = await client.get(proxied, headers={
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "User-Agent": _UA_LIST[attempt % len(_UA_LIST)],
+                "Referer": url.split("?")[0],
+            }, timeout=30)
+            if resp.status_code == 403:
+                logger.warning(f"Greenhouse 403 on {url}, attempt {attempt+1} — may be IP-based blocking")
+                await asyncio.sleep(delay * (2 ** attempt)); continue
+            if resp.status_code == 429:
+                await asyncio.sleep(delay * (2 ** attempt)); continue
+            if resp.status_code >= 500:
+                await asyncio.sleep(delay * (2 ** attempt)); continue
+            return resp
+        except (httpx.TimeoutException, httpx.ConnectError) as e:
+            last_exc = e; await asyncio.sleep(delay * (2 ** attempt))
+    raise httpx.HTTPError(f"Greenhouse: {retries} retries failed for {url}") from last_exc
+
+async def _gh_job_detail(client, token: str, job_id: int, api_base: str, remix_base: str) -> dict:
+    """
+    Fetch individual job detail — the ONLY way to get description text.
+    Greenhouse listing endpoints never include descriptions.
+    """
+    # Strategy A: Remix detail endpoint
+    try:
+        url = f"{remix_base}/{token}/jobs/{job_id}?_data="
+        resp = await _gh_get(client, url)
         if resp.status_code == 200:
             data = resp.json()
+            jp = data.get("jobPost") or {}
+            import html as _h
+            raw = _h.unescape(jp.get("content") or data.get("content") or "")
+            desc = _clean_html(raw)
+            pay_ranges = [
+                {"min": pr.get("min"), "max": pr.get("max"), "currency": pr.get("currency","USD"), "title": pr.get("title","")}
+                for pr in (data.get("pay_ranges") or []) if pr.get("min") or pr.get("max")
+            ]
+            emp = data.get("employment") or {}
+            loc = data.get("job_post_location") or (jp.get("location") or {}).get("name") or ""
+            depts = data.get("departments") or []
+            dept = depts[0].get("name","") if depts and isinstance(depts[0], dict) else ""
+            logger.debug(f"GH detail OK [{job_id}]: {len(desc)} chars")
+            return {"description": desc, "pay_ranges": pay_ranges,
+                    "employment_type": emp.get("name","") if isinstance(emp,dict) else "",
+                    "location": loc, "department": dept,
+                    "apply_url": f"{remix_base}/{token}/jobs/{job_id}#app"}
+    except Exception as e:
+        logger.debug(f"GH Remix detail failed {job_id}: {e}")
+    # Strategy B: boards-api individual job
+    try:
+        url = f"{api_base}/v1/boards/{token}/jobs/{job_id}"
+        resp = await _gh_get(client, url)
+        if resp.status_code == 200:
+            data = resp.json()
+            import html as _h
+            desc = _clean_html(_h.unescape(data.get("content","") or ""))
             loc = data.get("location") or {}
             depts = data.get("departments") or []
-            return {
-                "id":              data.get("id") or job_id,
-                "title":           data.get("title", ""),
-                "location":        loc.get("name", "") if isinstance(loc, dict) else str(loc),
-                "description":     data.get("content", ""),
-                "employment_type": "",
-                "pay_ranges":      [],
-                "department":      depts[0].get("name", "") if depts else "",
-                "published_at":    data.get("updated_at", ""),
-                "apply_url":       data.get("absolute_url", ""),
-                "_source":         "boards-api",
-            }
+            return {"description": desc, "pay_ranges": [],
+                    "employment_type": "",
+                    "location": loc.get("name","") if isinstance(loc,dict) else str(loc),
+                    "department": depts[0].get("name","") if depts else "",
+                    "apply_url": data.get("absolute_url","")}
     except Exception as e:
-        logger.debug(f"Greenhouse boards-api detail failed for {job_id}: {e}")
-
+        logger.debug(f"GH boards-api detail failed {job_id}: {e}")
+    logger.warning(f"GH: could not fetch detail for job {job_id} on {token}")
     return {}
 
+async def _fetch_details_for_jobs(jobs: list, token: str, api_base: str, remix_base: str):
+    """Fetch description + metadata for all jobs via their detail endpoints."""
+    import re
+    logger.info(
+        f"Greenhouse: fetching descriptions for {min(len(jobs),50)} jobs "
+        "direct"
+    )
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as dc:
+        for job in jobs[:50]:
+            m = re.search(r'/jobs/([0-9]+)', job.apply_url or "")
+            if not m:
+                continue
+            detail = await _gh_job_detail(dc, token, int(m.group(1)), api_base, remix_base)
+            if detail:
+                if detail.get("description"):
+                    job.description = detail["description"]
+                if detail.get("pay_ranges") and not job.salary:
+                    tmp = _parse_greenhouse_job({**detail}, token, job.company, job.source_url)
+                    if tmp and tmp.salary:
+                        job.salary = tmp.salary
+                if detail.get("employment_type"):
+                    job.job_type = _infer_job_type(detail["employment_type"]) or job.job_type
+                if detail.get("location") and job.location in ("Remote","Not specified",""):
+                    job.location = detail["location"]
+            await asyncio.sleep(0.25)
 
-async def scrape_greenhouse(page: Page, url: str, company: str) -> list[ScrapedJob]:
+async def scrape_greenhouse(page, url: str, company: str) -> list:
     """
-    Scrape Greenhouse jobs using three strategies in order:
+    Scrape Greenhouse jobs — 3 strategies + per-job description fetching.
 
-    1. Remix paginated loader  (job-boards.greenhouse.io/?page=N&_data=)
-       - New board format, paginated JSON, full descriptions
-       - Fetches individual job details (?_data=) for pay_ranges + employment_type
-       - Best for large boards (100s of jobs across multiple pages)
+    Strategies (tried in order):
+    1. Remix paginated loader  job-boards.*.greenhouse.io/?page=N&_data=
+    2. boards-api              boards-api.*.greenhouse.io/v1/boards/{token}/jobs?content=true
+    3. HTML fallback           boards.*.greenhouse.io/{token} via Playwright
 
-    2. Boards API  (boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true)
-       - Classic single-request endpoint, all jobs + descriptions in one call
-       - No pagination needed, simpler — best for smaller boards
-       - Falls back automatically if Remix endpoint returns no data
 
-    3. HTML scraping via Playwright  (boards.greenhouse.io/{token})
-       - Last resort when both APIs are unavailable/disabled
-       - Fetches individual job pages for descriptions (slow, capped at 15)
 
-    Token extraction handles both URL formats:
-      https://job-boards.greenhouse.io/{token}
-      https://boards.greenhouse.io/{token}
+
+    Descriptions are fetched via individual job detail endpoints after listing,
+    because listing APIs NEVER include description text.
+    Results are cached for 24 hours.
     """
     jobs = []
     token = _extract_greenhouse_token(url)
     if not token:
-        logger.warning(f"Could not extract Greenhouse token from {url}")
+        logger.warning(f"Greenhouse: could not extract token from {url}")
         return jobs
 
-    # ── Cache check ──────────────────────────────────────────────────────────
     cached = _cache_get(token)
     if cached:
         return cached
 
-    # ── Validate token / detect custom domain redirects ──────────────────────
-    # Some companies use custom domains that 301/302 away from greenhouse.io.
-    # A HEAD request on the board URL tells us if the token is valid before
-    # we attempt any scraping.
     api_base, board_base, remix_base = _greenhouse_base_url(url)
 
+    # Validate token
     try:
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as probe:
-            probe_resp = await probe.head(
-                f"{board_base}/{token}",
-                headers={"User-Agent": "JobStream/1.0"},
-            )
-            if probe_resp.status_code == 404:
+            pr = await probe.head(f"{board_base}/{token}", headers={"User-Agent": _UA_LIST[0]})
+            if pr.status_code == 404:
                 logger.error(f"Greenhouse: invalid token or board not found: {token}")
                 return jobs
-            # If final URL no longer contains greenhouse.io the company uses a
-            # custom domain — log it but continue anyway (APIs may still work)
-            if "greenhouse.io" not in str(probe_resp.url):
-                logger.warning(
-                    f"Greenhouse: {token} redirected to custom domain {probe_resp.url}. "
-                    "API endpoints may still be available."
-                )
     except Exception as e:
-        logger.debug(f"Greenhouse probe failed for {token}: {e}")  # non-fatal
+        logger.debug(f"Greenhouse probe failed for {token}: {e}")
 
-    # ── Strategy 1: Remix paginated loader ──────────────────────────────────
-    # https://job-boards.greenhouse.io/{token}?page=N&_data=
-    # Returns JSON: { jobPosts: { data: [...], total_pages: N } }
+    # ── Strategy 1: Remix paginated loader ───────────────────────────────────
     try:
         raw_jobs = []
         pg = 1
-        base = f"{remix_base}/{token}"
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=25, follow_redirects=True) as client:
             while True:
-                resp = await _greenhouse_get(client, f"{base}?page={pg}&_data=")
+                resp = await _gh_get(client, f"{remix_base}/{token}?page={pg}&_data=")
                 resp.raise_for_status()
                 data = resp.json()
                 page_jobs = data.get("jobPosts", {}).get("data", [])
@@ -1095,79 +1029,35 @@ async def scrape_greenhouse(page: Page, url: str, company: str) -> list[ScrapedJ
                 pg += 1
                 await asyncio.sleep(0.3)
 
-        # Fetch pay range details for jobs that have an id but no pay_range
-        # (batch fetch up to 20 to avoid too many requests)
-        ids_needing_details = [
-            j.get("id") for j in raw_jobs
-            if j.get("id") and not j.get("pay_range") and not j.get("salary_range")
-        ][:20]
-
-        detail_map = {}
-        if ids_needing_details:
-            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as detail_client:
-                for jid in ids_needing_details:
-                    detail = await _fetch_greenhouse_job_details(detail_client, token, jid, api_base, remix_base)
-                    if detail:
-                        detail_map[jid] = detail
-                    await asyncio.sleep(0.15)
-
         for job in raw_jobs:
-            jid = job.get("id")
-            if jid and jid in detail_map:
-                detail = detail_map[jid]
-                # Merge: detail fields fill gaps, listing title/location take priority
-                merged = {**detail, **{k: v for k, v in job.items() if v is not None and v != ""}}
-                # Always prefer detail pay_ranges and employment_type (richer)
-                if detail.get("pay_ranges"):
-                    merged["pay_ranges"] = detail["pay_ranges"]
-                if detail.get("employment_type"):
-                    merged["employment_type"] = detail["employment_type"]
-                if detail.get("description") and not job.get("content"):
-                    merged["content"] = detail["description"]
-                job = merged
             parsed = _parse_greenhouse_job(job, token, company, url)
             if parsed:
                 jobs.append(parsed)
 
         if jobs:
-            # Fetch descriptions for jobs that came back empty from the listing
-            # (Remix listing API may omit content — detail endpoint has it)
-            empty_desc = [j for j in jobs if not j.description]
-            if empty_desc:
-                logger.info(f"Greenhouse: fetching descriptions for {len(empty_desc)} jobs via detail API")
-                async with httpx.AsyncClient(timeout=15, follow_redirects=True) as dc:
-                    for job in empty_desc[:30]:  # cap at 30 detail requests
-                        job_id = None
-                        # Extract job ID from apply_url
-                        import re as _re
-                        m = _re.search(r'/jobs/(\d+)', job.apply_url)
-                        if m:
-                            job_id = int(m.group(1))
-                            detail = await _fetch_greenhouse_job_details(dc, token, job_id, api_base, remix_base)
-                            if detail.get("description"):
-                                job.description = _clean_html(detail["description"])
-                            if detail.get("pay_ranges") and not job.salary:
-                                # Re-parse salary from detail
-                                tmp = _parse_greenhouse_job(
-                                    {**detail, "pay_ranges": detail["pay_ranges"]},
-                                    token, job.company, job.source_url
-                                )
-                                if tmp and tmp.salary:
-                                    job.salary = tmp.salary
-                        await asyncio.sleep(0.2)
-            logger.info(f"Greenhouse Remix API: {len(jobs)} jobs from {token} ({pg} pages)")
+            with_desc = sum(1 for j in jobs if j.description)
+            logger.info(
+                f"Greenhouse Remix API: {len(jobs)} jobs from {token} ({pg} pages), "
+                f"{with_desc} with descriptions"
+            )
+            if with_desc == 0:
+                # content field was empty in listing - fetch individually
+                # (happens when IP is blocked and listing returns partial data)
+                logger.warning(
+                    f"Greenhouse: listing returned no descriptions for {token} "
+                    "(may be IP-based blocking — use GitHub Actions for reliable access)"
+                )
+                await _fetch_details_for_jobs(jobs, token, api_base, remix_base)
             _cache_set(token, jobs)
             return jobs
 
     except Exception as e:
         logger.warning(f"Greenhouse Remix loader failed for {token}: {e}")
 
-    # ── Strategy 2: boards-api.greenhouse.io JSON API ────────────────────────
-    # Classic endpoint, returns all jobs in one call with full content
+    # ── Strategy 2: boards-api JSON ──────────────────────────────────────────
     try:
-        api_url = f"{api_base}/v1/boards/{token}/jobs?content=true"
         async with httpx.AsyncClient(timeout=25, follow_redirects=True) as client:
-            resp = await _greenhouse_get(client, api_url)
+            resp = await _gh_get(client, f"{api_base}/v1/boards/{token}/jobs?content=true")
             resp.raise_for_status()
             data = resp.json()
 
@@ -1177,7 +1067,10 @@ async def scrape_greenhouse(page: Page, url: str, company: str) -> list[ScrapedJ
                 jobs.append(parsed)
 
         if jobs:
-            logger.info(f"Greenhouse boards-api: {len(jobs)} jobs from {token}")
+            with_desc = sum(1 for j in jobs if j.description)
+            logger.info(f"Greenhouse boards-api: {len(jobs)} jobs from {token}, {with_desc} with desc")
+            if with_desc == 0:
+                await _fetch_details_for_jobs(jobs, token, api_base, remix_base)
             _cache_set(token, jobs)
             return jobs
 
@@ -1185,22 +1078,17 @@ async def scrape_greenhouse(page: Page, url: str, company: str) -> list[ScrapedJ
         logger.warning(f"Greenhouse boards-api failed for {token}: {e}")
 
     # ── Strategy 3: HTML fallback via Playwright ─────────────────────────────
-    # Note: Playwright may not be available in all environments (e.g. Windows
-    # event loop, Railway containers without browsers). Catch all errors here
-    # so a Playwright failure never prevents strategies 1 & 2 results.
     if page is None:
-        logger.debug(f"Greenhouse: no Playwright page available, skipping HTML fallback for {token}")
+        logger.debug(f"Greenhouse: no Playwright page, skipping HTML fallback for {token}")
         return jobs
     try:
-        board_url = f"{board_base}/{token}"
-        await page.goto(board_url, wait_until="networkidle", timeout=25000)
+        await page.goto(f"{board_base}/{token}", wait_until="networkidle", timeout=25000)
         soup = BeautifulSoup(await page.content(), "html.parser")
         for section in soup.select(".opening"):
             title_el = section.select_one("a")
-            if not title_el:
-                continue
+            if not title_el: continue
             title = title_el.get_text(strip=True)
-            href = title_el.get("href", "")
+            href = title_el.get("href","")
             apply_url = f"{board_base}{href}" if href.startswith("/") else href
             loc_el = section.select_one(".location")
             location = loc_el.get_text(strip=True) if loc_el else "Remote"
@@ -1208,22 +1096,16 @@ async def scrape_greenhouse(page: Page, url: str, company: str) -> list[ScrapedJ
             parent = section.find_parent("section")
             if parent:
                 h2 = parent.select_one("h2, h3")
-                if h2:
-                    dept = h2.get_text(strip=True)
-            jobs.append(ScrapedJob(
-                title=title, company=company, source_url=url,
-                location=location, department=dept,
-                job_type=_infer_job_type(title), apply_url=apply_url,
-            ))
-        for job in jobs[:15]:
-            if job.apply_url:
-                job.description = await fetch_job_description(page, job.apply_url)
-        logger.info(f"Greenhouse HTML fallback: {len(jobs)} jobs from {token}")
+                if h2: dept = h2.get_text(strip=True)
+            jobs.append(ScrapedJob(title=title, company=company, source_url=url,
+                                   location=location, department=dept,
+                                   job_type=_infer_job_type(title), apply_url=apply_url))
         if jobs:
+            await _fetch_details_for_jobs(jobs, token, api_base, remix_base)
+            logger.info(f"Greenhouse HTML fallback: {len(jobs)} jobs from {token}")
             _cache_set(token, jobs)
     except NotImplementedError:
-        logger.warning(f"Greenhouse: Playwright not available in this environment (Windows/no-browser). "
-                       f"Only API strategies used for {token}.")
+        logger.warning(f"Greenhouse: Playwright not available ({token})")
     except Exception as e:
         logger.error(f"Greenhouse HTML fallback failed for {url}: {e}")
 
@@ -1629,68 +1511,86 @@ def detect_ats(url: str) -> str:
         return "oracle"
     if "myworkdayjobs.com" in url:
         return "workday"
-    if "odoo" in url.lower() or "/jobs" in url:
+    if "odoo" in url.lower():
         return "odoo"
     return "generic"
 
 
-async def scrape_company(url: str, company: str, industry: str = "", logo_url: str = "") -> list[ScrapedJob]:
+async def scrape_company(
+    url: str,
+    company: str,
+    industry: str = "",
+    logo_url: str = "",
+) -> list[ScrapedJob]:
     ats = detect_ats(url)
     logger.info(f"Scraping {company} ({url}) via {ats} strategy")
 
-    # Oracle uses direct HTTP API calls — no browser needed
+    jobs = []
+
+    # ── API-based scrapers (no Playwright needed) ─────────────────────────────
     if ats == "oracle":
         jobs = await scrape_oracle_hcm(url, company)
-        return _apply_industry(jobs, industry)
 
-    # Greenhouse uses HTTP API calls (Remix loader + boards-api) — no browser needed
-    # Playwright is only used as a last-resort fallback inside scrape_greenhouse itself
-    if ats == "greenhouse":
+    elif ats == "workday":
+        jobs = await scrape_workday(url, company)
+
+    elif ats == "greenhouse":
+        # Greenhouse uses Remix API + boards-api — no browser needed
+        # Playwright is only used as a last-resort fallback inside scrape_greenhouse
+        # and only when page is not None
         jobs = await scrape_greenhouse(None, url, company)
-        return _apply_industry(jobs, industry)
 
-    # All other ATS use browser for JS rendering
-    try:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1280, "height": 800},
+    # ── Browser-based scrapers (Playwright required) ──────────────────────────
+    else:
+        if not PLAYWRIGHT_AVAILABLE:
+            logger.warning(
+                f"Playwright not available — skipping {company} ({ats}). "
+                "Run: playwright install chromium"
             )
-            page = await context.new_page()
-            try:
-                if ats == "workday":
-                    jobs = await scrape_workday(url, company, page=page)
-                elif ats == "odoo":
-                    jobs = await scrape_odoo(page, url, company)
-                elif ats == "lever":
-                    jobs = await scrape_lever(page, url, company)
-                else:
-                    jobs = await scrape_generic(page, url, company)
-            finally:
-                await browser.close()
-    except NotImplementedError:
-        logger.warning(f"Playwright not available in this environment — skipping {company} ({ats})")
-        jobs = []
+            return []
+        try:
+            async with async_playwright() as pw:
+                browser = await pw.chromium.launch(headless=True)
+                context = await browser.new_context(
+                    user_agent=(
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    viewport={"width": 1280, "height": 800},
+                )
+                page = await context.new_page()
+                try:
+                    if ats == "odoo":
+                        jobs = await scrape_odoo(page, url, company)
+                    elif ats == "lever":
+                        jobs = await scrape_lever(page, url, company)
+                    else:
+                        jobs = await scrape_generic(page, url, company)
+                finally:
+                    await browser.close()
+        except NotImplementedError:
+            logger.warning(
+                f"Playwright cannot launch on this OS/event loop — "
+                f"skipping {company} ({ats}). "
+                "Use Railway deployment or GitHub Actions for browser-based scrapers."
+            )
+            return []
 
     logger.info(f"  -> Found {len(jobs)} jobs at {company}")
-    jobs = _apply_industry(jobs, industry)
+
+    # Stamp logo_url on all jobs
     if logo_url:
         for j in jobs:
-            if not j.logo_url:
+            if not getattr(j, "logo_url", ""):
                 j.logo_url = logo_url
-    return jobs
 
-
-def _apply_industry(jobs: list[ScrapedJob], industry: str) -> list[ScrapedJob]:
-    """Stamp every scraped job with the company's configured industry."""
+    # Stamp industry on all jobs
     if industry:
         for j in jobs:
-            j.industry = industry
+            if not getattr(j, "industry", ""):
+                j.industry = industry
+
     return jobs
 
 
@@ -1700,7 +1600,7 @@ def _apply_industry(jobs: list[ScrapedJob], industry: str) -> list[ScrapedJob]:
 # Converts OracleCloudScraper output to ScrapedJob dataclass
 # ---------------------------------------------------------------------------
 
-def scrape_oracle(company_name: str, careers_url: str, industry: str = "") -> list[ScrapedJob]:
+def scrape_oracle(company_name: str, careers_url: str) -> list[ScrapedJob]:
     """
     Scrape an Oracle HCM careers portal and return ScrapedJob objects.
     Uses the REST API with correct Oracle headers — no Playwright needed.
@@ -1727,7 +1627,6 @@ def scrape_oracle(company_name: str, careers_url: str, industry: str = "") -> li
             location=r.get("location", "Not specified"),
             job_type=r.get("job_type", "Full-time"),
             department=r.get("department", "General"),
-            industry=industry,
             description=r.get("description", ""),
             apply_url=r.get("apply_url", careers_url),
             salary=r.get("salary", ""),
@@ -1760,7 +1659,7 @@ async def scrape_all(companies: list[dict]) -> list[ScrapedJob]:
             if r.status_code == 403 and "allowlist" in r.text.lower():
                 logger.info(f"Oracle API blocked for {company['name']} — using Playwright instead")
                 return False, []
-            jobs = scrape_oracle(company["name"], company["url"], company.get("industry", ""))
+            jobs = scrape_oracle(company["name"], company["url"])
             return True, jobs
         except Exception as e:
             logger.warning(f"Oracle API attempt failed for {company['name']}: {e} — using Playwright")
@@ -1788,7 +1687,11 @@ async def scrape_all(companies: list[dict]) -> list[ScrapedJob]:
 
         async def guarded_scrape(c):
             async with semaphore:
-                return await scrape_company(c["url"], c["name"], c.get("industry", ""), c.get("logo_url", ""))
+                return await scrape_company(
+                    c["url"], c["name"],
+                    c.get("industry", ""),
+                    c.get("logo_url", ""),
+                )
 
         results = await asyncio.gather(
             *[guarded_scrape(c) for c in browser_cos], return_exceptions=True

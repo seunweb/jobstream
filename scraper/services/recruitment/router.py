@@ -809,7 +809,12 @@ async def admin_update_job(
     if current_user.get("role") not in ("super_admin", "platform_admin"):
         raise HTTPException(403, "Admin only")
 
-    updates = {k: v for k, v in body.dict().items() if v is not None}
+    ALLOWED_JOB_FIELDS = {
+        "title", "company", "location", "job_type", "department",
+        "industry", "salary", "description",
+    }
+    updates = {k: v for k, v in body.dict().items()
+               if v is not None and k in ALLOWED_JOB_FIELDS}
     if not updates:
         raise HTTPException(400, "No fields provided")
 

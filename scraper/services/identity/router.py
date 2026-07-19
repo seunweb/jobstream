@@ -187,6 +187,23 @@ async def register(body: RegisterIn, request: Request):
                 "INSERT INTO users (id, email, password_hash, full_name, role) VALUES (?, ?, ?, ?, 'candidate')",
                 (user_id, email, password_hash, full_name)
             )
+    # Auto-assign Candidate Free plan
+    try:
+        from services.identity.billing_router import _get_free_plan_from_db
+        from services.identity.quota_router import apply_plan_to_tenant
+        candidate_free = _get_free_plan_from_db("candidate")
+        if candidate_free:
+            # For candidates, tenant_id is their user_id (no org workspace)
+            apply_plan_to_tenant(
+                tenant_id=user_id,
+                plan_id=candidate_free["id"],
+                plan=candidate_free,
+                expires_at=None,
+            )
+    except Exception as _pe:
+        import logging as _l
+        _l.getLogger(__name__).warning(f"Could not assign candidate free plan: {_pe}")
+
     access_token = create_access_token(user_id, email, "candidate")
     refresh_token = create_refresh_token(user_id)
     create_session(user_id, refresh_token, request)

@@ -203,7 +203,10 @@ def get_organization_by_slug(slug: str):
 
 @router.get("/{org_id}")
 def get_organization(org_id: str):
-    """Get organization by ID."""
+    """
+    Get organization by ID, merging tenant profile fields so
+    the company profile page shows about, logo, hq_location etc.
+    """
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -211,10 +214,45 @@ def get_organization(org_id: str):
             else "SELECT * FROM organizations WHERE id = ?",
             (org_id,)
         )
-        org = cur.fetchone()
-        if not org:
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Organization not found")
-        return row_to_dict(org)
+        result = row_to_dict(row)
+
+        # Merge profile fields from tenants table
+        tenant_id = result.get("tenant_id")
+        org_name  = result.get("name", "")
+        ph = "%s" if USE_POSTGRES else "?"
+        profile_cols = [
+            "about", "logo_url", "cover_url", "website", "industry",
+            "company_size", "founded_year", "hq_location",
+            "linkedin_url", "twitter_url", "contact_email",
+            "contact_phone", "verification_status",
+        ]
+        col_sql = ", ".join(profile_cols)
+        try:
+            if tenant_id:
+                cur.execute(
+                    "SELECT " + col_sql + " FROM tenants WHERE id = " + ph,
+                    (str(tenant_id),)
+                )
+            else:
+                slug = org_name.lower().replace(" ", "-")
+                cur.execute(
+                    "SELECT " + col_sql + " FROM tenants WHERE name = "
+                    + ph + " OR slug = " + ph,
+                    (org_name, slug)
+                )
+            t = cur.fetchone()
+            if t:
+                vals = list(t.values()) if isinstance(t, dict) else list(t)
+                for k, v in zip(profile_cols, vals):
+                    if v is not None and v != "" and not result.get(k):
+                        result[k] = v
+        except Exception as e:
+            log.warning(f"get_organization tenant merge failed: {e}")
+
+        return result
 
 
 @router.patch("/{org_id}")

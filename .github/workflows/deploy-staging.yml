@@ -27,14 +27,14 @@ jobs:
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
           cd scraper
-          railway up --service jobstream-staging --detach
+          railway up --service jobstream --environment staging --detach
 
       - name: Deploy frontend to Railway (staging)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
-          railway up --service practical-creativity-staging --detach
+          railway up --service practical-creativity --environment staging --detach
 
       - name: Post deploy notification
         if: always()

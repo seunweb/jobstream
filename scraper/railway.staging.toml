@@ -1,0 +1,29 @@
+# Railway config for the STAGING environment
+# Copy this to railway.toml in the staging Railway service, or use Railway's
+# service-level environment override in the Railway dashboard.
+
+[build]
+builder = "nixpacks"
+
+[build.nixpacksPlan.phases.setup]
+nixPkgs = ["python310"]
+
+[build.nixpacksPlan.phases.install]
+cmds = [
+  "pip install -r requirements.txt",
+  "playwright install chromium --with-deps || echo 'Playwright install failed - continuing'"
+]
+
+[deploy]
+startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# Staging-specific environment variables are set in Railway dashboard:
+# DATABASE_URL     → staging PostgreSQL connection string
+# SECRET_KEY       → different from prod
+# ENVIRONMENT      → "staging"
+# FROM_EMAIL       → staging@yourdomain.com (or use Resend test mode)
+# CORS_ORIGINS     → staging frontend URL

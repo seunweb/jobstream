@@ -1,0 +1,44 @@
+name: Deploy to Production
+
+# Only deploys when a PR from staging → main is merged
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy main → Railway (Production)
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy backend to Railway (production)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
+        run: |
+          cd scraper
+          railway up --service jobstream-backend --detach
+
+      - name: Deploy frontend to Railway (production)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
+        run: |
+          railway up --service jobstream-frontend --detach
+
+      - name: Post deploy notification
+        if: always()
+        run: |
+          echo "Production deploy triggered at $(date -u)"
+          echo "Backend:  https://jobstream-production-088c.up.railway.app"
+          echo "Frontend: https://practical-creativity-production-2972.up.railway.app"
